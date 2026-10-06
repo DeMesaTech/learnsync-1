@@ -1,0 +1,31 @@
+import {Navigate,Outlet,createBrowserRouter,Link} from 'react-router-dom';
+import {useAuth} from './providers';
+import {Shell} from '../components/Shell';
+import {AuthPage} from '../features/accounts/AuthPage';
+import {Accounts,AccountSettings,Audit} from '../features/accounts/AccountPage';
+import {SchoolYears} from '../features/academics/SchoolYears';
+import {Subjects,ProspectusStart,ProspectusReview} from '../features/academics/Subjects';
+import {TermWorkspace} from '../features/academics/TermWorkspace';
+import {StudentImport} from '../features/academics/StudentImport';
+import {OfferingRoster,FacultySubjects,StudentSubjects} from '../features/academics/Rosters';
+import {OfferingLayout} from '../features/teaching/OfferingLayout';
+import {SyllabusPage} from '../features/teaching/SyllabusPage';
+import {ContentPage,ItemEditorPage} from '../features/teaching/Content';
+import {FacultyAnnouncements} from '../features/teaching/Announcements';
+import {StudentSyllabus,StudentLessons,StudentLesson,StudentAnnouncements} from '../features/teaching/Learn';
+import {AssessmentsPage} from '../features/assessments/Assessments';
+import {AssessmentEditorPage} from '../features/assessments/AssessmentEditor';
+import {ScoresPage} from '../features/assessments/ScoresPage';
+import {AttendancePage} from '../features/assessments/AttendancePage';
+import {GradebookPage} from '../features/assessments/GradebookPage';
+import {WorkList,WorkDetail,AttemptPage} from '../features/assessments/Work';
+import {ResultsPage} from '../features/assessments/ResultsPage';
+import {StudentHome,FacultyHome,AdminHome} from '../features/dashboard/Dashboards';
+import {MyIssues,AdminIssues} from '../features/support/Issues';
+import {ClassStandingPage} from '../features/assessments/ClassStanding';
+import {StudentStanding} from '../features/assessments/StudentStanding';
+import {StudentStudy} from '../features/study/Study';
+import {StudentProgress,FacultyProgress} from '../features/study/Progress';
+function Role({role}:{role:string}){const {session}=useAuth();return session?.user?.role===role?<Outlet/>:<section className="panel"><h1>Access unavailable</h1><p>This page is not available to your account.</p><Link to={'/'+session?.user?.role}>Back to your workspace</Link></section>}
+function Home(){const {session}=useAuth();const role=session?.user?.role;return role==='admin'?<AdminHome/>:role==='faculty'?<FacultyHome/>:<StudentHome/>}
+export const router=createBrowserRouter([{path:'/login',element:<AuthPage/>},{path:'/forgot-password',element:<AuthPage/>},{path:'/reset-password',element:<AuthPage/>},{path:'/accept-invitation',element:<AuthPage/>},{element:<Shell/>,children:[{path:'/',element:<Home/>},{path:'/account',element:<AccountSettings/>},...(['admin','faculty','student'] as const).map(role=>({path:'/'+role,element:<Role role={role}/>,children:[{index:true,element:<Home/>},...(role==='admin'?[{path:'academics',element:<SchoolYears/>},{path:'subjects',element:<Subjects/>},{path:'subjects/import',element:<ProspectusStart/>},{path:'subjects/import/:importId',element:<ProspectusReview/>},{path:'terms/:termId',element:<TermWorkspace/>},{path:'terms/:termId/import-students',element:<StudentImport/>},{path:'offerings/:offeringId',element:<OfferingRoster/>},{path:'accounts',element:<Accounts/>},{path:'issues',element:<AdminIssues/>},{path:'audit',element:<Audit/>}]:role==='faculty'?[{path:'issues',element:<MyIssues/>},{path:'subjects',element:<FacultySubjects/>},{path:'offerings/:offeringId',element:<OfferingLayout role="faculty"/>,children:[{index:true,element:<OfferingRoster embedded/>},{path:'syllabus',element:<SyllabusPage/>},{path:'content',element:<ContentPage/>},{path:'content/:itemId/edit',element:<ItemEditorPage/>},{path:'announcements',element:<FacultyAnnouncements/>},{path:'assessments',element:<AssessmentsPage/>},{path:'assessments/:assessmentId/edit',element:<AssessmentEditorPage/>},{path:'assessments/:assessmentId/scores',element:<ScoresPage/>},{path:'attendance',element:<AttendancePage/>},{path:'gradebook',element:<GradebookPage/>},{path:'class-standing',element:<ClassStandingPage/>},{path:'progress',element:<FacultyProgress/>},{path:'students/:studentId',element:<StudentStanding/>}]}]:[{path:'issues',element:<MyIssues/>},{path:'subjects',element:<StudentSubjects/>},{path:'offerings/:offeringId',element:<OfferingLayout role="student"/>,children:[{index:true,element:<Navigate to="syllabus" replace/>},{path:'syllabus',element:<StudentSyllabus/>},{path:'lessons',element:<StudentLessons/>},{path:'lessons/:itemId',element:<StudentLesson/>},{path:'announcements',element:<StudentAnnouncements/>},{path:'work',element:<WorkList/>},{path:'work/:assessmentId',element:<WorkDetail/>},{path:'work/:assessmentId/attempts/:attemptId',element:<AttemptPage/>},{path:'study',element:<StudentStudy/>},{path:'progress',element:<StudentProgress/>},{path:'results',element:<ResultsPage/>}]}])]})),{path:'*',element:<section className="panel"><h1>Page not found</h1><Link to="/">Back to your workspace</Link></section>}]},{path:'/sign-in',element:<Navigate to="/login" replace/>}]);

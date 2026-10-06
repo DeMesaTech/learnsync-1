@@ -1,0 +1,71 @@
+import {useEffect,useRef,useState} from 'react';
+import {Link,NavLink,Outlet,Navigate} from 'react-router-dom';
+import {useAuth,useTheme,queryClient} from '../app/providers';
+import {api,post,setCsrf} from '../app/api';
+
+type NavItem={to:string;label:string;icon:string;end?:boolean};
+const ROLE_LABEL={admin:'Academic administrator',faculty:'Teaching faculty',student:'Student'} as const;
+
+/** Grouped navigation. Icons are decoration only (aria-hidden); every entry has a visible text label. */
+function navigation(role:'admin'|'faculty'|'student'):{label:string;items:NavItem[]}[]{
+  const home='/'+role;
+  const account={label:'Account & help',items:[{to:'/account',label:'Account & theme',icon:'○'}]};
+  if(role==='admin')return [
+    {label:'Your workspace',items:[{to:home,label:'Dashboard',icon:'⌂',end:true},{to:`${home}/accounts`,label:'User accounts',icon:'♙'}]},
+    {label:'Academic management',items:[{to:`${home}/academics`,label:'School years',icon:'☰'},{to:`${home}/subjects`,label:'Subject catalog',icon:'▤'}]},
+    {label:'Oversight',items:[{to:`${home}/issues`,label:'Reports',icon:'?'},{to:`${home}/audit`,label:'Audit history',icon:'◷'}]},
+    account];
+  return [
+    {label:'Your workspace',items:[{to:home,label:'Dashboard',icon:'⌂',end:true},{to:`${home}/subjects`,label:'My subjects',icon:'▤'}]},
+    {label:'Account & help',items:[{to:`${home}/issues`,label:'Report a problem',icon:'?'},...account.items]}];
+}
+const initials=(name:string)=>name.split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]!.toUpperCase()).join('')||'?';
+
+export function Shell(){
+  const {session,loading,error}=useAuth();const {theme,setTheme}=useTheme();
+  const [open,setOpen]=useState(false);const [failure,setFailure]=useState('');
+  const menuButton=useRef<HTMLButtonElement>(null);
+  // the phone menu is a disclosure: Escape closes it and gives focus back to the button that opened it
+  useEffect(()=>{if(!open)return;const onKey=(e:KeyboardEvent)=>{if(e.key==='Escape'){setOpen(false);menuButton.current?.focus()}};document.addEventListener('keydown',onKey);return()=>document.removeEventListener('keydown',onKey)},[open]);
+  if(loading)return <main className="content">Loading your workspace…</main>;
+  if(error)return <main className="content"><p role="alert">Cannot reach the server. Please refresh after starting it.</p></main>;
+  if(!session?.user)return <Navigate to="/login" replace/>;
+  const user=session.user;const home='/'+user.role;
+  // the header selector saves to the account too, otherwise a saved preference would undo it on the next load
+  async function chooseTheme(value:'system'|'light'|'dark'){
+    setTheme(value);
+    try{await api('/me/preferences',{method:'PATCH',body:JSON.stringify({theme:value})});await queryClient.invalidateQueries({queryKey:['session']})}
+    catch{/* the choice still applies in this browser */}
+  }
+  async function logout(){
+    // A recovery copy exists only while edits are not on the server, so its presence means unsaved work.
+    const unsaved=(()=>{try{return Object.keys(localStorage).some(k=>k.startsWith(`learnsync:draft:${user.id}:`))}catch{return false}})();
+    if(unsaved&&!confirm('Some of your changes are saved only in this browser, not on the server yet. Signing out deletes them. Sign out anyway?'))return;
+    try{await post('/auth/logout',{});for(const key of Object.keys(localStorage)){if(key.startsWith('learnsync:draft:'))localStorage.removeItem(key)}setCsrf('');queryClient.clear();window.location.assign('/login')}
+    catch(e){setFailure(e instanceof Error?e.message:'Sign out failed.')}
+  }
+  return <div className="app-shell">
+    <a href="#main" className="skip">Skip to content</a>
+    <header className="header">
+      <button ref={menuButton} className="menu" aria-label="Toggle navigation" aria-expanded={open} onClick={()=>setOpen(!open)}>☰</button>
+      <Link to={home} className="brand"><span className="mark" aria-hidden="true">L</span>LearnSync</Link>
+      <span className="school">GMVCC · BS Entrepreneurship</span>
+      <div className="identity">
+        <div className="who"><strong>{user.display_name}</strong><span>{ROLE_LABEL[user.role]}</span></div>
+        <span className="avatar" aria-hidden="true">{initials(user.display_name)}</span>
+        <label className="theme-label"><span className="sr-only">Theme</span><select value={theme} onChange={e=>void chooseTheme(e.target.value as 'system'|'light'|'dark')}><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+        <button onClick={logout}>Sign out</button>
+      </div>
+    </header>
+    <aside className={'sidebar '+(open?'open':'')}>
+      <nav aria-label="Main" onClick={()=>setOpen(false)}>
+        {navigation(user.role).map(group=><div className="nav-group" key={group.label}>
+          <p className="nav-label">{group.label}</p>
+          {group.items.map(i=><NavLink key={i.to} to={i.to} end={i.end}><span className="nav-icon" aria-hidden="true">{i.icon}</span>{i.label}</NavLink>)}
+        </div>)}
+      </nav>
+      <p className="sidebar-note">Governor Mariano E. Villafuerte Community College<br/>BS Entrepreneurship</p>
+    </aside>
+    <main id="main" className="content">{failure&&<p role="alert" className="error">{failure}</p>}<Outlet/></main>
+  </div>;
+}
