@@ -8,6 +8,7 @@ import {Owl} from './Owl';
 import type {AllConversationsPage} from './types';
 
 const NONE:never[]=[];
+const DANCE_MS=2800,DANCE_EVERY_MIN=30000,DANCE_EVERY_SPREAD=40000;   // a dance every 30 to 70 seconds
 const SUBJECT_KEY=(uid:string)=>`learnsync:buddy-subject:${uid}`;
 const readSubject=(uid:string)=>{try{return localStorage.getItem(SUBJECT_KEY(uid))??''}catch{return ''}};
 
@@ -23,6 +24,19 @@ export function StudyBuddy({userId}:{userId:string}){
   const [active,setActive]=useState<Record<string,string|null|undefined>>({});
   const [state,setState]=useState<ChatState>('idle');
   const launcher=useRef<HTMLButtonElement>(null);
+  // every so often the owl does a short dance: only while idle and closed, never for reduced-motion users or a hidden tab
+  const [dancing,setDancing]=useState(false);
+  const idle=useRef(true);const closed=useRef(true);
+  useEffect(()=>{idle.current=state==='idle'},[state]);
+  useEffect(()=>{closed.current=!open},[open]);
+  useEffect(()=>{
+    if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+    let wait=0,stop=0;
+    const schedule=()=>{wait=window.setTimeout(()=>{
+      if(!document.hidden&&idle.current&&closed.current){setDancing(true);stop=window.setTimeout(()=>{setDancing(false);schedule()},DANCE_MS)}else schedule()
+    },DANCE_EVERY_MIN+Math.random()*DANCE_EVERY_SPREAD)};
+    schedule();return()=>{window.clearTimeout(wait);window.clearTimeout(stop);setDancing(false)};
+  },[]);
   // on a subject's pages the buddy follows that subject; elsewhere it keeps the last one used
   useEffect(()=>{if(routeSubject&&subjects.some(s=>s.offering_id===routeSubject))setSubject(routeSubject)},[routeSubject,subjects]);
   const current=subjects.find(s=>s.offering_id===subject)??subjects[0];
@@ -64,6 +78,6 @@ export function StudyBuddy({userId}:{userId:string}){
     </section>}
     {!(open&&window.matchMedia('(max-width:639px)').matches)&&
       <button ref={launcher} type="button" className="buddy-launch" aria-expanded={open} aria-controls="buddy-panel" onClick={()=>setOpen(!open)}>
-        <Owl state={pet}/><span className="buddy-label">Study buddy</span><span className="sr-only">{open?'Close':'Open'} Study buddy chat</span></button>}
+        <Owl state={pet} dance={dancing&&pet==='idle'&&!open}/><span className="buddy-label">Study buddy</span><span className="sr-only">{open?'Close':'Open'} Study buddy chat</span></button>}
   </div>;
 }
