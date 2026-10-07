@@ -33,12 +33,17 @@ def issue_token(db, account, purpose, actor=None, payload=None):
     return raw
 
 
+SUBJECTS = {"invite": "You are invited to LearnSync: set up your account",
+            "reset": "Reset your LearnSync password",
+            "handover": "LearnSync: confirm the administrator ownership transfer"}
+
+
 def send_link(account, raw, purpose):
     route = "reset-password" if purpose == "reset" else "accept-invitation"
     message = EmailMessage()
     message["From"] = settings().mail_from
     message["To"] = account.email
-    message["Subject"] = f"LearnSync: {purpose}"
+    message["Subject"] = SUBJECTS.get(purpose, "LearnSync account link")
     message.set_content(f"Hello {account.display_name},\n\nOpen this single-use link to choose your password:\n"
                         f"{settings().app_origin}/{route}#token={raw}\n\n"
                         "If you did not expect this message, contact your school administrator.")

@@ -1,15 +1,26 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from .models import Account, AuditEvent
 
 
-def list_accounts(db, page, page_size, search, role=None):
+def filtered(search, role=None, status=None):
     query = select(Account)
     if role:
         query = query.where(Account.role == role)
+    if status:
+        query = query.where(Account.status == status)
     if search:
         pattern = f"%{search}%"
         query = query.where(Account.display_name.ilike(pattern) | Account.email.ilike(pattern))
+    return query
+
+
+def count_accounts(db, search, role=None, status=None):
+    return db.scalar(select(func.count()).select_from(filtered(search, role, status).subquery())) or 0
+
+
+def list_accounts(db, page, page_size, search, role=None, status=None):
+    query = filtered(search, role, status)
     return db.scalars(query.order_by(Account.display_name, Account.id)
                       .offset((page - 1) * page_size).limit(page_size)).all()
 

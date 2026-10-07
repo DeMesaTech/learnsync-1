@@ -35,6 +35,7 @@ def test_roles_cannot_administer(client,db,actors,headers):
     for role in ("faculty","student"):
         auth=sign_in(client,headers,role)
         assert client.get("/api/accounts").status_code == 403
+        assert client.get("/api/accounts/count").status_code == 403
         assert client.get("/api/audit").status_code == 403
         assert client.post("/api/accounts",headers=auth,json={"email":"other@example.com","display_name":"Other","role":"admin"}).status_code == 403
         assert client.post("/api/auth/logout",headers=auth).status_code == 200
@@ -83,3 +84,40 @@ def test_expired_session(client,db,actors,headers):
     session.expires_at=now()-timedelta(seconds=1)
     db.commit()
     assert client.get("/api/accounts").status_code == 401
+
+
+def test_accounts_can_be_filtered_by_status_and_counted(client, db, actors, headers):
+    auth = sign_in(client, headers)
+    everyone = client.get("/api/accounts?page_size=100").json()
+    assert client.get("/api/accounts/count").json() == {"total": len(everyone)}
+    assert client.post("/api/accounts", headers=auth, json={"email": "waiting@example.com", "display_name": "Waiting", "role": "faculty"}).status_code == 201
+    invited = client.get("/api/accounts?status=invited").json()
+    assert [a["email"] for a in invited] == ["waiting@example.com"]
+    assert client.get("/api/accounts/count?status=invited").json() == {"total": 1}
+    assert client.get("/api/accounts/count?role=faculty&status=invited&search=wait").json() == {"total": 1}
+    assert client.get("/api/accounts/count?status=bogus").status_code == 422
+    assert client.get("/api/accounts/count?search=zzz-nobody").json() == {"total": 0}
+    client.post("/api/auth/logout", headers=auth)
+    assert client.get("/api/accounts/count").status_code == 401
+
+
+def test_emailed_links_have_a_clear_subject(monkeypatch):
+    import smtplib
+    from types import SimpleNamespace
+
+    from app.features.accounts import commands
+    seen = []
+
+    class FakeSmtp:
+        def __init__(self, *a, **k): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def send_message(self, message): seen.append(message["Subject"])
+        def starttls(self): pass
+        def login(self, *a): pass
+    monkeypatch.setattr(smtplib, "SMTP", FakeSmtp)
+    account = SimpleNamespace(email="x@example.com", display_name="X")
+    for purpose in ("invite", "reset", "handover"):
+        commands.send_link(account, "tok", purpose)
+    assert seen[0].startswith("You are invited") and seen[1] == "Reset your LearnSync password"
+    assert "ownership" in seen[2] and not any(s == f"LearnSync: {p}" for s, p in zip(seen, ("invite", "reset", "handover")))

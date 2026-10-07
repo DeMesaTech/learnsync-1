@@ -96,8 +96,17 @@ def reset_password(data: AcceptToken, session=Depends(csrf_session), db: Session
 def accounts(page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100),
              search: str = Query("", max_length=150),
              role: str | None = Query(None, pattern="^(admin|faculty|student)$"),
+             status: str | None = Query(None, pattern="^(invited|active|inactive)$"),
              actor=Depends(admin), db: Session = Depends(get_db)):
-    return queries.list_accounts(db, page, page_size, search, role)
+    return queries.list_accounts(db, page, page_size, search, role, status)
+
+
+@router.get("/accounts/count")
+def account_count(search: str = Query("", max_length=150),
+                  role: str | None = Query(None, pattern="^(admin|faculty|student)$"),
+                  status: str | None = Query(None, pattern="^(invited|active|inactive)$"),
+                  actor=Depends(admin), db: Session = Depends(get_db)):
+    return {"total": queries.count_accounts(db, search, role, status)}
 
 @router.post("/accounts", response_model=AccountView, status_code=201)
 def invite(data: Invite, actor=Depends(admin), db: Session = Depends(get_db)):

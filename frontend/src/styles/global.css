@@ -175,3 +175,4 @@ tbody th.sticky{text-transform:none;letter-spacing:normal;font-size:inherit;colo
 .week b{min-height:1.2em}
 .stats a{font-size:.8rem}
 .dot{display:inline-block;width:9px;height:9px;margin-left:8px;border-radius:50%;background:var(--action);vertical-align:middle;border:2px solid var(--surface)}
+.filters{display:grid;gap:0 16px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
