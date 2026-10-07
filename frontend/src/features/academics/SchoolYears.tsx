@@ -21,7 +21,7 @@ export function SchoolYears(){
   return <>
     <div className="page-heading">
       <div><p className="eyebrow">Administration</p><h1>School years and terms</h1>
-        <p className="muted">Open a term to set up sections, offerings and enrollment.</p></div>
+        <p className="muted">Open a term to set up sections, offerings and enrollment. A term marked “open” can be edited; its dates show the academic period, so you can prepare the next semester ahead.</p></div>
       <button className="primary" onClick={()=>{setMessage('');setCreating(true)}}>New school year</button>
     </div>
     {message&&<p role="status">{message}</p>}
@@ -62,10 +62,20 @@ const blankTerms:TermDraft[]=[
   {name:'Second Semester',sequence:2,start_date:'',end_date:'',copy_from_term_id:'',copy_offerings:false},
 ];
 
+const day=(ms:number)=>new Date(ms).toISOString().slice(0,10);
+// ponytail: splits the year at its midpoint; the admin adjusts to the real calendar
+function splitYear(start:string,end:string,draft:TermDraft[]){
+  const a=Date.parse(start),z=Date.parse(end);if(!(a<z))return draft;
+  const mid=a+Math.floor((z-a)/2/864e5)*864e5;
+  return draft.map((t,i)=>({...t,start_date:t.start_date||(i?day(mid+864e5):start),end_date:t.end_date||(i?end:day(mid))}));
+}
+
 function NewYear({terms,onClose,onDone}:{terms:{id:string;label:string}[];onClose:()=>void;onDone:()=>void}){
   const [draft,setDraft]=useState(blankTerms);
   const [error,setError]=useState('');
   const patch=(i:number,change:Partial<TermDraft>)=>setDraft(draft.map((t,j)=>j===i?{...t,...change}:t));
+  const yearDates=(e:React.ChangeEvent<HTMLInputElement>)=>{const f=new FormData(e.currentTarget.form!);
+    setDraft(d=>splitYear(String(f.get('start_date')),String(f.get('end_date')),d))};
   async function submit(e:FormEvent<HTMLFormElement>){
     e.preventDefault();const f=new FormData(e.currentTarget);
     try{
@@ -77,16 +87,16 @@ function NewYear({terms,onClose,onDone}:{terms:{id:string;label:string}[];onClos
   return <Dialog title="New school year" onClose={onClose}>
     <form onSubmit={submit}>
       <label>Label<input name="label" required maxLength={30} placeholder="2027-2028"/></label>
-      <div className="grid-2"><label>Starts<input name="start_date" type="date" required/></label><label>Ends<input name="end_date" type="date" required/></label></div>
+      <div className="grid-2"><label>Starts<input name="start_date" type="date" required onChange={yearDates}/></label><label>Ends<input name="end_date" type="date" required onChange={yearDates}/></label></div>
       {draft.map((t,i)=><fieldset key={i}><legend>{t.name}</legend>
         <div className="grid-2">
           <label>Starts<input type="date" required value={t.start_date} onChange={e=>patch(i,{start_date:e.target.value})}/></label>
           <label>Ends<input type="date" required value={t.end_date} onChange={e=>patch(i,{end_date:e.target.value})}/></label>
         </div>
-        <label>Copy sections from (optional)
+        {terms.length>0&&<label>Copy sections from (optional)
           <select value={t.copy_from_term_id} onChange={e=>patch(i,{copy_from_term_id:e.target.value})}>
             <option value="">Start empty</option>{terms.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}
-          </select></label>
+          </select></label>}
         {t.copy_from_term_id&&<label className="inline"><input type="checkbox" checked={t.copy_offerings} onChange={e=>patch(i,{copy_offerings:e.target.checked})}/> Also copy subject assignments (review the teachers afterwards)</label>}
       </fieldset>)}
       <p className="muted">Copying never brings students; enroll them in the new term.</p>
