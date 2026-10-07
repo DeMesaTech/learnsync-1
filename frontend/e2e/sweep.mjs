@@ -15,7 +15,7 @@ const roles={
     const o=`/student/offerings/${OFFERING}`;
     const ids=await page.evaluate(async o=>{const items=await fetch('/api/learn/offerings/'+o+'/items').then(r=>r.json());const work=await fetch('/api/learn/offerings/'+o+'/assessments').then(r=>r.json());
       return {lesson:items.find(i=>i.kind==='lesson')?.id,quiz:work.find(w=>w.kind==='online_quiz'&&w.state==='available')?.id??work.find(w=>w.kind==='online_quiz')?.id,act:work.find(w=>w.kind==='activity')?.id}},OFFERING);
-    return ['/student','/student/subjects',`${o}/syllabus`,`${o}/lessons`,`${o}/lessons/${ids.lesson}`,`${o}/study`,`${o}/work`,`${o}/work/${ids.quiz}`,`${o}/work/${ids.act}`,`${o}/progress`,`${o}/results`,`${o}/announcements`,'/student/issues','/account']}}
+    return ['/student','/student/todo','/student/subjects',`${o}/syllabus`,`${o}/lessons`,`${o}/lessons/${ids.lesson}`,`${o}/study`,`${o}/work`,`${o}/work/${ids.quiz}`,`${o}/work/${ids.act}`,`${o}/progress`,`${o}/results`,`${o}/announcements`,'/student/issues','/account']}}
 };
 
 const browser=await launch();

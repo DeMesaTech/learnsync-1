@@ -51,7 +51,8 @@ def work_buckets(db, student, offering, enrollment, subject):
     todo, waiting, again = [], [], []
     for w in learner.listing(db, student, offering, enrollment):
         base = {"offering_id": offering.id, "assessment_id": w["id"], "kind": w["kind"], "title": w["title"],
-                "subject": subject.code, "deadline": w["deadline"], "available_from": w["available_from"]}
+                "subject": subject.code, "deadline": w["deadline"], "available_from": w["available_from"],
+                "late_allowed": w["late_allowed"]}
         bucket = w["bucket"]
         if bucket == "again":
             again.append({**base, "attempts_left": w["max_attempts"] - w["attempts_used"]})
@@ -85,6 +86,26 @@ def updates_for(db, student, offering, enrollment, subject):
     return out
 
 
+def sort_todo(todo):
+    """Available work first, earliest deadline first (none last); work that is not open yet follows, soonest opening first."""
+    def key(x):
+        if x["state"] == "not_open":
+            return 1, x["available_from"] is None, x["available_from"] or 0, str(x["assessment_id"])
+        return 0, x["deadline"] is None, x["deadline"] or 0, str(x["assessment_id"])
+    return sorted(todo, key=key)
+
+
+def student_todo(db, student):
+    """Every open item across the student's current subjects (the dashboard only shows the first few)."""
+    todo, waiting, again = [], [], []
+    for enrollment, offering, subject in current_enrollments(db, student):
+        t, w, a = work_buckets(db, student, offering, enrollment, subject)
+        todo += t
+        waiting += w
+        again += a
+    return {"todo": sort_todo(todo), "awaiting_feedback": waiting, "another_attempt": again}
+
+
 def student_dashboard(db, student):
     subjects, todo, waiting, again, updates = [], [], [], [], []
     next_lesson = None
@@ -103,10 +124,11 @@ def student_dashboard(db, student):
         subjects.append({"offering_id": offering.id, "code": subject.code, "title": subject.title,
                          "percent": summary["percent"], "done": summary["done"], "total": summary["total"],
                          "to_do": len(t)})
-    todo.sort(key=lambda x: (x["deadline"] is None, x["deadline"] or 0))
+    todo = sort_todo(todo)
     updates.sort(key=lambda x: x["at"], reverse=True)
-    if next_lesson is None and todo:
-        first = todo[0]
+    available = [t for t in todo if t["state"] != "not_open"]      # something that opens later is not a next step
+    if next_lesson is None and available:
+        first = available[0]
         next_lesson = {"type": "work", "offering_id": first["offering_id"], "title": first["title"], "subject": first["subject"],
                        "link": f"/student/offerings/{first['offering_id']}/work/{first['assessment_id']}"}
     return {"name": student.display_name, "subjects": subjects, "week": week_strip(db, student),

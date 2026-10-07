@@ -1,9 +1,12 @@
+import {useEffect,useRef} from 'react';
 import {Link} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
 import {api} from '../../app/api';
 import {useHere} from '../../components/origin';
+import {useAuth} from '../../app/providers';
+import {markSeen,readSeen} from '../../components/seen';
 
-const when=(iso:string)=>new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+export const when=(iso:string)=>new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric'});
 const dateTime=(iso:string)=>new Date(iso).toLocaleString(undefined,{weekday:'short',hour:'numeric',minute:'2-digit',month:'short',day:'numeric'});
 const today=()=>new Date().toLocaleDateString(undefined,{weekday:'long',day:'2-digit',month:'long'});
 const greeting=()=>{const h=new Date().getHours();return h<12?'Good morning':h<18?'Good afternoon':'Good evening'};
@@ -26,17 +29,22 @@ function Hero({eyebrow,title,detail,action,to,icon}:{eyebrow:string;title:string
 }
 
 // ---------------------------------------------------------------- student
-interface Work{offering_id:string;assessment_id:string;kind:string;title:string;subject:string;deadline:string|null;state?:string;attempts_left?:number}
+export interface Work{late_allowed?:boolean;offering_id:string;assessment_id:string;kind:string;title:string;subject:string;deadline:string|null;available_from?:string|null;state?:string;attempts_left?:number}
 interface StudentHomeData{name:string;subjects:{offering_id:string;code:string;title:string;percent:number|null;done:number;total:number;to_do:number}[];
   week:{days:{label:string;date:string;count:number;today:boolean;future:boolean}[];lessons_today:number;work_today:number};
   next_step:{type:string;title:string;subject:string;link:string}|null;todo:Work[];todo_total:number;awaiting_feedback:Work[];another_attempt:Work[];
   updates:{type:string;title:string;subject:string;at:string;link:string}[]}
 const UPDATE_LABEL:Record<string,string>={announcement:'Announcement',material:'New material',result:'Result',grade:'Grade'};
-const workLink=(w:Work)=>`/student/offerings/${w.offering_id}/work/${w.assessment_id}`;
+export const workLink=(w:Work)=>`/student/offerings/${w.offering_id}/work/${w.assessment_id}`;
+
+export const studentHomeQuery={queryKey:['dashboard','student'],queryFn:()=>api<StudentHomeData>('/dashboard/student')};
 
 export function StudentHome(){
-  const here=useHere();
-  const query=useQuery({queryKey:['dashboard','student'],queryFn:()=>api<StudentHomeData>('/dashboard/student')});
+  const here=useHere();const {session}=useAuth();const uid=session?.user?.id??'';
+  const seenBefore=useRef(readSeen(uid));          // fixed for this visit so the "New" tags stay readable
+  const query=useQuery(studentHomeQuery);
+  const latest=query.data?.updates[0]?.at;
+  useEffect(()=>{if(latest)markSeen(uid,latest)},[uid,latest]);
   return <Page query={query}>{d=>{
     const first=d.name.split(' ')[0];const only=d.subjects.length===1?d.subjects[0]:null;
     return <>
@@ -61,13 +69,14 @@ export function StudentHome(){
         <div className="dash-side">
           <section className="panel"><h2>To do</h2>
             {d.todo.length===0?<p className="muted">Nothing needs your action.</p>:<ul className="rows">{d.todo.map(w=><li key={w.assessment_id}><Link state={here} to={workLink(w)}>{w.title}</Link>
-              <span className="muted">{w.subject} · {w.kind==='online_quiz'?'Quiz':'Activity'} · {w.state==='not_open'?'not open yet':w.deadline?`due ${dateTime(w.deadline)}`:'no deadline'}</span></li>)}</ul>}
-            {d.todo_total>d.todo.length&&<p className="muted">and {d.todo_total-d.todo.length} more in your subjects.</p>}
+              <span className="muted">{w.subject} · {w.kind==='online_quiz'?'Quiz':'Activity'} · {w.state==='not_open'?(w.available_from?`opens ${dateTime(w.available_from)}`:'not open yet'):w.deadline?(w.late_allowed?`late submission allowed, was due ${dateTime(w.deadline)}`:`due ${dateTime(w.deadline)}`):'no deadline'}</span></li>)}</ul>}
+            {d.todo_total>d.todo.length&&<p className="muted">and {d.todo_total-d.todo.length} more. </p>}
+            <Link state={here} className="touch" to="/student/todo">See everything to do</Link>
             {d.awaiting_feedback.length>0&&<><h3>Awaiting feedback</h3><ul className="rows">{d.awaiting_feedback.map(w=><li key={w.assessment_id}><Link state={here} to={workLink(w)}>{w.title}</Link><span className="muted">{w.subject} · submitted</span></li>)}</ul></>}
             {d.another_attempt.length>0&&<><h3>Another attempt available</h3><ul className="rows">{d.another_attempt.map(w=><li key={w.assessment_id}><Link state={here} to={workLink(w)}>{w.title}</Link><span className="muted">{w.subject} · {plural(w.attempts_left??0,'attempt')} left</span></li>)}</ul></>}
           </section>
           <section className="panel"><h2>Course updates</h2>
-            {d.updates.length===0?<p className="muted">No updates in the last 30 days.</p>:<ul className="rows updates">{d.updates.map((u,i)=><li key={i}><span className="eyebrow">{UPDATE_LABEL[u.type]??u.type} · {when(u.at)}</span><Link state={here} to={u.link}>{u.title}</Link><span className="muted">{u.subject}</span></li>)}</ul>}
+            {d.updates.length===0?<p className="muted">No updates in the last 30 days.</p>:<ul className="rows updates">{d.updates.map((u,i)=><li key={i}><span className="eyebrow">{UPDATE_LABEL[u.type]??u.type} · {when(u.at)}{Date.parse(u.at)>seenBefore.current&&<> · <span className="badge">New</span></>}</span><Link state={here} to={u.link}>{u.title}</Link><span className="muted">{u.subject}</span></li>)}</ul>}
           </section>
           <section className="panel"><h2>Need a little help?</h2><p className="muted">Ask a question about your learning materials. Answers cite the lessons they came from.</p>
             <Link state={here} className="button" to={only?`/student/offerings/${only.offering_id}/study`:'/student/subjects'}>{only?'Ask study help':'Choose a subject'}</Link></section>
@@ -133,8 +142,8 @@ export function AdminHome(){
   const query=useQuery({queryKey:['dashboard','admin'],queryFn:()=>api<AdminHomeData>('/dashboard/admin')});
   return <Page query={query}>{d=>{
     const attention=d.issues.open?{t:`${plural(d.issues.open,'open report')} to review`,s:'Students and teachers are waiting for a reply.',a:'Review reports',to:'/admin/issues'}
-      :d.accounts.invited?{t:`${plural(d.accounts.invited,'invitation')} not accepted yet`,s:'These people cannot sign in until they accept their invitation.',a:'Review accounts',to:'/admin/accounts'}
-      :d.pending_imports?{t:`${plural(d.pending_imports,'student import')} waiting to be confirmed`,s:'A previewed file has not been committed.',a:'Open academic setup',to:'/admin/academics'}:null;
+      :d.accounts.invited?{t:`${plural(d.accounts.invited,'invitation')} not accepted yet`,s:'These people cannot sign in until they accept their invitation.',a:'Review accounts',to:'/admin/accounts?status=invited'}
+      :d.pending_imports?{t:`${plural(d.pending_imports,'student import')} waiting to be confirmed`,s:'A previewed file has not been committed.',a:'Open school years',to:'/admin/academics'}:null;
     return <>
       <Heading eyebrow="Admin dashboard" title="Your academic workspace." line="Manage the academic year, students, teachers and accounts."/>
       <div className="dash-grid">
@@ -142,8 +151,8 @@ export function AdminHome(){
           {d.setup.length>0&&<section className="panel"><h2>Get started</h2><p className="muted">Set up in this order. Finished steps are ticked.</p>
             <ol className="rows">{d.setup.map(x=><li key={x.key}>{x.done?<span><span aria-hidden="true">✓ </span>{x.label}<span className="sr-only"> (done)</span></span>:<Link state={here} to={x.link}>{x.label}</Link>}</li>)}</ol></section>}
           <section className="panel"><h2>Academic management</h2><div className="actions">
-            <Link state={here} className="button primary" to="/admin/academics">Open academic setup</Link><Link state={here} className="button" to="/admin/subjects">Subject catalog</Link>
-            <Link state={here} className="button" to="/admin/subjects/import">Import a prospectus</Link><Link state={here} className="button" to="/admin/accounts">User accounts</Link></div></section>
+            <Link state={here} className="button primary" to="/admin/academics">School years and terms</Link><Link state={here} className="button" to="/admin/subjects">Subject catalog</Link>
+            <Link state={here} className="button" to="/admin/subjects/import">Import a prospectus</Link></div></section>
           {attention?<Hero eyebrow="Needs your attention" title={attention.t} detail={attention.s} action={attention.a} to={attention.to} icon="!"/>
             :<Hero eyebrow="Needs your attention" title="Nothing needs attention" detail="No open reports, pending invitations or unconfirmed imports." icon="✓"/>}
           <Stats items={[[d.accounts.students,'Active students'],[d.accounts.faculty,'Active faculty'],[d.accounts.inactive,'Inactive accounts'],[d.subjects,'Subjects in the catalog']]}/>
@@ -153,11 +162,31 @@ export function AdminHome(){
                 {d.terms.map(t=><tr key={t.id}><td>{t.name}<br/><span className="muted">{t.school_year}</span></td><td>{t.sections}</td><td>{t.offerings}</td><td>{t.students}</td><td><Link state={here} to={`/admin/terms/${t.id}`}>Open</Link></td></tr>)}</tbody></table></div>}</section>
         </div>
         <div className="dash-side">
-          <section className="panel"><h2>User actions</h2><p className="muted">Invite a person or change their access.</p><Link state={here} className="button primary" to="/admin/accounts">Manage accounts</Link></section>
           <section className="panel"><h2>Recent account activity</h2>
             {d.recent_activity.length===0?<p className="muted">No account activity yet.</p>:<ul className="rows updates">{d.recent_activity.map((a,i)=><li key={i}><strong>{ACTION_LABEL[a.action]??a.action.replace('account.','').replace(/_/g,' ')}</strong><span className="muted">{a.who} · {dateTime(a.at)}</span></li>)}</ul>}</section>
           <section className="panel"><h2>Reports</h2><p className="muted">{plural(d.issues.open,'open report')}{d.issues.in_progress?`, ${d.issues.in_progress} being looked at`:''}.</p><Link state={here} className="button" to="/admin/issues">Open reports</Link></section>
         </div>
       </div></>;
   }}</Page>;
+}
+
+export function StudentTodo(){
+  const here=useHere();
+  const query=useQuery({queryKey:['todo','student'],queryFn:()=>api<{todo:Work[];awaiting_feedback:Work[];another_attempt:Work[]}>('/dashboard/student/todo')});
+  const row=(w:Work,note:string)=><li key={w.assessment_id}><Link state={here} to={workLink(w)}>{w.title}</Link><span className="muted">{w.subject} · {w.kind==='online_quiz'?'Quiz':'Activity'} · {note}</span></li>;
+  const group=(title:string,hint:string,items:Work[],note:(w:Work)=>string)=><section className="panel" key={title}><h2>{title}</h2><p className="muted">{hint}</p>
+    {items.length===0?<p className="muted">Nothing here.</p>:<ul className="rows">{items.map(w=>row(w,note(w)))}</ul>}</section>;
+  return <>
+    <div className="page-heading"><div><p className="eyebrow">All subjects</p><h1>To do</h1><p className="muted">Quizzes and activities from every current subject, earliest deadline first.</p></div></div>
+    <Page query={query}>{d=>{
+      const open=d.todo.filter(w=>w.state!=='not_open'),later=d.todo.filter(w=>w.state==='not_open');
+      const due=(w:Work)=>w.deadline?(w.late_allowed?`late submission allowed, was due ${dateTime(w.deadline)}`:`due ${dateTime(w.deadline)}`):'no deadline';
+      return <>
+        {d.todo.length+d.awaiting_feedback.length+d.another_attempt.length===0&&<section className="panel"><h2>You’re up to date</h2><p className="muted">Nothing needs your action. New work appears here when your teacher publishes it.</p><Link state={here} className="button" to="/student/subjects">See my subjects</Link></section>}
+        {open.length>0&&group('Available now','Open for you, earliest deadline first.',open,due)}
+        {d.another_attempt.length>0&&group('Another attempt available','You have submitted these once and can try again.',d.another_attempt,w=>`${plural(w.attempts_left??0,'attempt')} left${w.late_allowed&&w.deadline?` · late submission allowed, was due ${dateTime(w.deadline)}`:''}`)}
+        {later.length>0&&group('Not open yet','These open later.',later,w=>w.available_from?`opens ${dateTime(w.available_from)}`:due(w))}
+        {d.awaiting_feedback.length>0&&group('Awaiting feedback','Submitted. Your teacher has not released a result yet.',d.awaiting_feedback,()=>'submitted')}
+      </>}}</Page>
+  </>;
 }

@@ -142,6 +142,38 @@ def test_the_admin_home_has_setup_counts_and_none_of_the_teaching_data(world):
         assert forbidden not in raw, forbidden
 
 
+def test_the_todo_page_lists_everything_the_dashboard_summarises_and_only_for_students(graded):
+    quiz = make_quiz(graded, title="Open quiz", max_attempts=2)
+    done = make_manual(graded, "activity", "Already handed in", points="10", category_key="activity")
+    make_manual(graded, "activity", "Poster", points="10", category_key="activity")
+    assert submit_pdf(graded["st1"], graded, done).status_code in (200, 201)
+    attempt = start(graded["st1"], graded, quiz["aid"]).json()
+    assert submit(graded["st1"], graded, attempt["id"], quiz["correct"]).status_code == 200
+    page = graded["st1"].get("/api/dashboard/student/todo").json()
+    data = home(graded)
+    for key in ("todo", "awaiting_feedback", "another_attempt"):
+        assert [w["assessment_id"] for w in page[key]] == [w["assessment_id"] for w in data[key]], key
+    assert [w["title"] for w in page["todo"]] == ["Poster"] and page["another_attempt"][0]["attempts_left"] == 1
+    assert graded["fac"].get("/api/dashboard/student/todo").status_code == 403
+    assert graded["admin"].get("/api/dashboard/student/todo").status_code == 403
+
+
+def test_todo_order_puts_open_work_first_and_never_offers_upcoming_work_as_the_next_step(graded):
+    from datetime import datetime, timedelta, timezone
+    iso = lambda days: (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    make_manual(graded, "activity", "Later due", points="10", category_key="activity", deadline=iso(5))
+    make_manual(graded, "activity", "No deadline", points="10", category_key="activity")
+    make_manual(graded, "activity", "Due first", points="10", category_key="activity", deadline=iso(1))
+    make_manual(graded, "activity", "Opens last", points="10", category_key="activity", available_from=iso(6), deadline=iso(9))
+    make_manual(graded, "activity", "Opens soon", points="10", category_key="activity", available_from=iso(2), deadline=iso(20))
+    page = graded["st1"].get("/api/dashboard/student/todo").json()
+    assert [w["title"] for w in page["todo"]] == ["Due first", "Later due", "No deadline", "Opens soon", "Opens last"]
+    assert all("late_allowed" in w for w in page["todo"])
+    data = home(graded)
+    assert data["next_step"]["title"] in ("Due first",) or data["next_step"]["type"] == "lesson"
+    assert "Opens" not in (data["next_step"] or {}).get("title", "")
+
+
 def test_each_dashboard_is_for_its_own_role(graded):
     for who, mine, others in (("st1", "student", ("faculty", "admin")), ("fac", "faculty", ("student", "admin")),
                               ("admin", "admin", ("student", "faculty"))):

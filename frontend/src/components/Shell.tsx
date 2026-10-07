@@ -1,9 +1,12 @@
 import {useEffect,useRef,useState} from 'react';
 import {Link,NavLink,Outlet,Navigate} from 'react-router-dom';
 import {useAuth,useTheme,queryClient} from '../app/providers';
+import {useQuery} from '@tanstack/react-query';
 import {api,post,setCsrf} from '../app/api';
+import {studentHomeQuery} from '../features/dashboard/Dashboards';
+import {useUnread} from './seen';
 
-type NavItem={to:string;label:string;icon:string;end?:boolean};
+type NavItem={to:string;label:string;icon:string;end?:boolean;dot?:boolean};
 const ROLE_LABEL={admin:'Academic administrator',faculty:'Teaching faculty',student:'Student'} as const;
 
 /** Grouped navigation. Icons are decoration only (aria-hidden); every entry has a visible text label. */
@@ -15,11 +18,18 @@ function navigation(role:'admin'|'faculty'|'student'):{label:string;items:NavIte
     {label:'Academic management',items:[{to:`${home}/academics`,label:'School years',icon:'☰'},{to:`${home}/subjects`,label:'Subject catalog',icon:'▤'}]},
     {label:'Oversight',items:[{to:`${home}/issues`,label:'Reports',icon:'?'},{to:`${home}/audit`,label:'Audit history',icon:'◷'}]},
     account];
+  const student=role==='student';
   return [
-    {label:'Your workspace',items:[{to:home,label:'Dashboard',icon:'⌂',end:true},{to:`${home}/subjects`,label:'My subjects',icon:'▤'}]},
+    {label:'Your workspace',items:[{to:home,label:'Dashboard',icon:'⌂',end:true,dot:student},...(student?[{to:`${home}/todo`,label:'To do',icon:'☑'}]:[]),{to:`${home}/subjects`,label:'My subjects',icon:'▤'}]},
     {label:'Account & help',items:[{to:`${home}/issues`,label:'Report a problem',icon:'?'},...account.items]}];
 }
 const initials=(name:string)=>name.split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]!.toUpperCase()).join('')||'?';
+
+/** A dot beside Dashboard while there are course updates this browser has not shown yet (students only). */
+function UpdatesDot({userId}:{userId:string}){
+  const latest=useQuery(studentHomeQuery).data?.updates[0]?.at;
+  return useUnread(userId,latest)?<span className="dot" role="img" aria-label="New course updates"/>:null;
+}
 
 export function Shell(){
   const {session,loading,error}=useAuth();const {theme,setTheme}=useTheme();
@@ -61,7 +71,7 @@ export function Shell(){
       <nav aria-label="Main" onClick={()=>setOpen(false)}>
         {navigation(user.role).map(group=><div className="nav-group" key={group.label}>
           <p className="nav-label">{group.label}</p>
-          {group.items.map(i=><NavLink key={i.to} to={i.to} end={i.end}><span className="nav-icon" aria-hidden="true">{i.icon}</span>{i.label}</NavLink>)}
+          {group.items.map(i=><NavLink key={i.to} to={i.to} end={i.end}><span className="nav-icon" aria-hidden="true">{i.icon}</span>{i.label}{i.dot&&<UpdatesDot userId={user.id}/>}</NavLink>)}
         </div>)}
       </nav>
       <p className="sidebar-note">Governor Mariano E. Villafuerte Community College<br/>BS Entrepreneurship</p>
