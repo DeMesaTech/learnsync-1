@@ -550,3 +550,8 @@ Note: another process (started from Codex's Python runtime) was already serving 
 - A short dance (about 2.8 s: hop, sway, wings flapping, happy eyes) every 30 to 70 seconds, only while the chat is idle and the panel is closed, never in a hidden tab and never for people who prefer reduced motion (no timer is even started). It stops the moment the chat is busy.
 - Verified with a fake clock in a browser: dance class appears within 72 s and is gone 3 s later; no dance with the panel open (200 s); no dance with reduced motion (300 s). The pose was read from a zoomed screenshot. tsc and eslint clean; accessibility sweep 164 pages 0 violations.
 - Not verified: how often it feels right to a real student (the 30 to 70 s range is my guess), and the dance on a phone.
+
+#### "Loading your workspace..." that never ends (2026-10-07, Claude)
+- Cause of the report: the user's page was on Vite 5173, and I had just stopped the Docker database and the API; the page then waited on /api/auth/session. A failed request already showed "Cannot reach the server", but a request that never answers (API up, database down) left the page on Loading forever.
+- Fix: the session request now has a 10-second limit (`AbortSignal.timeout`), so it ends in the "Cannot reach the server" message. Verified in a browser against the dev server: healthy page loads; with the session request deliberately never answered it shows Loading at 2 s and the error message at 12.5 s. tsc and eslint clean. Only the session request has the limit; other requests are unchanged.
+- Services restored: Docker Postgres and Mailpit started, API started on 8001 (mine). The Vite on 5173 is not mine and was left running.
