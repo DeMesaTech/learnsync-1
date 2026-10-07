@@ -201,6 +201,10 @@ try{
   const chat=await call(stud,'POST',`/learn/offerings/${O}/study/conversations`,{});
   check('a student can start private study help',chat.status===201);
   check('the teacher cannot read the student’s conversations',(await call(teach,'GET',`/learn/offerings/${O}/study/conversations`)).status===403);
+  await stud.goto('/student');await stud.locator('.buddy-launch').click();await stud.locator('.buddy-panel').waitFor();
+  await stud.getByRole('button',{name:'Delete conversation'}).waitFor({timeout:8000});   // only shown when a conversation is open
+  check('the Study buddy reopens the last conversation instead of starting a new one',true);
+  await stud.keyboard.press('Escape');
 
   // ---------- 7b. sequence and status of lessons, My work, deleting a study chat ----------
   const topicId=outline.chapters[0].topics[0].id;
@@ -232,8 +236,12 @@ try{
   await stud.locator('.chat-item').first().click();
   await stud.getByRole('button',{name:'Delete conversation'}).click();
   await stud.locator('dialog').getByRole('button',{name:'Delete conversation'}).click();
-  await stud.getByText('No earlier chats yet.').waitFor();
+  await stud.getByText('No conversations yet.').waitFor();
   check('a student deletes a whole study conversation',((await call(stud,'GET',`/learn/offerings/${O}/study/conversations`)).data.items).length===0);
+  check('the old Study help address lands on the Study buddy page',stud.url().includes('/student/study-buddy?subject='+O));
+  await stud.goto('/student');await stud.locator('.buddy-launch').waitFor();
+  await teach.goto('/faculty');await teach.waitForLoadState('networkidle');await teach.waitForTimeout(400);
+  check('the Study buddy button is on student pages and never on teacher pages',(await stud.locator('.buddy-launch').count())===1&&(await teach.locator('.buddy-launch').count())===0);
 
   // ---------- 7c. a realistic subject: 40 more lessons, and the new lists at phone width ----------
   for(let n=1;n<=40;n++){
