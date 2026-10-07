@@ -32,6 +32,13 @@ def ai_status(actor=Depends(current_account)):
     return provider.status()
 
 
+@router.get("/learn/study/conversations")
+def all_conversations(limit: int = Query(25, ge=1, le=100), cursor: str | None = None,
+                      offering_id: UUID | None = None, actor=Depends(student), db: Session = Depends(get_db)):
+    """Only the signed-in student's own chats, across their subjects. Faculty and admins are refused."""
+    return study.list_all_conversations(db, actor, limit, cursor, offering_id)
+
+
 @router.get(L + "/study/conversations")
 def conversations(offering_id: UUID, limit: int = Query(25, ge=1, le=100), cursor: str | None = None,
                   actor=Depends(student), db: Session = Depends(get_db)):

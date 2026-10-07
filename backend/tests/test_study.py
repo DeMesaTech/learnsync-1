@@ -711,3 +711,30 @@ def test_an_analogy_is_shown_only_after_the_explanation_and_the_analogy_both_pas
     plain = run(json.dumps({"answer": "Fixed costs stay the same [S1].", "evidence": [{"source": "S1", "quote": COSTS}]}),
                 '{"supported": true, "analogy_ok": true}')
     assert plain["analogy"] is None                                                                  # the model offered none
+
+
+def test_the_all_conversations_list_is_the_students_own_and_says_where_they_can_still_ask(db, course, ai):
+    lesson(course, "Markets", "<p>A market is where buyers and sellers meet.</p>")
+    st1, st2 = course["st1"], course["st2"]
+    url = "/api/learn/study/conversations"
+    first, second, theirs = conversation(st1, course), conversation(st1, course), conversation(st2, course)
+    assert ask(st1, course, first, "What is a market?").status_code == 200
+    page = st1.get(url).json()
+    assert {c["id"] for c in page["items"]} == {first, second} and theirs not in {c["id"] for c in page["items"]}
+    top = page["items"][0]
+    assert top["id"] == first and top["offering_id"] == course["oid"] and top["subject_code"] and top["can_ask"] is True
+    assert top["title"] and "market" not in str(page["items"][1:]).lower()        # titles only, never message text of others
+    from urllib.parse import quote
+    one = st1.get(url + "?limit=1").json()
+    assert len(one["items"]) == 1 and one["has_more"] and st1.get(url + "?limit=1&cursor=" + quote(one["next_cursor"])).json()["items"][0]["id"] == second
+    assert [c["id"] for c in st1.get(url + f"?offering_id={course['oid']}").json()["items"]] == [first, second]
+    assert st1.get(url + "?offering_id=00000000-0000-0000-0000-000000000000").json()["items"] == []
+    assert course["fac"].get(url).status_code == 403 and course["admin"].get(url).status_code == 403
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    assert TestClient(app).get(url).status_code == 401
+    # history survives a closed term, but asking no longer applies
+    assert course["admin"].post(f"/api/terms/{course['term']['id']}/close").status_code in (200, 204)
+    closed = {c["id"]: c["can_ask"] for c in st1.get(url).json()["items"]}
+    assert closed == {first: False, second: False}

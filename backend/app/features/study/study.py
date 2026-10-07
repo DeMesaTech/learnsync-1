@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.errors import fail
-from app.features.academics.models import Subject
+from app.features.academics.models import AcademicTerm, Enrollment, Offering, Subject
 from app.features.accounts.commands import audit
 from app.features.accounts.models import now
 from app.features.assessments.attempts import expired
@@ -78,6 +78,32 @@ def list_conversations(db, student, offering, limit=25, cursor=None):
                       for c in shown],
             "has_more": len(rows) > limit,
             "next_cursor": f"{shown[-1].updated_at.isoformat()}~{shown[-1].id}" if len(rows) > limit else None}
+
+
+def list_all_conversations(db, student, limit=25, cursor=None, offering_id=None):
+    """The student's own chats across every subject (history stays readable after withdrawal or term close).
+    Each item says whether the student can still ask in it. Newest first, one page at a time."""
+    query = (select(StudyConversation, Subject, AcademicTerm.status, Enrollment.status)
+             .join(Offering, Offering.id == StudyConversation.offering_id)
+             .join(Subject, Subject.id == Offering.subject_id)
+             .join(AcademicTerm, AcademicTerm.id == Offering.term_id)
+             .outerjoin(Enrollment, and_(Enrollment.offering_id == Offering.id, Enrollment.student_id == student.id))
+             .where(StudyConversation.student_id == student.id))
+    if offering_id:
+        query = query.where(StudyConversation.offering_id == offering_id)
+    if cursor:
+        at, last = parse_cursor(cursor, 2)
+        query = query.where(or_(StudyConversation.updated_at < at,
+                                and_(StudyConversation.updated_at == at, StudyConversation.id > last)))
+    rows = db.execute(query.order_by(StudyConversation.updated_at.desc(), StudyConversation.id)
+                      .limit(limit + 1)).all()
+    shown = rows[:limit]
+    return {"items": [{"id": c.id, "title": c.title or "New conversation", "updated_at": c.updated_at,
+                       "offering_id": c.offering_id, "subject_code": s.code, "subject_title": s.title,
+                       "can_ask": term == "open" and enrolled == "enrolled"}
+                      for c, s, term, enrolled in shown],
+            "has_more": len(rows) > limit,
+            "next_cursor": (f"{shown[-1][0].updated_at.isoformat()}~{shown[-1][0].id}" if len(rows) > limit else None)}
 
 
 def delete_conversation(db, student, offering, conversation_id):
