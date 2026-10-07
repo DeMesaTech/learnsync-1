@@ -4,6 +4,8 @@ export interface Suggestion{item_id:string;title:string;why:string;kind:'related
 export interface StudyMessage{id:string;role:'user'|'assistant';content:string;sources:StudySource[];suggestions:Suggestion[];analogy?:string|null;created_at:string}
 export interface ConversationSummary{id:string;title:string;updated_at:string}
 export interface ConversationPage{items:ConversationSummary[];has_more:boolean;next_cursor:string|null}
+export interface AllConversation extends ConversationSummary{offering_id:string;subject_code:string;subject_title:string;can_ask:boolean}
+export interface AllConversationsPage{items:AllConversation[];has_more:boolean;next_cursor:string|null}
 export interface Conversation{id:string;title:string;has_earlier:boolean;next_cursor:string|null;messages:StudyMessage[]}
 export interface Snapshot{id:string;status:'extracted'|'approved';method:'fetched'|'manual';source_url:string;text:string;approved_at:string|null}
 export interface SnapshotState{snapshot:Snapshot|null;revision_state:string|null}

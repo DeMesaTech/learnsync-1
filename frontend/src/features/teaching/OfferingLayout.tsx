@@ -18,13 +18,13 @@ export function OfferingLayout({role}:{role:'faculty'|'student'}){
       </div></div>
       {role==='student'&&query.data.enrollment_status==='withdrawn'?<>
         <p className="warn" role="status">You are no longer enrolled in this subject. Course content is not available, but you can still see your own results and your earlier study chats.</p>
-        <nav className="tabs" aria-label="Subject sections"><NavLink to={`${base}/study`}>Study help history</NavLink><NavLink to={`${base}/results`}>Grades & results</NavLink></nav></>:
+        <nav className="tabs" aria-label="Subject sections"><NavLink to={`/student/study-buddy?subject=${query.data.id}`}>Study buddy chats</NavLink><NavLink to={`${base}/results`}>Grades & results</NavLink></nav></>:
       <nav className="tabs" aria-label="Subject sections">
         {role==='faculty'&&<NavLink end to={base}>Students</NavLink>}
         <NavLink to={`${base}/syllabus`}>Syllabus</NavLink>
         <NavLink to={`${base}/${role==='faculty'?'content':'lessons'}`}>{role==='faculty'?'Content':'Lessons & materials'}</NavLink>
         {role==='faculty'?<><NavLink to={`${base}/assessments`}>Assessments</NavLink><NavLink to={`${base}/attendance`}>Attendance</NavLink><NavLink to={`${base}/gradebook`}>Gradebook</NavLink><NavLink to={`${base}/class-standing`}>Class standing</NavLink><NavLink to={`${base}/progress`}>Progress</NavLink></>
-          :<><NavLink to={`${base}/study`}>Study help</NavLink><NavLink to={`${base}/work`}>My work</NavLink><NavLink to={`${base}/progress`}>My progress</NavLink><NavLink to={`${base}/results`}>Grades & results</NavLink></>}
+          :<><NavLink to={`/student/study-buddy?subject=${query.data.id}`}>Study buddy</NavLink><NavLink to={`${base}/work`}>My work</NavLink><NavLink to={`${base}/progress`}>My progress</NavLink><NavLink to={`${base}/results`}>Grades & results</NavLink></>}
         <NavLink to={`${base}/announcements`}>Announcements</NavLink>
       </nav>}
       <Outlet context={{offering:query.data}}/>
