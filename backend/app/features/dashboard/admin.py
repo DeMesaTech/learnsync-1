@@ -24,6 +24,21 @@ def count(db, query):
     return db.scalar(query) or 0
 
 
+def setup_steps(terms, subjects, faculty):
+    """First-run guide derived from existing records (no stored progress); empty once every step is done.
+    It shows that starting records exist; it does not certify that setup is complete."""
+    first = terms[0] if terms else None          # sections, offerings and students are judged in ONE term
+    term = f"/admin/terms/{first['id']}" if first else "/admin/academics"
+    steps = [("term", "Create a school year and open a term", bool(terms), "/admin/academics"),
+             ("subjects", "Add subjects to the catalog (import a prospectus)", subjects > 0, "/admin/subjects/import"),
+             ("sections", "Create sections for the term", bool(first and first["sections"]), term),
+             ("faculty", "Invite a faculty account (a teacher must exist before assignment)", faculty > 0, "/admin/accounts"),
+             ("offerings", "Assign teachers to subjects", bool(first and first["offerings"]), term),
+             ("students", "Enroll students (import them into sections; invitations are sent)", bool(first and first["students"]), term)]
+    out = [{"key": k, "label": label, "done": done, "link": link} for k, label, done, link in steps]
+    return [] if all(x["done"] for x in out) else out
+
+
 def admin_dashboard(db, admin):
     terms = []
     for term, year in db.execute(select(AcademicTerm, SchoolYear)
@@ -40,14 +55,16 @@ def admin_dashboard(db, admin):
                               .group_by(Account.role)).all())
     status = dict(db.execute(select(Account.status, func.count()).group_by(Account.status)).all())
     issues = dict(db.execute(select(IssueReport.status, func.count()).group_by(IssueReport.status)).all())
+    subjects = count(db, select(func.count()).select_from(Subject).where(Subject.status == "active"))
     recent = [{"action": a.action, "who": a.actor_label, "at": a.created_at}
               for a in db.scalars(select(AuditEvent).where(AuditEvent.action.in_(ACCOUNT_CHANGES))
                                   .order_by(AuditEvent.created_at.desc()).limit(RECENT))]
-    return {"name": admin.display_name, "terms": terms,
+    faculty = count(db, select(func.count()).select_from(Account).where(Account.role == "faculty", Account.status != "inactive"))
+    return {"name": admin.display_name, "terms": terms, "setup": setup_steps(terms, subjects, faculty),
             "accounts": {"students": by_role.get("student", 0), "faculty": by_role.get("faculty", 0),
                          "admins": by_role.get("admin", 0), "invited": status.get("invited", 0),
                          "inactive": status.get("inactive", 0)},
-            "subjects": count(db, select(func.count()).select_from(Subject)),
+            "subjects": subjects,
             "pending_imports": count(db, select(func.count()).select_from(StudentImport)
                                      .where(StudentImport.status == "previewed")),
             "issues": {"open": issues.get("open", 0), "in_progress": issues.get("in_progress", 0)},

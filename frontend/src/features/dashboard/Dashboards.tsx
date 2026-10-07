@@ -16,8 +16,10 @@ function Page<T>({query,children}:{query:{isPending:boolean;error:Error|null;dat
 }
 const Heading=({eyebrow,title,line}:{eyebrow:string;title:string;line:string})=>
   <div className="page-heading dash-heading"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p className="muted">{line}</p></div><span className="date-chip">{today()}</span></div>;
-const Stats=({items}:{items:[number|string,string][]})=>
-  <section className="stats" aria-label="At a glance">{items.map(([n,l])=><div key={l}><strong>{n}</strong><span>{l}</span></div>)}</section>;
+const Stats=({items}:{items:[number|string,string,string?][]})=>{
+  const here=useHere();
+  return <section className="stats" aria-label="At a glance">{items.map(([n,l,to])=><div key={l}><strong>{n}</strong>{to?<Link state={here} to={to}>{l}</Link>:<span>{l}</span>}</div>)}</section>;
+};
 function Hero({eyebrow,title,detail,action,to,icon}:{eyebrow:string;title:string;detail:string;action?:string;to?:string;icon:string}){
   const here=useHere();
   return <section className="hero"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2><p className="muted">{detail}</p>{action&&to&&<Link state={here} className="button primary" to={to}>{action}</Link>}</div><span className="hero-art" aria-hidden="true">{icon}</span></section>;
@@ -41,6 +43,8 @@ export function StudentHome(){
       <Heading eyebrow="Student dashboard" title={`Let’s keep learning, ${first}.`} line="One clear next step, with everything else close by."/>
       <div className="dash-grid">
         <div className="dash-main">
+          {d.next_step?<Hero eyebrow={d.next_step.type==='lesson'?'Your next step':'Your next task'} title={d.next_step.title} detail={d.next_step.subject} action={d.next_step.type==='lesson'?'Continue learning':'Open work'} to={d.next_step.link} icon="▤"/>
+            :<Hero eyebrow="Your next step" title="You’re up to date" detail={d.subjects.length?'Nothing is waiting for you right now. New lessons and work appear here when your teacher publishes them. You can review your subjects or ask study help about what you have learned.':'You are not enrolled in a current subject yet.'} action={d.subjects.length?(only?'Ask study help':'See my subjects'):undefined} to={only?`/student/offerings/${only.offering_id}/study`:'/student/subjects'} icon="✓"/>}
           <section className="panel"><h2>Learning activity this week</h2>
             <p className="muted">Lessons you marked complete and quizzes or activities you submitted. Opening or reading something does not count.</p>
             <ol className="week" aria-label="Activity by day this week">{d.week.days.map(day=>
@@ -50,8 +54,6 @@ export function StudentHome(){
             <Stats items={[[d.week.lessons_today,'Lessons completed today'],[d.week.work_today,'Quizzes and activities submitted today']]}/>
             {only&&<Link state={here} className="button" to={`/student/offerings/${only.offering_id}/progress`}>View my progress</Link>}
           </section>
-          {d.next_step?<Hero eyebrow={d.next_step.type==='lesson'?'Your next step':'Your next task'} title={d.next_step.title} detail={d.next_step.subject} action={d.next_step.type==='lesson'?'Continue learning':'Open work'} to={d.next_step.link} icon="▤"/>
-            :<Hero eyebrow="Your next step" title="You’re up to date" detail={d.subjects.length?'Nothing is waiting for you right now. New lessons and work appear here when your teacher publishes them. You can review your subjects or ask study help about what you have learned.':'You are not enrolled in a current subject yet.'} action={d.subjects.length?(only?'Ask study help':'See my subjects'):undefined} to={only?`/student/offerings/${only.offering_id}/study`:'/student/subjects'} icon="✓"/>}
           <section aria-labelledby="subjects-h"><div className="section-head"><h2 id="subjects-h">My subjects</h2><Link state={here} to="/student/subjects">All subjects, including past terms</Link></div>
             {d.subjects.length===0?<p className="panel muted">No current subjects.</p>:<div className="cards">{d.subjects.map(s=><SubjectCard key={s.offering_id} code={s.code} title={s.title} meta={s.to_do?plural(s.to_do,'item')+' to do':'Nothing to do'}
               progress={s.percent} detail={s.total?`${s.done} of ${s.total} steps done`:'No lessons or work yet'} to={`/student/offerings/${s.offering_id}/lessons`} action="Open" links={[['Progress',`/student/offerings/${s.offering_id}/progress`],['Study help',`/student/offerings/${s.offering_id}/study`]]}/>)}</div>}</section>
@@ -85,7 +87,7 @@ export function SubjectCard({code,title,meta,progress,detail,to,action,links}:{c
 
 // ---------------------------------------------------------------- faculty
 interface FacultyHomeData{name:string;subjects:{offering_id:string;code:string;title:string;sections:string[];students:number;term:string;drafts_content:number;drafts_assessments:number;to_grade:number;needs_review:number;average_progress:number|null;quiet_students:number}[];
-  closed_subjects:number;task:{headline:string;detail:string;action:string;link:string}|null;deadlines:{title:string;deadline:string;subject:string;link:string}[];
+  closed_subjects:number;task:{headline:string;detail:string;action:string;link:string;icon:string}|null;queue:{title:string;count:number;subject:string;link:string}[];review_link:string|null;deadlines:{title:string;deadline:string;subject:string;link:string}[];
   totals:{subjects:number;students:number;to_grade:number;needs_review:number;drafts:number}}
 
 export function FacultyHome(){
@@ -96,9 +98,9 @@ export function FacultyHome(){
       <Heading eyebrow="Staff dashboard" title={`${greeting()}, ${d.name}.`} line="Your subjects, teaching tasks and grading at a glance."/>
       <div className="dash-grid">
         <div className="dash-main">
-          {d.task?<Hero eyebrow="Your next teaching task" title={d.task.headline} detail={d.task.detail} action={d.task.action} to={d.task.link} icon="✓"/>
-            :<Hero eyebrow="Your next teaching task" title="Nothing is waiting for you" detail="No submissions to grade, no grades to review and no drafts in progress." icon="✓"/>}
-          <Stats items={[[d.totals.subjects,'Assigned subjects (current term)'],[d.totals.students,'Enrolled students'],[d.totals.to_grade,'Submissions to grade'],[d.totals.needs_review,'Grades to review']]}/>
+          {d.task?<Hero eyebrow="Your next teaching task" title={d.task.headline} detail={d.task.detail} action={d.task.action} to={d.task.link} icon={d.task.icon}/>
+            :<Hero eyebrow="Your next teaching task" title="Nothing is waiting for you" detail="No activity submissions to grade, no grades to review and no drafts in progress." icon="✓"/>}
+          <Stats items={[[d.totals.subjects,'Assigned subjects in open terms'],[d.totals.students,'Subject enrollments'],[d.totals.to_grade,'Activity submissions to grade',d.queue[0]?.link],[d.totals.needs_review,'Students with grades to review',d.review_link??undefined]]}/>
           <section aria-labelledby="my-subjects-h"><div className="section-head"><h2 id="my-subjects-h">My subjects</h2><Link state={here} to="/faculty/subjects">{d.closed_subjects?`All subjects, including ${plural(d.closed_subjects,'past one')}`:'All subjects'}</Link></div>
             {d.subjects.length===0?<p className="panel muted">No subjects are assigned to you in an open term.</p>:<div className="cards">{d.subjects.map(s=>{
               const o=`/faculty/offerings/${s.offering_id}`;const drafts=s.drafts_content+s.drafts_assessments;
@@ -106,6 +108,7 @@ export function FacultyHome(){
                 to={o} action="Teach" links={[['Content',`${o}/content`],['Assessments',`${o}/assessments`],['Gradebook',`${o}/gradebook`]]}/>})}</div>}</section>
         </div>
         <div className="dash-side">
+          {d.queue.length>0&&<section className="panel"><h2>Activity submissions needing grading</h2><p className="muted">Top 5 by number awaiting grading.</p><ul className="rows">{d.queue.map((q,i)=><li key={i}><Link state={here} to={q.link}>{q.title}</Link><span className="muted">{q.subject} · {plural(q.count,'submission')} waiting</span></li>)}</ul></section>}
           <section className="panel"><h2>Upcoming deadlines</h2>
             {d.deadlines.length===0?<p className="muted">No deadlines in the next two weeks.</p>:<ul className="rows">{d.deadlines.map((x,i)=><li key={i}><Link state={here} to={x.link}>{x.title}</Link><span className="muted">{x.subject} · {dateTime(x.deadline)}</span></li>)}</ul>}</section>
           <section className="panel"><h2>Student progress</h2>
@@ -120,7 +123,7 @@ export function FacultyHome(){
 }
 
 // ---------------------------------------------------------------- admin
-interface AdminHomeData{name:string;terms:{id:string;name:string;school_year:string;sections:number;offerings:number;students:number}[];
+interface AdminHomeData{name:string;setup:{key:string;label:string;done:boolean;link:string}[];terms:{id:string;name:string;school_year:string;sections:number;offerings:number;students:number}[];
   accounts:{students:number;faculty:number;admins:number;invited:number;inactive:number};subjects:number;pending_imports:number;issues:{open:number;in_progress:number};
   recent_activity:{action:string;who:string;at:string}[]}
 const ACTION_LABEL:Record<string,string>={'account.invited':'Invitation sent','account.activated':'Account activated','account.status_changed':'Access changed','account.bootstrapped':'Administrator created','account.handed_over':'Ownership transferred','account.handover_initiated':'Ownership transfer started','account.link_sent':'Sign-in link sent','account.password_reset':'Password reset'};
@@ -136,6 +139,8 @@ export function AdminHome(){
       <Heading eyebrow="Admin dashboard" title="Your academic workspace." line="Manage the academic year, students, teachers and accounts."/>
       <div className="dash-grid">
         <div className="dash-main">
+          {d.setup.length>0&&<section className="panel"><h2>Get started</h2><p className="muted">Set up in this order. Finished steps are ticked.</p>
+            <ol className="rows">{d.setup.map(x=><li key={x.key}>{x.done?<span><span aria-hidden="true">✓ </span>{x.label}<span className="sr-only"> (done)</span></span>:<Link state={here} to={x.link}>{x.label}</Link>}</li>)}</ol></section>}
           <section className="panel"><h2>Academic management</h2><div className="actions">
             <Link state={here} className="button primary" to="/admin/academics">Open academic setup</Link><Link state={here} className="button" to="/admin/subjects">Subject catalog</Link>
             <Link state={here} className="button" to="/admin/subjects/import">Import a prospectus</Link><Link state={here} className="button" to="/admin/accounts">User accounts</Link></div></section>

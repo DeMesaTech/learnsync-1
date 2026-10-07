@@ -166,3 +166,11 @@ tbody th.sticky{text-transform:none;letter-spacing:normal;font-size:inherit;colo
 .verdict{display:inline-block;padding:2px 10px;border-radius:999px;font-weight:600;font-size:.85rem;border:1px solid currentColor;margin-right:6px}
 .verdict.correct{color:var(--success)}.verdict.wrong{color:var(--danger)}.verdict.partial{color:var(--warning)}.verdict.none{color:var(--muted)}
 .review{border-left:4px solid var(--border)}.review.correct{border-left-color:var(--success)}.review.wrong{border-left-color:var(--danger)}.review.partial{border-left-color:var(--warning)}
+
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;list-style:none;margin:12px 0;padding:0;text-align:center}
+.week li{display:grid;gap:4px;padding:8px 2px;border:1px solid var(--border);border-radius:8px;font-size:.75rem;color:var(--muted)}
+.week li.done{background:var(--surface-alt);color:var(--action)}
+.week li.today{border-color:var(--action);font-weight:600}
+.week li.future{border-style:dashed}
+.week b{min-height:1.2em}
+.stats a{font-size:.8rem}

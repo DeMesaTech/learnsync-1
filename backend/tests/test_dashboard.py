@@ -115,9 +115,11 @@ def test_the_faculty_home_counts_only_the_teachers_own_work(db, graded):
     assert card["students"] == 2 and card["sections"] == ["1A", "1B"]
     assert data["task"]["headline"].endswith("ready to grade") and data["task"]["link"].endswith("/scores")
     assert data["totals"] == {"subjects": 1, "students": 2, "to_grade": 1, "needs_review": 1, "drafts": 1}
+    assert [(q["count"], q["link"].endswith("/scores")) for q in data["queue"]] == [(1, True)]
+    assert data["review_link"].endswith("/gradebook") and data["task"]["icon"] == "!"
     stranger = Api(make_account(db, "other@example.com", "faculty").email)
     empty = stranger.get("/api/dashboard/faculty").json()
-    assert empty["subjects"] == [] and empty["task"] is None and empty["totals"]["students"] == 0
+    assert empty["subjects"] == [] and empty["task"] is None and empty["queue"] == [] and empty["review_link"] is None and empty["totals"]["students"] == 0
     assert "A draft that nobody can see" not in json.dumps(empty)
 
 
@@ -158,3 +160,17 @@ def test_recent_account_activity_shows_changes_to_people_not_routine_sign_ins(wo
     Api("s1@example.com")                                             # signs in
     actions = [a["action"] for a in admin.get("/api/dashboard/admin").json()["recent_activity"]]
     assert "account.invited" in actions and "account.signed_in" not in actions
+
+
+def test_the_admin_setup_guide_is_derived_and_disappears_when_complete():
+    from app.features.dashboard.admin import setup_steps
+    empty = setup_steps([], 0, 0)
+    assert [x["key"] for x in empty if not x["done"]] == ["term", "subjects", "sections", "faculty", "offerings", "students"]
+    term = {"id": "t1", "sections": 1, "offerings": 0, "students": 0}
+    partial = {x["key"]: x for x in setup_steps([term], 3, 0)}
+    assert partial["term"]["done"] and partial["sections"]["link"] == "/admin/terms/t1" and not partial["offerings"]["done"]
+    assert setup_steps([{**term, "offerings": 1, "students": 2}], 3, 5) == []
+    first_empty = {"id": "t1", "sections": 0, "offerings": 0, "students": 0}
+    other = {"id": "t2", "sections": 4, "offerings": 4, "students": 9}      # only the FIRST term counts
+    steps = {x["key"]: x for x in setup_steps([first_empty, other], 3, 1)}
+    assert not steps["sections"]["done"] and not steps["offerings"]["done"] and not steps["students"]["done"]
