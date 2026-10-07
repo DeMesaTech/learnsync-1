@@ -63,7 +63,10 @@ try{
   const fb=teach.getByLabel('Feedback for Demo student 3');puts.length=0;
   await fb.click();await teach.keyboard.type('a');await teach.keyboard.press('Enter');await teach.keyboard.type('b');
   check('E: Enter in feedback is a newline and saves nothing',(await fb.inputValue())==='a\nb'&&puts.length===0);
-  await fb.fill('');
+  // ---- F: a feedback-only save (blank score) leaves the student ungraded, and the announced count says so
+  await fb.fill('Please add a cost estimate.');await teach.getByRole('button',{name:'Save'}).click();await teach.waitForTimeout(2000);
+  const said=await teach.locator('p[role=status]').first().innerText();
+  check('F: a feedback-only save still counts that student as ungraded',/Saved Demo student 3\. 1 of 3 still need grading\./.test(said),said);
   // ---- accessibility of the populated page
   const violations=await axe(teach);
   check('axe finds no violations on the populated scores page',violations.length===0,JSON.stringify(violations.map(v=>v.id)));
@@ -79,6 +82,8 @@ try{
   check('C: conflict is shown to the teacher',await teach.locator(`#err-${sid(1)}`).count()===1,await teach.locator(`#err-${sid(1)}`).innerText().catch(()=>''));
   check('C: focus stays on the conflicting box',(await active())===`s-${sid(1)}`,await active());
   await shot(teach,'grading-regression',false);
+  const phone=await newPage(browser,{width:375,height:812,state:F});await phone.goto(teach.url());await phone.waitForLoadState('networkidle');await phone.waitForTimeout(500);
+  await shot(phone,'grading-375',true);
 }catch(e){console.log('SCRIPT ERROR:',e.message);results.push(false)}
 await browser.close();
 console.log(`${results.filter(Boolean).length}/${results.length} checks passed`);

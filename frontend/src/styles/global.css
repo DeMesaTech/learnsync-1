@@ -176,3 +176,12 @@ tbody th.sticky{text-transform:none;letter-spacing:normal;font-size:inherit;colo
 .stats a{font-size:.8rem}
 .dot{display:inline-block;width:9px;height:9px;margin-left:8px;border-radius:50%;background:var(--action);vertical-align:middle;border:2px solid var(--surface)}
 .filters{display:grid;gap:0 16px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+@media(max-width:639px){.theme-label{display:none}.header .identity{flex:0 0 auto;margin-left:auto}}
+@media(max-width:639px){
+  table.stack thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+  table.stack,table.stack tbody{display:block;min-width:0;width:100%}
+  table.stack tr{display:block;border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin:0 0 12px;background:var(--surface)}
+  table.stack td{display:block;border:0;padding:6px 0}
+  table.stack td[data-label]::before{content:attr(data-label);display:block;font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  table.stack textarea{min-height:80px}
+}

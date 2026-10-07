@@ -41,11 +41,12 @@ export function StudentImport(){
       <h2>Preview</h2>
       <p>{preview.summary.new} new · {preview.summary.existing} existing · <span className={preview.summary.errors?'error':''}>{preview.summary.errors} with errors</span></p>
       {preview.summary.errors>0&&<p className="warn" role="alert">Nothing can be imported while rows have errors. Fix the file and upload it again.</p>}
+      {preview.summary.errors>0&&<ul className="rows" aria-label="Rows to fix">{preview.rows.filter(r=>r.status==='error').flatMap(r=>r.errors.map(m=><li key={`${r.row}-${m}`} className="error">Row {r.row}: {m}</li>))}</ul>}
       <div className="table-wrap" tabIndex={0} role="region" aria-label="Import preview"><table><thead><tr><th>Row</th><th>Student no.</th><th>Name</th><th>Email</th><th>Section</th><th>Result</th></tr></thead>
         <tbody>{preview.rows.map(r=><tr key={r.row} className={r.status==='error'?'row-error':''}>
           <td>{r.row}</td><td>{r.student_number}</td><td>{r.display_name}</td><td>{r.email}</td><td>{r.section||'—'}</td>
           <td>{r.status==='error'?r.errors.map(m=><div className="error" key={m}>{m}</div>):r.status}</td></tr>)}</tbody></table></div>
-      <div className="actions"><button className="primary" disabled={busy||preview.summary.errors>0} onClick={commit}>Import {preview.summary.total} students</button></div>
+      <div className="actions"><button className="primary" disabled={busy||preview.summary.errors>0} onClick={commit}>{preview.summary.errors>0?`Fix ${preview.summary.errors} ${preview.summary.errors===1?'row':'rows'} to import`:`Import ${preview.summary.total} students`}</button></div>
     </section>}
   </>;
 }
