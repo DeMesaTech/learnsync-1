@@ -5,6 +5,7 @@ import {useQuery} from '@tanstack/react-query';
 import {api,post,setCsrf} from '../app/api';
 import {studentHomeQuery} from '../features/dashboard/Dashboards';
 import {useUnread} from './seen';
+import {StudyBuddy} from '../features/study/StudyBuddy';
 
 type NavItem={to:string;label:string;icon:string;end?:boolean;dot?:boolean};
 const ROLE_LABEL={admin:'Academic administrator',faculty:'Teaching faculty',student:'Student'} as const;
@@ -20,7 +21,7 @@ function navigation(role:'admin'|'faculty'|'student'):{label:string;items:NavIte
     account];
   const student=role==='student';
   return [
-    {label:'Your workspace',items:[{to:home,label:'Dashboard',icon:'⌂',end:true,dot:student},...(student?[{to:`${home}/todo`,label:'To do',icon:'☑'}]:[]),{to:`${home}/subjects`,label:'My subjects',icon:'▤'}]},
+    {label:'Your workspace',items:[{to:home,label:'Dashboard',icon:'⌂',end:true,dot:student},...(student?[{to:`${home}/todo`,label:'To do',icon:'☑'},{to:`${home}/study-buddy`,label:'Study buddy',icon:'✦'}]:[]),{to:`${home}/subjects`,label:'My subjects',icon:'▤'}]},
     {label:'Account & help',items:[{to:`${home}/issues`,label:'Report a problem',icon:'?'},...account.items]}];
 }
 const initials=(name:string)=>name.split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]!.toUpperCase()).join('')||'?';
@@ -77,5 +78,6 @@ export function Shell(){
       <p className="sidebar-note">Governor Mariano E. Villafuerte Community College<br/>BS Entrepreneurship</p>
     </aside>
     <main id="main" className="content">{failure&&<p role="alert" className="error">{failure}</p>}<Outlet/></main>
+    {user.role==='student'&&<StudyBuddy userId={user.id}/>}
   </div>;
 }
