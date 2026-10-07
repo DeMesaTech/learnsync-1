@@ -14,6 +14,7 @@
     "e2e:sweep": "node e2e/sweep.mjs",
     "e2e:keyboard": "node e2e/keyboard.mjs",
     "e2e:keyboard-flows": "node e2e/keyboard-flows.mjs",
+    "e2e:grading": "node e2e/grading.mjs",
     "e2e:states": "node e2e/sweep-states.mjs",
     "e2e:gallery": "node e2e/gallery.mjs"
   },
