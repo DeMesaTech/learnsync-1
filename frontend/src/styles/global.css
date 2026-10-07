@@ -173,7 +173,7 @@ tbody th.sticky{text-transform:none;letter-spacing:normal;font-size:inherit;colo
 .week li.today{border-color:var(--action);font-weight:600}
 .week li.future{border-style:dashed}
 .week b{min-height:1.2em}
-.stats a{font-size:.8rem}
+.stats a{font-size:.8rem;display:inline-flex;align-items:center;min-height:44px}
 .dot{display:inline-block;width:9px;height:9px;margin-left:8px;border-radius:50%;background:var(--action);vertical-align:middle;border:2px solid var(--surface)}
 .filters{display:grid;gap:0 16px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
 @media(max-width:639px){.theme-label{display:none}.header .identity{flex:0 0 auto;margin-left:auto}}
