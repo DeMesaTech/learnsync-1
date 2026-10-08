@@ -1,3 +1,4 @@
+import {useToast} from '../../components/undo';
 import {useState,type FormEvent} from 'react';
 import {Link,useParams} from 'react-router-dom';
 import {useHere} from '../../components/origin';
@@ -5,8 +6,7 @@ import {useQuery} from '@tanstack/react-query';
 import {api,post,send,errorText,ApiError,type Account} from '../../app/api';
 import {queryClient} from '../../app/providers';
 import {Dialog} from '../../components/Dialog';
-import {useConfirm} from '../../components/confirm';
-import {yearLabel,type Member,type OfferingSummary,type SchoolYear,type Section,type Subject} from './types';
+import {yearLabel,type OfferingSummary,type SchoolYear,type Section,type Subject} from './types';
 
 export function TermWorkspace(){
   const {termId}=useParams();
@@ -15,7 +15,6 @@ export function TermWorkspace(){
   const sections=useQuery({queryKey:['sections',termId],queryFn:()=>api<Section[]>(`/terms/${termId}/sections`)});
   const offerings=useQuery({queryKey:['offerings',termId],queryFn:()=>api<OfferingSummary[]>(`/terms/${termId}/offerings`)});
   const [dialog,setDialog]=useState<'section'|'offering'|null>(null);
-  const [managing,setManaging]=useState<Section|null>(null);
   const [editing,setEditing]=useState<OfferingSummary|null>(null);
   const year=years.data?.find(y=>y.terms.some(t=>t.id===termId));
   const term=year?.terms.find(t=>t.id===termId);
@@ -37,13 +36,14 @@ export function TermWorkspace(){
       <div className="page-heading"><h2>Sections</h2><button className={sections.data?.length===0?'primary':''} disabled={closed} onClick={()=>setDialog('section')}>Add section</button></div>
       {sections.isPending?<p>Loading…</p>:sections.error?<p role="alert">{sections.error.message}</p>:
         sections.data.length===0?<p className="muted">No sections yet. Add one, or copy structure when creating the school year.</p>:
-        <div className="cards">{sections.data.map(s=><article className="subpanel" key={s.id}>
-          <div><h3>{s.name}</h3><p className="muted">{yearLabel(s.year_level)} · {s.member_count} student{s.member_count===1?'':'s'}</p></div>
-          <button onClick={()=>setManaging(s)}>{closed?'View students':'Manage students'}</button></article>)}</div>}
+        <div className="table-wrap"><table><caption className="sr-only">Sections of this term</caption>
+          <thead><tr><th scope="col">Section</th><th scope="col">Year level</th><th scope="col">Students</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
+          <tbody>{sections.data.map(s=><tr key={s.id}><th scope="row">{s.name}</th><td>{yearLabel(s.year_level)}</td><td>{s.member_count}</td>
+            <td><Link className="button" state={here} to={`/admin/terms/${termId}/sections/${s.id}/students`}>{closed?'View students':'Manage students'}</Link></td></tr>)}</tbody></table></div>}
     </section>
 
     <section className="panel">
-      <div className="page-heading"><h2>Offerings</h2><button className={sections.data?.length&&offerings.data?.length===0?'primary':''} disabled={closed||!sections.data} onClick={()=>setDialog('offering')}>Assign a subject</button></div>
+      <div className="page-heading"><h2>Offerings</h2><button className={sections.data?.length&&offerings.data?.length===0?'primary':''} disabled={closed||!sections.data} onClick={()=>setDialog('offering')}>Assign subjects</button></div>
       {offerings.isPending?<p>Loading…</p>:offerings.error?<p role="alert">{offerings.error.message}</p>:
         offerings.data.length===0?<p className="muted">No subjects are assigned yet.</p>:
         <div className="table-wrap" tabIndex={0} role="region" aria-label="Offerings"><table><thead><tr><th>Subject</th><th>Teacher</th><th>Sections</th><th>Enrolled</th><th><span className="sr-only">Actions</span></th></tr></thead>
@@ -55,9 +55,10 @@ export function TermWorkspace(){
     </section>
 
     {dialog==='section'&&<SectionDialog termId={term.id} onClose={()=>setDialog(null)} onDone={()=>{setDialog(null);refresh()}}/>}
-    {(dialog==='offering'||editing)&&<OfferingDialog termId={term.id} sections={sections.data??[]} offering={editing}
-      onClose={()=>{setDialog(null);setEditing(null)}} onDone={()=>{setDialog(null);setEditing(null);refresh()}}/>}
-    {managing&&<MembersDialog section={managing} closed={!!closed} onClose={()=>{setManaging(null);refresh()}}/>}
+    {dialog==='offering'&&<BulkAssignDialog termId={term.id} termSequence={term.sequence} sections={sections.data??[]} existing={offerings.data??[]}
+      onClose={()=>setDialog(null)} onDone={()=>{setDialog(null);refresh()}}/>}
+    {editing&&<OfferingDialog sections={sections.data??[]} offering={editing}
+      onClose={()=>setEditing(null)} onDone={()=>{setEditing(null);refresh()}}/>}
   </>;
 }
 
@@ -76,63 +77,84 @@ function SectionDialog({termId,onClose,onDone}:{termId:string;onClose:()=>void;o
   </form></Dialog>;
 }
 
-function OfferingDialog({termId,sections,offering,onClose,onDone}:{termId:string;sections:Section[];offering:OfferingSummary|null;onClose:()=>void;onDone:()=>void}){
-  const subjects=useQuery({queryKey:['subjects',false],queryFn:()=>api<Subject[]>('/subjects')});
+function OfferingDialog({sections,offering,onClose,onDone}:{sections:Section[];offering:OfferingSummary;onClose:()=>void;onDone:()=>void}){
   const faculty=useQuery({queryKey:['faculty-list'],queryFn:()=>api<Account[]>('/accounts?role=faculty&page_size=100')});
-  const [chosen,setChosen]=useState<string[]>(offering?.sections.map(s=>s.id)??[]);
-  const [facultyId,setFacultyId]=useState(offering?.faculty.id??'');
+  const [chosen,setChosen]=useState<string[]>(offering.sections.map(s=>s.id));
+  const [facultyId,setFacultyId]=useState(offering.faculty.id);
   const [error,setError]=useState('');
   const [needsOverride,setNeedsOverride]=useState(false);
   async function submit(e:FormEvent<HTMLFormElement>){
     e.preventDefault();const f=new FormData(e.currentTarget);
     const override=needsOverride?String(f.get('override_reason')||'').trim()||undefined:undefined;
-    try{
-      if(offering)await send('PATCH',`/offerings/${offering.id}`,{faculty_id:f.get('faculty_id'),section_ids:chosen,placement_override_reason:override});
-      else await post(`/terms/${termId}/offerings`,{subject_id:f.get('subject_id'),faculty_id:f.get('faculty_id'),section_ids:chosen,placement_override_reason:override});
-      onDone();
-    }catch(err){
-      setNeedsOverride(err instanceof ApiError&&err.code==='placement_mismatch');
-      setError(errorText(err));
-    }
+    try{await send('PATCH',`/offerings/${offering.id}`,{faculty_id:f.get('faculty_id'),section_ids:chosen,placement_override_reason:override});onDone()}
+    catch(err){setNeedsOverride(err instanceof ApiError&&err.code==='placement_mismatch');setError(errorText(err))}
   }
-  return <Dialog title={offering?`Edit ${offering.subject.code}`:'Assign a subject'} onClose={onClose}><form onSubmit={submit}>
-    {offering?<p><strong>{offering.subject.code}</strong> {offering.subject.title}</p>:
-      <label>Subject<select name="subject_id" required defaultValue=""><option value="" disabled>Choose a subject</option>
-        {subjects.data?.map(s=><option key={s.id} value={s.id}>{s.code} · {s.title} ({s.year_level?`Y${s.year_level} S${s.semester}`:'unplaced'})</option>)}</select></label>}
+  return <Dialog title={`Edit ${offering.subject.code}`} onClose={onClose}><form onSubmit={submit}>
+    <p><strong>{offering.subject.code}</strong> {offering.subject.title}</p>
     <label>Teacher<select name="faculty_id" required value={facultyId} onChange={e=>setFacultyId(e.target.value)}><option value="" disabled>Choose a teacher</option>
       {faculty.data?.filter(f=>f.status!=='inactive').map(f=><option key={f.id} value={f.id}>{f.display_name}</option>)}</select></label>
     <fieldset><legend>Sections taking this subject</legend>
-      {sections.length===0&&<p className="muted">Add sections first.</p>}
       {sections.map(s=><label className="inline" key={s.id}><input type="checkbox" checked={chosen.includes(s.id)}
         onChange={e=>setChosen(e.target.checked?[...chosen,s.id]:chosen.filter(x=>x!==s.id))}/> {s.name} ({s.member_count})</label>)}
     </fieldset>
     <p className="muted">A subject placed in a year and semester only accepts matching sections. Use an enrollment exception for irregular students.</p>
     {error&&<p role="alert">{error}</p>}
     {needsOverride&&<label>Reason for an off-semester placement (kept in the audit history)<textarea name="override_reason" minLength={3} maxLength={1000}/></label>}
-    <div className="actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary">{offering?'Save changes':'Assign subject'}</button></div>
+    <div className="actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary">Save changes</button></div>
   </form></Dialog>;
 }
 
-function MembersDialog({section,closed,onClose}:{section:Section;closed:boolean;onClose:()=>void}){
-  const ask=useConfirm();
-  const members=useQuery({queryKey:['members',section.id],queryFn:()=>api<Member[]>(`/sections/${section.id}/members`)});
-  const [search,setSearch]=useState('');
-  const results=useQuery({queryKey:['student-search',search],enabled:search.length>=2&&!closed,
-    queryFn:()=>api<Account[]>(`/accounts?role=student&page_size=10&search=${encodeURIComponent(search)}`)});
-  const [message,setMessage]=useState('');
-  const refresh=()=>queryClient.invalidateQueries({queryKey:['members',section.id]});
-  async function add(a:Account){try{await post(`/sections/${section.id}/members`,{student_id:a.id});setMessage(`${a.display_name} added.`);setSearch('');refresh()}catch(e){setMessage(errorText(e))}}
-  async function withdraw(m:Member){if(!await ask({title:`Withdraw ${m.display_name}?`,message:`They leave ${section.name}. Their enrollment history is kept.`,yes:'Withdraw',danger:true}))return;
-    try{await send('DELETE',`/sections/${section.id}/members/${m.student_id}`);setMessage(`${m.display_name} withdrawn.`);refresh()}catch(e){setMessage(errorText(e))}}
-  return <Dialog title={`${section.name} students`} onClose={onClose}>
-    {!closed&&<><label>Add a student<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by name or email"/></label>
-      {results.data?.map(a=><div className="member-row" key={a.id}><span>{a.display_name} <span className="muted">{a.student_number}</span></span><button onClick={()=>add(a)}>Add</button></div>)}
-      {results.data?.length===0&&<p className="muted">No matching students.</p>}</>}
-    {message&&<p role="status">{message}</p>}
-    <h3>Current students</h3>
-    {members.isPending?<p>Loading…</p>:members.data?.length===0?<p className="muted">No students in this section.</p>:
-      members.data?.map(m=><div className="member-row" key={m.student_id}><span>{m.display_name} <span className="muted">{m.student_number}</span></span>
-        {!closed&&<button onClick={()=>withdraw(m)}>Withdraw</button>}</div>)}
-    <div className="actions"><button className="primary" onClick={onClose}>Done</button></div>
-  </Dialog>;
+/** One teacher, several subjects, each with its own sections, saved together (all or nothing). */
+function BulkAssignDialog({termId,termSequence,sections,existing,onClose,onDone}:{termId:string;termSequence:number;sections:Section[];existing:OfferingSummary[];onClose:()=>void;onDone:()=>void}){
+  const toast=useToast();
+  const subjects=useQuery({queryKey:['subjects',false],queryFn:()=>api<Subject[]>('/subjects')});
+  const faculty=useQuery({queryKey:['faculty-list'],queryFn:()=>api<Account[]>('/accounts?role=faculty&page_size=100')});
+  const [facultyId,setFacultyId]=useState('');
+  const [find,setFind]=useState('');
+  const [pick,setPick]=useState<Record<string,string[]>>({});          // subject id -> chosen section ids; present = subject selected
+  const [reasons,setReasons]=useState<Record<string,string>>({});
+  const [error,setError]=useState('');const [busy,setBusy]=useState(false);
+  const teacher=faculty.data?.find(f=>f.id===facultyId);
+  const taken=new Set(existing.filter(o=>o.faculty.id===facultyId).map(o=>o.subject.id));
+  const fits=(sub:Subject,sec:Section)=>sub.year_level===null||sub.semester===null||(sec.year_level===sub.year_level&&termSequence===sub.semester);
+  const needle=find.trim().toLowerCase();
+  const list=(subjects.data??[]).filter(sub=>sub.status==='active'&&(!needle||`${sub.code} ${sub.title}`.toLowerCase().includes(needle)))
+    .sort((a,b)=>Number(pick[b.id]!==undefined)-Number(pick[a.id]!==undefined)||Number(a.semester===termSequence?0:1)-Number(b.semester===termSequence?0:1)||a.code.localeCompare(b.code));
+  const chosen=Object.keys(pick);
+  const subjectOf=(id:string)=>subjects.data?.find(x=>x.id===id);
+  const needsReason=(id:string)=>{const sub=subjectOf(id);return !!sub&&pick[id].some(sid=>{const sec=sections.find(x=>x.id===sid);return !!sec&&!fits(sub,sec)})};   // a section from another year
+  const ready=!!facultyId&&chosen.length>0&&chosen.every(id=>pick[id].length>0&&(!needsReason(id)||(reasons[id]??'').trim().length>=3));
+  function toggleSubject(sub:Subject,on:boolean){
+    if(!on){const rest={...pick};delete rest[sub.id];setPick(rest);return}
+    setPick({...pick,[sub.id]:sections.filter(sec=>sub.year_level!==null&&fits(sub,sec)).map(sec=>sec.id)});   // sections that match its year and semester start ticked
+  }
+  async function submit(e:FormEvent){
+    e.preventDefault();setBusy(true);setError('');
+    const items=chosen.map(id=>({subject_id:id,section_ids:pick[id],placement_override_reason:needsReason(id)?(reasons[id]??'').trim():undefined}));
+    try{await post(`/terms/${termId}/offerings/bulk`,{faculty_id:facultyId,items});toast(`${items.length} subject${items.length===1?'':'s'} assigned to ${teacher?.display_name}.`);onDone()}
+    catch(err){
+      setError(errorText(err));
+    }finally{setBusy(false)}
+  }
+  return <Dialog title="Assign subjects" onClose={onClose}><form onSubmit={submit}>
+    <label>Teacher<select required value={facultyId} onChange={e=>setFacultyId(e.target.value)}><option value="" disabled>Choose a teacher</option>
+      {faculty.data?.filter(f=>f.status!=='inactive').map(f=><option key={f.id} value={f.id}>{f.display_name}</option>)}</select></label>
+    <fieldset className="bulk-subjects"><legend>Subjects and the sections taking each</legend>
+      {sections.length===0&&<p className="muted">Add sections first.</p>}
+      <label>Filter subjects<input type="search" value={find} onChange={e=>setFind(e.target.value)} placeholder="Code or title"/></label>
+      {subjects.isPending?<p>Loading subjects…</p>:<ul className="pick-list" aria-label="Subjects">{list.map(sub=>{
+        const on=pick[sub.id]!==undefined,done=taken.has(sub.id);
+        return <li key={sub.id} className={on?'on':''}>
+          <label className="inline"><input type="checkbox" checked={on} disabled={!facultyId||done} onChange={e=>toggleSubject(sub,e.target.checked)}/>
+            <span><strong>{sub.code}</strong> {sub.title} <span className="muted">{sub.year_level?`Year ${sub.year_level}, semester ${sub.semester}`:'not placed'}{done?' · already assigned to this teacher':''}</span></span></label>
+          {on&&<div className="bulk-sections"><div className="chips" role="group" aria-label={`Sections for ${sub.code}`}>{sections.map(sec=>
+            <label className="inline" key={sec.id}><input type="checkbox" checked={pick[sub.id].includes(sec.id)} onChange={e=>setPick({...pick,[sub.id]:e.target.checked?[...pick[sub.id],sec.id]:pick[sub.id].filter(x=>x!==sec.id)})}/> {sec.name} <span className="muted">({sec.member_count}){fits(sub,sec)?'':' · other year'}</span></label>)}</div>
+            {pick[sub.id].length===0&&<p className="muted">Choose at least one section.</p>}
+            {needsReason(sub.id)&&<label>Reason for placing {sub.code} with a section from another year (kept in the audit history)<textarea value={reasons[sub.id]??''} onChange={e=>setReasons({...reasons,[sub.id]:e.target.value})} minLength={3} maxLength={1000} required/></label>}</div>}</li>})}</ul>}
+      {!facultyId&&<p className="muted">Choose a teacher first.</p>}
+    </fieldset>
+    <p className="muted">A subject placed in a year and semester only accepts matching sections. Choosing a section from another year asks for a reason. Nothing is saved unless every selected subject can be assigned.</p>
+    {error&&<p role="alert">{error}</p>}
+    <div className="actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary" disabled={!ready||busy}>{busy?'Assigning…':chosen.length===0?'Assign subjects':`Assign ${chosen.length} subject${chosen.length===1?'':'s'}`}</button></div>
+  </form></Dialog>;
 }

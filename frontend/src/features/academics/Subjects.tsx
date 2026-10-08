@@ -29,7 +29,7 @@ export function Subjects(){
 
   return <>
     <div className="page-heading">
-      <div><p className="eyebrow">Administration</p><h1>Subject catalog</h1>
+      <div><p className="eyebrow">Administration</p><h1>Prospectus</h1>
         <p className="muted">Subjects are placed by year level and semester. Teaching assignments use these.</p></div>
       <div className="actions"><Link className="button" to="/admin/subjects/import">Import prospectus</Link>
         <button className="primary" onClick={()=>{setMessage('');setEditing('new')}}>Add subject</button></div>
@@ -74,7 +74,7 @@ export function ProspectusStart(){
     catch(err){setError(errorText(err))}
   }
   return <>
-    <p className="back"><Link to="/admin/subjects">← Subject catalog</Link></p>
+    <p className="back"><Link to="/admin/subjects">← Prospectus</Link></p>
     <h1>Import prospectus</h1>
     <p className="muted">Upload the prospectus (PDF, Word, Excel or CSV). Subjects are read into a draft you review before anything is created. Scanned images are not supported.</p>
     <section className="panel"><form onSubmit={submit}>
@@ -118,7 +118,7 @@ export function ProspectusReview(){
     }catch(err){setMessage(errorText(err));await query.refetch()}
   }
   return <>
-    <p className="back"><Link to="/admin/subjects">← Subject catalog</Link></p>
+    <p className="back"><Link to="/admin/subjects">← Prospectus</Link></p>
     <h1>Review prospectus</h1>
     {draft.warnings.map(w=><p className="warn" role="status" key={w}>{w}</p>)}
     {locked&&<p role="status">This prospectus was already committed.</p>}

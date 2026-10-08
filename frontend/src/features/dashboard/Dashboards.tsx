@@ -151,7 +151,7 @@ export function AdminHome(){
           {d.setup.length>0&&<section className="panel"><h2>Get started</h2><p className="muted">Set up in this order. Finished steps are ticked.</p>
             <ol className="rows">{d.setup.map(x=><li key={x.key}>{x.done?<span><span aria-hidden="true">✓ </span>{x.label}<span className="sr-only"> (done)</span></span>:<Link state={here} to={x.link}>{x.label}</Link>}</li>)}</ol></section>}
           <section className="panel"><h2>Academic management</h2><div className="actions">
-            <Link state={here} className="button primary" to="/admin/academics">School years and terms</Link><Link state={here} className="button" to="/admin/subjects">Subject catalog</Link>
+            <Link state={here} className="button primary" to="/admin/academics">School years and terms</Link><Link state={here} className="button" to="/admin/subjects">Prospectus</Link>
             <Link state={here} className="button" to="/admin/subjects/import">Import a prospectus</Link></div></section>
           {attention?<Hero eyebrow="Needs your attention" title={attention.t} detail={attention.s} action={attention.a} to={attention.to} icon="!"/>
             :<Hero eyebrow="Needs your attention" title="Nothing needs attention" detail="No open reports, pending invitations or unconfirmed imports." icon="✓"/>}

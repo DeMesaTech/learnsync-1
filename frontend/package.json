@@ -22,6 +22,7 @@
     "e2e:states": "node e2e/sweep-states.mjs",
     "e2e:controls": "node e2e/control-count.mjs",
     "e2e:workspace": "node e2e/workspace.mjs",
+    "e2e:admin-lists": "node e2e/admin-lists.mjs",
     "e2e:gallery": "node e2e/gallery.mjs"
   },
   "dependencies": {

@@ -17,7 +17,7 @@ function navigation(role:'admin'|'faculty'|'student'):{label:string;items:NavIte
   const account={label:'Account & help',items:[{to:'/account',label:'Account & theme',icon:'○'}]};
   if(role==='admin')return [
     {label:'Your workspace',items:[{to:home,label:'Dashboard',icon:'⌂',end:true},{to:`${home}/accounts`,label:'User accounts',icon:'♙'}]},
-    {label:'Academic management',items:[{to:`${home}/academics`,label:'School years',icon:'☰'},{to:`${home}/subjects`,label:'Subject catalog',icon:'▤'}]},
+    {label:'Academic management',items:[{to:`${home}/academics`,label:'School years',icon:'☰'},{to:`${home}/subjects`,label:'Prospectus',icon:'▤'}]},
     {label:'Oversight',items:[{to:`${home}/issues`,label:'Reports',icon:'?'},{to:`${home}/audit`,label:'Audit history',icon:'◷'}]},
     account];
   const student=role==='student';
@@ -41,6 +41,8 @@ export function Shell(){
   const menuButton=useRef<HTMLButtonElement>(null);
   // the phone menu is a disclosure: Escape closes it and gives focus back to the button that opened it
   useEffect(()=>{if(!open)return;const onKey=(e:KeyboardEvent)=>{if(e.key==='Escape'){setOpen(false);menuButton.current?.focus()}};document.addEventListener('keydown',onKey);return()=>document.removeEventListener('keydown',onKey)},[open]);
+  // the sticky sidebar sits under the header, whose height changes when it wraps
+  useEffect(()=>{const h=document.querySelector('.header');if(!h)return;const set=()=>document.documentElement.style.setProperty('--header-h',h.getBoundingClientRect().height+'px');set();const ro=new ResizeObserver(set);ro.observe(h);return()=>ro.disconnect()},[loading,session?.user]);
   if(loading)return <main className="content">Loading your workspace…</main>;
   if(error)return <main className="content"><p role="alert">Cannot reach the server. Please refresh after starting it.</p></main>;
   if(!session?.user)return <Navigate to="/login" replace/>;
