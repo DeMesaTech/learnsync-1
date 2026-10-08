@@ -41,3 +41,8 @@ Python 3.12.14 (the interpreter inside backend/.venv); FastAPI 0.142.2, Uvicorn 
 
 ### UX rework, Phase 4 (attendance grid)
 No new endpoint: `PUT /api/teach/offerings/{id}/attendance` has always been a PARTIAL save per (section, date): only the students named in `marks` change (a null clears), everyone else on that date is untouched, and a date's grading period is locked once recorded (409 `period_locked`). The grid depends on exactly that and `tests/test_attendance_grid.py` pins it. The grid's columns are the dates in the visible week or month that are recorded, fall on a class day (`offering.meeting_days`), or were added by hand; they are computed in the browser, so nothing is stored for a date until a mark is saved. Each cell change is debounced per date (600 ms) into one partial save; a failed save keeps the typed value, outlines the cell and offers Retry; leaving the page tries to flush first (`useFlushOnLeave`). There is no per-cell version check: two tabs editing the same cell are last-write-wins, as before.
+
+## Phase 5 endpoints
+- `GET /api/dashboard/faculty/review`: activity submissions waiting for a grade across the teacher's subjects, oldest first.
+- `GET /api/teach/offerings/{id}/exports/attendance?format=xlsx|pdf&section_id=&start=&end=`: attendance file for one section (teacher of the offering only; recorded dates only; audited without names).
+- `POST /api/teach/offerings/{id}/assessments/{aid}/unpublish`: published revision becomes superseded and a draft is kept or created; refused with 409 `has_history` once attempts, uploads, scores, released results or exceptions exist.
