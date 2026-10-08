@@ -14,8 +14,8 @@ from app.features.study.events import record_event
 
 from .attempts import student_lock
 from .definitions import revision
-from .results import latest_release
 from .models import ActivitySubmission, AssessmentScore, SubmissionPermission
+from .results import latest_release
 from .scores import enrolled_student_ids
 
 SUBMISSION_TYPES = {".pdf"}

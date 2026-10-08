@@ -10,12 +10,15 @@ from app.features.accounts.models import now
 from app.features.teaching.items import check_sections, outline_ids
 
 from .models import (
+    ActivitySubmission,
     Assessment,
     AssessmentRevision,
     AssessmentScore,
     AssessmentSection,
     QuizAttempt,
     QuizQuestion,
+    ResultPublication,
+    SubmissionPermission,
 )
 from .policy import category_keys, period_keys, published_policy
 from .reviews import flag_graded_change, flag_review
@@ -187,6 +190,24 @@ def discard_draft(db, actor, assessment, expected_counter):
         fail(409, "never_published", "This assessment was never published; delete it instead.")
     db.execute(delete(QuizQuestion).where(QuizQuestion.revision_id == draft.id))
     db.delete(draft)
+    db.commit()
+
+
+def unpublish(db, actor, offering, assessment):
+    """Pull a published assessment back to a draft, but only while nothing depends on it: no attempt, upload,
+    recorded score, released result or granted exception. Anything with history is archived instead."""
+    published = revision(db, assessment.id, "published")
+    if not published:
+        fail(409, "not_published", "This assessment is not published.")
+    used = any(db.scalar(select(model.id).where(model.assessment_id == assessment.id).limit(1)) is not None
+               for model in (QuizAttempt, ActivitySubmission, AssessmentScore, ResultPublication, SubmissionPermission))
+    if used:
+        fail(409, "has_history", "Students have already worked on this or results exist, so it cannot be "
+                                 "unpublished. Archive it instead.")
+    start_draft(db, actor, assessment)          # keeps any newer draft the teacher was already editing
+    published.state = "superseded"
+    audit(db, actor, "assessment.unpublished", "assessment", assessment.id)
+    flag_graded_change(db, offering.id, published, f"{published.title}: unpublished.")
     db.commit()
 
 

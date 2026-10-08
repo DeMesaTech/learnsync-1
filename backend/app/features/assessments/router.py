@@ -147,6 +147,13 @@ def publish(offering_id: UUID, assessment_id: UUID, data: Counter, actor=Depends
     return definitions.assessment_view(db, a)
 
 
+@router.post(T + "/assessments/{assessment_id}/unpublish")
+def unpublish(offering_id: UUID, assessment_id: UUID, actor=Depends(faculty), db: Session = Depends(get_db)):
+    offering, a = assessment_of(db, offering_id, assessment_id, actor)
+    definitions.unpublish(db, actor, offering, a)
+    return definitions.assessment_view(db, a)
+
+
 @router.patch(T + "/assessments/{assessment_id}")
 def assessment_settings(offering_id: UUID, assessment_id: UUID, data: AssessmentSettings,
                         actor=Depends(faculty), db: Session = Depends(get_db)):

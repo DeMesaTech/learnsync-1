@@ -567,3 +567,43 @@ def test_submitting_after_the_deadline_tells_the_student_which_answers_counted(d
     late = submit(st1, graded, attempt["id"], quiz["correct"])                  # all answers, sent too late
     assert late.status_code == 200
     assert late.json()["score"] == 2.0 and late.json()["answers_ignored"] is True
+
+
+# ---------------- unpublish ----------------
+
+def test_an_untouched_assessment_can_be_unpublished_back_to_a_draft_and_republished(graded):
+    quiz = make_quiz(graded)
+    path = a(graded, f"/{quiz['aid']}/unpublish")
+    assert graded["st1"].post(path).status_code == 403
+    view = graded["fac"].post(path).json()
+    assert view["published"] is None and view["draft"]["title"] == "Quiz 1" and len(view["draft"]["questions"]) == len(quiz["questions"])
+    assert graded["st1"].get(la(graded, "/assessments")).json() == []                   # students no longer see it
+    again = graded["fac"].post(path)
+    assert again.status_code == 409 and again.json()["error"]["code"] == "not_published"
+    republished = graded["fac"].post(a(graded, f"/{quiz['aid']}/draft/publish"), {"expected_counter": view["draft"]["counter"]})
+    assert republished.status_code == 200 and republished.json()["published"]["version"] == 2
+    assert [r["title"] for r in graded["st1"].get(la(graded, "/assessments")).json()] == ["Quiz 1"]
+
+
+def test_unpublish_keeps_a_newer_draft_the_teacher_was_editing(graded):
+    quiz = make_quiz(graded)
+    graded["fac"].post(a(graded, f"/{quiz['aid']}/draft"))
+    draft = graded["fac"].get(a(graded, f"/{quiz['aid']}")).json()["draft"]
+    body = {"expected_counter": draft["counter"], **draft_fields(title="Edited title", questions=quiz["questions"])}
+    assert graded["fac"].put(a(graded, f"/{quiz['aid']}/draft"), body).status_code == 200
+    view = graded["fac"].post(a(graded, f"/{quiz['aid']}/unpublish")).json()
+    assert view["published"] is None and view["draft"]["title"] == "Edited title"
+
+
+def test_an_assessment_with_attempts_scores_or_a_released_result_cannot_be_unpublished(db, graded):
+    quiz = make_quiz(graded)
+    attempt = start(graded["st1"], graded, quiz["aid"]).json()
+    refused = graded["fac"].post(a(graded, f"/{quiz['aid']}/unpublish"))
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "has_history"
+    submit(graded["st1"], graded, attempt["id"], quiz["correct"])
+    assert graded["fac"].post(a(graded, f"/{quiz['aid']}/unpublish")).status_code == 409
+    exam = make_manual(graded, "exam", "Final exam")
+    student = graded["students"][0]
+    assert graded["fac"].put(a(graded, f"/{exam}/scores/{student.id}"), {"score": "40"}).status_code in (200, 204)
+    assert graded["fac"].post(a(graded, f"/{exam}/unpublish")).status_code == 409
+    assert graded["fac"].get(a(graded, f"/{exam}")).json()["published"] is not None      # nothing changed
