@@ -54,7 +54,7 @@ try{
   await fp.context().close();
 
   const sp=await open(student,{accept:true});
-  await sp.goto(`/student/offerings/${O}/work`);await sp.getByRole('heading',{name:'My work'}).waitFor().catch(()=>{});await sp.waitForLoadState('networkidle');
+  await sp.goto(`/student/offerings/${O}/classwork?type=quiz`);await sp.locator('nav.type-tabs').waitFor();await sp.waitForLoadState('networkidle');
   await tabTo(sp,d=>d.tag==='a'&&d.href.endsWith(quizId),'the quiz link');await press(sp,'Enter');
   await tabTo(sp,named(/Start/,'button'),'Start the quiz');await press(sp,'Enter');
   await sp.getByText('Which one is a business form?').waitFor();
@@ -68,8 +68,9 @@ try{
 
   // ---------- B. faculty: dialog validation, editor, autosave conflict, publish ----------
   const tp=await open(faculty);
-  await tp.goto(`/faculty/offerings/${O}/content`);await tp.getByRole('button',{name:'New item'}).waitFor();
-  await tabTo(tp,named(/^New item$/,'button'),'New item');await press(tp,'Enter');
+  await tp.goto(`/faculty/offerings/${O}/classwork`);await tp.locator('summary',{hasText:'+ Create'}).waitFor();
+  await tabTo(tp,d=>d.tag==='summary'&&/Create/.test(d.name),'+ Create');await press(tp,'Enter');
+  await tabTo(tp,named(/^Lesson$/,'button'),'Lesson');await press(tp,'Enter');
   await tp.locator('dialog[open]').waitFor();
   check('opening the dialog with Enter puts focus inside it',(await describe(tp)).inDialog);
   await tabTo(tp,named(/Create and edit/,'button'),'Create and edit');await press(tp,'Enter');
@@ -89,7 +90,7 @@ try{
   await tp.getByText('This draft was changed somewhere else').waitFor();
   await tabTo(tp,named(/Keep my version/,'button'),'Keep my version');await press(tp,'Enter');await tp.waitForTimeout(1500);
   check('an edit conflict is resolved with the keyboard and saving resumes',(await tp.locator('.save-indicator').innerText()).includes('Saved'));
-  await tabTo(tp,named(/^Publish$/,'button'),'Publish');await press(tp,'Enter');await tp.waitForURL(/\/content$/);
+  await tabTo(tp,named(/^Publish$/,'button'),'Publish');await press(tp,'Enter');await tp.waitForURL(/\/classwork$/);
   check('the lesson is published with the keyboard',(await tp.locator('main').innerText()).includes('Published v1'));
 
   // ---------- C. gradebook: edit a score, reach the publish control ----------
@@ -160,7 +161,7 @@ try{
   await ap.locator('dialog[open]').waitFor({state:'detached'});
   check('Escape closes it once the discard is confirmed, and focus returns to the Invite button',(await describe(ap))?.name==='Invite user');
   await ap.context().close();
-}catch(e){console.log('FAILED:',e.message.slice(0,200));results.push(false);
+}catch(e){console.log('FAILED:',e.message.slice(0,200));console.log('AT:',(e.stack.split(String.fromCharCode(10)).find(l=>l.includes('keyboard-flows'))||'').trim());results.push(false);
   if(current){console.log('FOCUS WAS ON:',JSON.stringify(await describe(current).catch(()=>null)));console.log('PAGE SAID:',(await current.locator('main').innerText().catch(()=>'')).slice(0,500));await current.screenshot({path:'../var/screens/keyboard-failure.png',fullPage:true}).catch(()=>{})}}
 { // leave the dev data as found: archive what this run created
   const cp=await open(faculty);await cp.goto('/');

@@ -53,6 +53,16 @@ for(const scheme of ['light','dark'])for(const width of [1280,375]){
     }
     await page.context().close();
   }
+  // 2b. the creation dialogs behind the Classwork "+ Create" menu (its entries are only clickable once the menu is open)
+  {const page=await newPage(browser,{...opts,state:sessions.faculty});
+    await page.goto(`/faculty/offerings/${O}/classwork`);await page.waitForLoadState('networkidle');await page.waitForTimeout(300);
+    for(const name of ['Lesson','File','Link','Quiz','Paper quiz','Activity','Examination','Teacher-scored item','Quiz drafted by AI']){
+      await page.locator('summary',{hasText:'+ Create'}).click();
+      await page.locator('.menu-list button',{hasText:new RegExp(`^${name}$`)}).click();
+      const opened=await page.locator('dialog[open]').waitFor({timeout:2000}).then(()=>true).catch(()=>false);
+      if(opened){await page.waitForTimeout(200);await audit(page,`faculty dialog "Create ${name}" on classwork`,scheme,width);if(scheme==='light'&&width===1280)covered.push(`faculty dialog "Create ${name}"`);await page.keyboard.press('Escape');await page.locator('dialog[open]').waitFor({state:'detached'}).catch(()=>{})}
+    }
+    await page.context().close()}
   // 3. the quiz attempt in progress
   if(attemptPath){const page=await newPage(browser,{...opts,state:sessions.student});await page.goto(attemptPath);await page.waitForLoadState('networkidle');await page.waitForTimeout(300);
     await audit(page,'student quiz attempt in progress',scheme,width);if(scheme==='light'&&width===1280)covered.push('student quiz attempt in progress');await page.context().close()}

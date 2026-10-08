@@ -28,15 +28,15 @@ try{
     check('the next-step button opens its page and Back names the Dashboard',await says(stu,/Back to Dashboard/))}else console.log('SKIP next-step check: this dev student has nothing left to do (covered by the fresh-install flow)');
   const lessonUrl=await stu.evaluate(async o=>{const items=await (await fetch(`/api/learn/offerings/${o}/items`)).json();return `/student/offerings/${o}/lessons/${items.find(i=>i.kind==='lesson').id}`},O);
   await stu.goto(lessonUrl);
-  check('the same lesson opened directly falls back to Lessons & materials',await says(stu,/Back to Lessons & materials/));
-  await backLink(stu).click();await stu.waitForURL(/\/lessons$/);
-  check('and that Back lands on the lesson list',/\/lessons$/.test(path(stu)));
+  check('the same lesson opened directly falls back to Classwork',await says(stu,/Back to Classwork/));
+  await backLink(stu).click();await stu.waitForURL(/\/classwork/);
+  check('and that Back lands on Classwork',/\/classwork/.test(path(stu)));
   // subject card -> Progress tab is a tab, but a card's lesson link carries the origin too
   await stu.goto('/student/subjects');await stu.waitForLoadState('networkidle');
-  await stu.getByRole('link',{name:/Grades & results/}).click();await stu.waitForURL(/\/results$/);
+  await stu.getByRole('link',{name:/Grades & results/}).first().click();await stu.waitForURL(/\/results$/);
   await stu.getByRole('heading',{name:'Published grades'}).waitFor();await stu.getByRole('heading',{name:'Released assessment results'}).waitFor();
   check('the subject card links to "Grades & results" and the page uses both headings',true);
-  check('the subject tab is called "Grades & results"',await stu.getByRole('navigation',{name:'Subject sections'}).getByRole('link',{name:'Grades & results'}).count()===1);
+  check('the subject tab is called "Grades"',await stu.getByRole('navigation',{name:'Subject sections'}).getByRole('link',{name:'Grades',exact:true}).count()===1);
 
   // ---- faculty: dashboard task -> scores page -> Back to the dashboard; direct link -> Assessments
   const fac=await newPage(browser,{state:await sessionFor(browser,'faculty1@example.com')});
@@ -49,7 +49,7 @@ try{
     check('and Back returns to the faculty dashboard',path(fac)==='/faculty');
     await fac.goBack();await fac.waitForURL(/\/scores$/);
     const direct=path(fac);await fac.goto('about:blank');await fac.goto(direct);   // a reload keeps its history state on purpose, so start from a blank page
-    check('the scores page opened by URL falls back to Assessments',await says(fac,/Back to Assessments/));
+    check('the scores page opened by URL falls back to Classwork',await says(fac,/Back to Classwork/));
   }
 
   // ---- admin: term workspace -> roster -> Back to the term workspace; direct roster -> School years

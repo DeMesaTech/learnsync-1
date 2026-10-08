@@ -100,8 +100,8 @@ try{
   const pub=await call(teach,'POST',`/teach/offerings/${O}/syllabus/draft/publish`,{expected_counter:sv.counter});
   check('the syllabus with a grading policy is published',pub.status===200,String(pub.status));
 
-  await teach.goto(`/faculty/offerings/${O}/content`);
-  await teach.getByRole('button',{name:'New item'}).click();
+  await teach.goto(`/faculty/offerings/${O}/classwork`);
+  await teach.getByText('+ Create').click();await teach.getByRole('button',{name:'Lesson',exact:true}).click();
   await teach.locator('dialog').getByLabel('Title').fill('Starting a venture');
   await teach.locator('dialog').getByLabel('Attach to a syllabus topic').selectOption({label:'Chapter 1 - Foundations › What is a venture?'});
   await teach.locator('dialog').getByRole('button',{name:'Create and edit'}).click();
@@ -110,12 +110,12 @@ try{
   await teach.waitForTimeout(2500);
   await shot(teach,'flow-1-lesson-editor');
   await teach.getByRole('button',{name:'Publish'}).click();
-  await teach.waitForURL(/\/content$/);
+  await teach.waitForURL(/\/classwork$/);
   await teach.getByText('Published v1').first().waitFor();
   check('the lesson is published',(await text(teach)).includes('Starting a venture'));
 
-  await teach.goto(`/faculty/offerings/${O}/assessments`);
-  await teach.getByRole('button',{name:'New assessment'}).click();
+  await teach.goto(`/faculty/offerings/${O}/classwork?type=quiz`);
+  await teach.getByText('+ Create').click();await teach.getByRole('button',{name:'Quiz',exact:true}).click();
   await teach.locator('dialog').getByLabel('Title').fill('Venture basics quiz');
   await teach.locator('dialog').getByRole('button',{name:'Create and set up'}).click();
   await teach.getByLabel('Grading category').selectOption({label:'Quizzes (100%)'});
@@ -132,7 +132,7 @@ try{
   await shot(teach,'flow-2-quiz-editor');
   await teach.getByRole('button',{name:'Next',exact:true}).click();
   await teach.getByRole('button',{name:'Assign',exact:true}).click();
-  await teach.waitForURL(/\/assessments$/);
+  await teach.waitForURL(/\/classwork$/);
   await teach.getByText('Published v1').first().waitFor();
   check('the quiz is published',(await text(teach)).includes('Venture basics quiz'));
 
@@ -219,22 +219,25 @@ try{
   await stud.goto(`/student/offerings/${O}/lessons`);
   await stud.getByRole('heading',{name:/What is a venture\?/}).waitFor();
   const lessons=await text(stud);
-  check('lessons are grouped under their syllabus topic with a completed chip and an unfinished one',lessons.includes('Chapter 1 - Foundations › What is a venture?')&&lessons.includes('✓ Completed')&&lessons.includes('Not marked complete'));
+  check('lessons are grouped chapter then topic, with a completed chip and an unfinished one',await stud.locator('.tree.d0 > header h3',{hasText:'Chapter 1 - Foundations'}).count()===1&&await stud.locator('.tree.d1 > header h4',{hasText:'What is a venture?'}).count()===1&&lessons.includes('✓ Completed')&&lessons.includes('Not marked complete'));
   check('Up next marks the unfinished lesson and Continue points to it',await stud.locator('li.next',{hasText:'Finding customers'}).count()===1&&await stud.getByRole('link',{name:/Continue: Finding customers/}).count()===1);
   await shot(stud,'flow-6-student-lessons');
   await teach.goto(`/faculty/offerings/${O}/content`);
+  await teach.getByRole('button',{name:'Reorder'}).first().click();
   await teach.getByRole('button',{name:'Move Finding customers up'}).click();
   await teach.getByText(/Moved “Finding customers” up/).waitFor();
   check('faculty reorder with the Up button and the move is announced',true);
   await stud.reload();await stud.getByRole('heading',{name:/What is a venture\?/}).waitFor();
-  check('the student sees the new order',(await stud.locator('ul.seq li').first().innerText()).includes('Finding customers'));
+  const order=(await call(stud,'GET',`/learn/offerings/${O}/items`)).data.map(i=>i.title);
+  check('the student sees the new order',order.indexOf('Finding customers')<order.indexOf('Starting a venture'),order.join(', '));
   await stud.getByRole('link',{name:'Finding customers',exact:true}).click();
   await stud.getByRole('button',{name:'Mark lesson as complete'}).click();
   await stud.getByRole('link',{name:/Next lesson: Starting a venture/}).waitFor();
   check('after completing, the next lesson in the sequence is offered',true);
-  await stud.goto(`/student/offerings/${O}/work`);
-  await stud.getByRole('heading',{name:/^Completed/}).waitFor();
-  check('My work puts the finished quiz under Completed',(await text(stud)).includes('Venture basics quiz'));
+  await stud.goto(`/student/offerings/${O}/classwork?type=quiz`);
+  await stud.getByRole('button',{name:/^Done/}).click();
+  await stud.getByRole('link',{name:'Venture basics quiz'}).waitFor();
+  check('the Quizzes tab lists the finished quiz under Done',(await text(stud)).includes('Venture basics quiz'));
   await stud.goto(`/student/offerings/${O}/study`);
   await stud.locator('.chat-item').first().waitFor();
   await stud.locator('.chat-item').first().click();
@@ -258,12 +261,13 @@ try{
   const started=Date.now();const listed=(await call(stud,'GET',`/learn/offerings/${O}/items`)).data;const took=Date.now()-started;
   check('with 42 lessons the student list is complete, grouped, and answers quickly',listed.length===42&&took<3000,`${listed.length} items in ${took} ms`);
   await stud.setViewportSize({width:375,height:812});await teach.setViewportSize({width:375,height:812});
-  await stud.goto(`/student/offerings/${O}/lessons`);await stud.getByRole('heading',{name:'Other materials'}).waitFor();await stud.waitForLoadState('networkidle');
+  await stud.goto(`/student/offerings/${O}/lessons`);await stud.getByRole('heading',{name:'Not under a topic'}).waitFor();await stud.waitForLoadState('networkidle');
   const phoneStudent=await layout(stud);await shot(stud,'flow-7-student-lessons-phone');
   check('the student lesson list fits a phone: no sideways scroll and 44px targets',!phoneStudent.overflow&&phoneStudent.small.length===0,JSON.stringify(phoneStudent.small));
-  await teach.goto(`/faculty/offerings/${O}/content`);await teach.getByRole('heading',{name:'Other materials'}).waitFor();await teach.waitForLoadState('networkidle');
+  await teach.goto(`/faculty/offerings/${O}/content`);await teach.getByRole('heading',{name:'Not under a topic'}).waitFor();await teach.waitForLoadState('networkidle');
   const phoneFaculty=await layout(teach);await shot(teach,'flow-8-faculty-content-phone');
   check('the faculty content list fits a phone with its Up/Down buttons',!phoneFaculty.overflow&&phoneFaculty.small.length===0,JSON.stringify(phoneFaculty.small));
+  await teach.locator('summary',{hasText:'Search and archived'}).click();
   await teach.getByLabel('Search').fill('lesson 17');
   check('the content search narrows 42 items to the match',await teach.locator('ul.seq li').count()===1);
   await stud.setViewportSize({width:1280,height:900});await teach.setViewportSize({width:1280,height:900});

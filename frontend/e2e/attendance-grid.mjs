@@ -30,9 +30,17 @@ try{
   await page.goto(`/faculty/offerings/${O}/attendance`);await page.waitForLoadState('networkidle');
   check('desktop opens in grid mode',await page.getByRole('heading',{name:/^Week of/}).count()===1&&await page.locator('table.att-grid').count()===1);
   const cols=await page.locator('table.att-grid thead th[scope=col]').count();
-  check('the class days (Mon, Wed, Fri) are the columns, plus the student column',cols===4,String(cols));
+  check('every day of the week is a column (7 days plus the student column), not just class days',cols===8,String(cols));
+  check('class days (Mon, Wed, Fri) are plain and the other four say "no class"',await page.locator('table.att-grid thead .att-head',{hasText:'no class'}).count()===4);
   check('only one grid cell is in the tab order (roving focus)',await page.locator('table.att-grid tbody button[tabindex="0"]').count()===1);
   check('axe finds no violations on the grid',(await axe(page)).length===0);
+  // the student column stays in view while the dates scroll sideways (a month is wider than the screen)
+  await page.getByRole('button',{name:'Month',exact:true}).click();
+  await page.waitForFunction(()=>{const w=document.querySelector('.table-wrap');return w&&w.scrollWidth>w.clientWidth});
+  await page.evaluate(()=>{document.querySelector('.table-wrap').scrollLeft=600});
+  const pinned=await page.evaluate(()=>{const w=document.querySelector('.table-wrap');const r=document.querySelector('table.att-grid tbody th.sticky').getBoundingClientRect();return {scrolled:w.scrollLeft,offset:Math.round(r.left-w.getBoundingClientRect().left)}});
+  check('the student column stays pinned while the dates scroll sideways',pinned.scrolled>=500&&pinned.offset===0,JSON.stringify(pinned));
+  await page.getByRole('button',{name:'Week',exact:true}).click();
 
   // ---- click cycles a status and saves by itself
   const cell=(r,c)=>page.locator(`table.att-grid button[data-r="${r}"][data-c="${c}"]`);
@@ -57,17 +65,21 @@ try{
   check('the server holds exactly the keyboard result (A, L; the cleared one is gone)',day0[rid(1)]==='absent'&&day0[rid(2)]==='late'&&day0[rid(0)]===undefined,JSON.stringify(Object.values(day0)));
 
   // ---- Mark rest present on the second column
-  await page.getByRole('button',{name:'Mark rest present'}).nth(1).click();
+  await page.getByRole('button',{name:'Mark rest present'}).nth(2).click();                       // the Wednesday column
   await page.getByText('All changes saved.').waitFor();
   s=await sessions();
   check('Mark rest present marks everyone not yet marked on that date',s.sessions.length===2&&Object.keys(s.sessions[0].marks).length===3);
 
   // ---- a period per date, locked once recorded
-  const third=page.locator('table.att-grid thead th[scope=col]').nth(3);
-  await third.getByRole('combobox').selectOption('finals');
-  await cell(0,2).click();await page.getByText('All changes saved.').waitFor();
+  const friday=page.locator('table.att-grid thead th[scope=col]').nth(5);                        // th 0 is the student column
+  await friday.getByRole('combobox').selectOption('finals');
+  await cell(0,4).click();await page.getByText('All changes saved.').waitFor();
   s=await sessions();
-  check('a new date takes the period chosen in its header',s.sessions.some(x=>x.period==='finals')&&await third.getByRole('combobox').count()===0);
+  check('a new date takes the period chosen in its header',s.sessions.some(x=>x.period==='finals')&&await friday.getByRole('combobox').count()===0);
+  // ---- a day that is not a class day can still be marked (a make-up class)
+  await cell(0,6).click();await page.getByText('All changes saved.').waitFor();
+  s=await sessions();
+  check('a non-class day (Sunday) can be marked and is saved like any other',s.sessions.length===4&&(await cell(0,6).innerText())==='P');
 
   // ---- a failed save is flagged with Retry and keeps the mark
   await page.route('**/attendance',r=>r.request().method()==='PUT'?r.fulfill({status:500,contentType:'application/json',body:JSON.stringify({error:{code:'boom',message:'The server could not save this.',field_errors:{}}})}):r.continue());
@@ -80,11 +92,11 @@ try{
   check('Retry saves the kept change',await page.locator('.att-cell.err').count()===0);
 
   // ---- class days and an extra date
-  await page.locator('details.more summary',{hasText:'Dates and class days'}).click();
+  await page.locator('details.more summary',{hasText:'Class days'}).click();
   await page.getByRole('checkbox',{name:'Tue',exact:true}).check();
   await page.getByRole('button',{name:'Save class days'}).click();
   await page.getByText('Class days saved.').waitFor();
-  check('adding a class day adds its column',await page.locator('table.att-grid thead th[scope=col]').count()===5);
+  check('adding a class day keeps every column and takes one off the "no class" list',await page.locator('table.att-grid thead th[scope=col]').count()===8&&await page.locator('table.att-grid thead .att-head',{hasText:'no class'}).count()===2);
   check('the new class days are stored on the subject',(await call(teach,'GET',`/offerings/${O}`)).data.meeting_days===23);
 
   // ---- One day view keeps the quick roll call
@@ -94,6 +106,19 @@ try{
   await page.getByRole('button',{name:'Grid',exact:true}).click();
   await page.locator('table.att-grid').waitFor();
   check('and the grid comes back',await page.locator('table.att-grid').count()===1);
+
+  // ---- export: a real file downloads from the page
+  await page.locator('details.more summary',{hasText:'Export'}).first().click();
+  await page.getByRole('radio',{name:'All recorded dates'}).check();
+  const [xlsx]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Download Excel'}).click()]);
+  const [pdf]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Download PDF'}).click()]);
+  await page.getByRole('radio',{name:'Custom range'}).check();
+  await page.getByRole('textbox',{name:'To'}).fill('2000-01-01');
+  check('an end date before the start disables the downloads',await page.getByRole('button',{name:'Download Excel'}).isDisabled()&&await page.getByRole('alert').filter({hasText:'not before'}).count()===1);
+  const yr=new Date().getFullYear();await page.getByRole('textbox',{name:'From'}).fill(`${yr-1}-01-01`);await page.getByRole('textbox',{name:'To'}).fill(`${yr+1}-12-31`);
+  const [ranged]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Download Excel'}).click()]);
+  check('a custom range downloads',ranged.suggestedFilename().endsWith('.xlsx'),ranged.suggestedFilename());
+  check('Excel and PDF attendance files download',/^attendance-ENT-101-1A.*\.xlsx$/.test(xlsx.suggestedFilename())&&pdf.suggestedFilename().endsWith('.pdf'),`${xlsx.suggestedFilename()}, ${pdf.suggestedFilename()}`);
 
   // ---- phones start with one day
   const phone=await newPage(browser,{width:375,height:812,state:F});

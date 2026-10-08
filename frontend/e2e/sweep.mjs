@@ -10,12 +10,12 @@ const roles={
     const o=`/faculty/offerings/${OFFERING}`;
     const ids=await page.evaluate(async o=>{const j=u=>fetch('/api/teach/offerings/'+o+u).then(r=>r.json());
       const items=await j('/items'),as=await j('/assessments');return {lesson:items.find(i=>i.kind==='lesson')?.id,ref:items.find(i=>i.kind==='reference')?.id,quiz:as.find(a=>a.kind==='online_quiz')?.id,act:as.find(a=>a.kind==='activity')?.id}},OFFERING);
-    return ['/faculty','/faculty/subjects',o,`${o}/syllabus`,`${o}/content`,`${o}/content/${ids.lesson}/edit`,`${o}/content/${ids.ref}/edit`,`${o}/assessments`,`${o}/assessments/${ids.quiz}/edit`,`${o}/assessments/${ids.quiz}/scores`,`${o}/assessments/${ids.act}/scores`,`${o}/attendance`,`${o}/gradebook`,`${o}/class-standing`,`${o}/progress`,`${o}/announcements`,'/faculty/issues','/account']}},
+    return ['/faculty','/faculty/subjects',o,`${o}/syllabus`,`${o}/content`,`${o}/content/${ids.lesson}/edit`,`${o}/content/${ids.ref}/edit`,`${o}/assessments`,`${o}/assessments/${ids.quiz}/edit`,`${o}/assessments/${ids.quiz}/scores`,`${o}/assessments/${ids.act}/scores`,`${o}/attendance`,`${o}/gradebook`,`${o}/class-standing`,`${o}/progress`,`${o}/announcements`,`${o}/stream`,`${o}/classwork`,`${o}/classwork?type=quiz`,`${o}/classwork?type=activity`,`${o}/classwork?type=exam`,'/faculty/review','/faculty/issues','/account']}},
   student:{email:'student1@example.com',pages:async page=>{
     const o=`/student/offerings/${OFFERING}`;
     const ids=await page.evaluate(async o=>{const items=await fetch('/api/learn/offerings/'+o+'/items').then(r=>r.json());const work=await fetch('/api/learn/offerings/'+o+'/assessments').then(r=>r.json());
       return {lesson:items.find(i=>i.kind==='lesson')?.id,quiz:work.find(w=>w.kind==='online_quiz'&&w.state==='available')?.id??work.find(w=>w.kind==='online_quiz')?.id,act:work.find(w=>w.kind==='activity')?.id}},OFFERING);
-    return ['/student','/student/todo','/student/study-buddy','/student/subjects',`${o}/syllabus`,`${o}/lessons`,`${o}/lessons/${ids.lesson}`,`${o}/study`,`${o}/work`,`${o}/work/${ids.quiz}`,`${o}/work/${ids.act}`,`${o}/progress`,`${o}/results`,`${o}/announcements`,'/student/issues','/account']}}
+    return ['/student','/student/todo','/student/study-buddy','/student/subjects',`${o}/syllabus`,`${o}/lessons`,`${o}/lessons/${ids.lesson}`,`${o}/study`,`${o}/work`,`${o}/work/${ids.quiz}`,`${o}/work/${ids.act}`,`${o}/progress`,`${o}/results`,`${o}/announcements`,`${o}/stream`,`${o}/classwork`,`${o}/classwork?type=quiz`,`${o}/classwork?type=activity`,'/student/issues','/account']}}
 };
 
 const browser=await launch();
