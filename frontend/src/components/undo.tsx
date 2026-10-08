@@ -20,7 +20,7 @@ export function UndoProvider({children}:{children:ReactNode}){
     timer.current=window.setTimeout(()=>setToast(t=>t&&t.id===id?null:t),undo?UNDO_MS:PLAIN_MS);
   },[]);
   return <UndoContext.Provider value={offer}>{children}
-    <div className="toast-region" role="status" aria-live="polite">{toast&&<div className="toast"><span aria-hidden="true">✓</span><span>{toast.message}</span>
+    <div className="toast-region" role="status" aria-live="polite">{toast&&<div className="toast"><span className="toast-icon" aria-hidden="true">✓</span><span>{toast.message}</span>
       {toast.undo&&<button type="button" onClick={()=>{toast.undo!();setToast(null)}}>Undo</button>}
       <button type="button" aria-label="Dismiss" onClick={()=>setToast(null)}>×</button></div>}</div></UndoContext.Provider>;
 }

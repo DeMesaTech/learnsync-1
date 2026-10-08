@@ -276,10 +276,16 @@ tbody th.sticky{text-transform:none;letter-spacing:normal;font-size:inherit;colo
 .more>summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:600}
 pre.code{white-space:pre-wrap;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-size:.85rem;overflow:auto}
 
-/* ---- undo toast ---- */
-.toast-region{position:fixed;left:max(16px,env(safe-area-inset-left));bottom:max(16px,env(safe-area-inset-bottom));z-index:7;max-width:min(520px,calc(100vw - 32px))}
-.toast{display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;background:var(--text);color:var(--surface);border-radius:var(--radius);box-shadow:0 8px 24px rgba(0,0,0,.3)}
-.toast button{min-height:44px;background:transparent;color:inherit;border-color:currentColor}
+/* ---- toast: white card, top centre, like react-hot-toast ---- */
+.toast-region{position:fixed;top:max(16px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:7;width:max-content;max-width:min(420px,calc(100vw - 32px));pointer-events:none}
+.toast{display:flex;align-items:center;gap:10px;padding:6px 8px 6px 14px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:12px;box-shadow:0 3px 10px rgba(0,0,0,.14),0 3px 3px rgba(0,0,0,.08);font-size:.95rem;line-height:1.35;pointer-events:auto;animation:toast-in .25s cubic-bezier(.21,1.02,.73,1) both}
+.toast-icon{flex:none;display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#27AE60;color:#fff;font-size:.8rem;font-weight:700}
+.toast>span:nth-child(2){flex:1;min-width:0}
+.toast button{min-height:44px;min-width:44px;padding:0 10px;border:0;background:transparent;color:var(--action);font-weight:700;border-radius:8px}
+.toast button[aria-label=Dismiss]{color:var(--muted);font-weight:400;font-size:1.3rem}
+.toast button:hover{background:var(--surface-alt)}
+@keyframes toast-in{from{opacity:0;transform:translateY(-14px) scale(.96)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.toast{animation:none}}
 dialog[data-confirm]{width:min(460px,calc(100vw - 24px))}
 
 /* ---- attendance grid ---- */
