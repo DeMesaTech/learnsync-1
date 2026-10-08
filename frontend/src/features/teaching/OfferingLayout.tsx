@@ -1,13 +1,18 @@
-import {Link,NavLink,Outlet,useParams} from 'react-router-dom';
+import {Link,NavLink,Outlet,useMatch,useParams} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
 import {api} from '../../app/api';
 import type {OfferingSummary} from '../academics/types';
+import type {SyllabusState} from './types';
 
 /** Shared header + tabs for one subject. role selects the route prefix and tab set. */
 export function OfferingLayout({role}:{role:'faculty'|'student'}){
   const {offeringId}=useParams();
   const base=`/${role}/offerings/${offeringId}`;
   const query=useQuery({queryKey:['offering',offeringId],queryFn:()=>api<OfferingSummary&{enrollment_status?:string}>(role==='faculty'?`/offerings/${offeringId}`:`/learn/offerings/${offeringId}`)});
+  const setup=!!useMatch('/faculty/offerings/:offeringId/setup');
+  // a teacher whose subject has no published syllabus yet is pointed at the guided setup (faculty only)
+  const syllabus=useQuery({queryKey:['syllabus',offeringId],queryFn:()=>api<SyllabusState>(`/teach/offerings/${offeringId}/syllabus`),enabled:role==='faculty'});
+  const needsSetup=role==='faculty'&&!setup&&query.data?.term_status==='open'&&!!syllabus.data&&!syllabus.data.published;
   return <>
     <p className="back"><Link to={`/${role}/subjects`}>← My subjects</Link></p>
     {query.isPending?<p>Loading…</p>:query.error?<section className="panel"><h1>Subject unavailable</h1><p role="alert">{query.error.message}</p></section>:<>
@@ -18,15 +23,16 @@ export function OfferingLayout({role}:{role:'faculty'|'student'}){
       </div></div>
       {role==='student'&&query.data.enrollment_status==='withdrawn'?<>
         <p className="warn" role="status">You are no longer enrolled in this subject. Course content is not available, but you can still see your own results and your earlier study chats.</p>
-        <nav className="tabs" aria-label="Subject sections"><NavLink to={`/student/study-buddy?subject=${query.data.id}`}>Study buddy chats</NavLink><NavLink to={`${base}/results`}>Grades & results</NavLink></nav></>:
-      <nav className="tabs" aria-label="Subject sections">
+        <nav className="tabs" aria-label="Subject sections"><NavLink to={`/student/study-buddy?subject=${query.data.id}`}>Study buddy chats</NavLink><NavLink to={`${base}/results`}>Grades & results</NavLink></nav></>:<>
+      {needsSetup&&<p className="notice" role="status"><strong>This subject is not set up yet.</strong> A guided setup takes a few minutes. <Link className="touch" to={`${base}/setup`}>Set up this subject</Link></p>}
+      {!setup&&<nav className="tabs" aria-label="Subject sections">
         {role==='faculty'&&<NavLink end to={base}>Students</NavLink>}
         <NavLink to={`${base}/syllabus`}>Syllabus</NavLink>
         <NavLink to={`${base}/${role==='faculty'?'content':'lessons'}`}>{role==='faculty'?'Content':'Lessons & materials'}</NavLink>
         {role==='faculty'?<><NavLink to={`${base}/assessments`}>Assessments</NavLink><NavLink to={`${base}/attendance`}>Attendance</NavLink><NavLink to={`${base}/gradebook`}>Gradebook</NavLink><NavLink to={`${base}/class-standing`}>Class standing</NavLink><NavLink to={`${base}/progress`}>Progress</NavLink></>
           :<><NavLink to={`/student/study-buddy?subject=${query.data.id}`}>Study buddy</NavLink><NavLink to={`${base}/work`}>My work</NavLink><NavLink to={`${base}/progress`}>My progress</NavLink><NavLink to={`${base}/results`}>Grades & results</NavLink></>}
         <NavLink to={`${base}/announcements`}>Announcements</NavLink>
-      </nav>}
+      </nav>}</>}
       <Outlet context={{offering:query.data}}/>
     </>}
   </>;
