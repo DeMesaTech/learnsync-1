@@ -35,7 +35,7 @@ try{
   await dl.getByRole('button',{name:/Create/}).click();await teach.waitForURL(/edit/);await teach.waitForTimeout(1200);
   await teach.getByLabel('Grading category').selectOption({label:'Activities (100%)'});await teach.getByLabel('Grading period').selectOption({label:'Midterm'});
   await teach.getByLabel('Maximum points').fill('20');await teach.getByLabel('Due').fill(new Date(Date.now()+3*864e5).toISOString().slice(0,16));
-  await teach.waitForTimeout(2500);await teach.getByRole('button',{name:'Publish'}).click();await teach.waitForTimeout(2000);
+  await teach.waitForTimeout(2500);await teach.getByRole('button',{name:'Assign',exact:true}).click();await teach.waitForTimeout(2000);
   const pdf=Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF');
   for(const state of S){const p=await newPage(browser,{state});await p.goto(`/student/offerings/${O}/work`);await p.waitForLoadState('networkidle');
     await p.getByRole('link',{name:/Business idea pitch/}).first().click();await p.waitForLoadState('networkidle');

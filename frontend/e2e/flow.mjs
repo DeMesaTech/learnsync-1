@@ -118,6 +118,9 @@ try{
   await teach.getByRole('button',{name:'New assessment'}).click();
   await teach.locator('dialog').getByLabel('Title').fill('Venture basics quiz');
   await teach.locator('dialog').getByRole('button',{name:'Create and set up'}).click();
+  await teach.getByLabel('Grading category').selectOption({label:'Quizzes (100%)'});
+  await teach.getByLabel('Grading period').selectOption({label:'Midterm'});
+  await teach.getByRole('button',{name:'Next',exact:true}).click();                 // the quiz is a three-step stepper
   await teach.getByRole('button',{name:'Add multiple choice'}).click();
   await teach.getByLabel('Question',{exact:true}).fill('What starts a venture?');
   await teach.getByLabel('Choice 1 text').fill('A real customer problem');
@@ -125,11 +128,10 @@ try{
   await teach.getByLabel('Choice 3 text').fill('A loan');
   await teach.getByLabel('Choice 4 text').fill('A website');
   await teach.getByLabel('Choice 1 is correct').check();
-  await teach.getByLabel('Grading category').selectOption({label:'Quizzes (100%)'});
-  await teach.getByLabel('Grading period').selectOption({label:'Midterm'});
   await teach.waitForTimeout(2500);
   await shot(teach,'flow-2-quiz-editor');
-  await teach.getByRole('button',{name:'Publish'}).click();
+  await teach.getByRole('button',{name:'Next',exact:true}).click();
+  await teach.getByRole('button',{name:'Assign',exact:true}).click();
   await teach.waitForURL(/\/assessments$/);
   await teach.getByText('Published v1').first().waitFor();
   check('the quiz is published',(await text(teach)).includes('Venture basics quiz'));
