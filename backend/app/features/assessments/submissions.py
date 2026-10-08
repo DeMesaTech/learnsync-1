@@ -14,6 +14,7 @@ from app.features.study.events import record_event
 
 from .attempts import student_lock
 from .definitions import revision
+from .results import latest_release
 from .models import ActivitySubmission, AssessmentScore, SubmissionPermission
 from .scores import enrolled_student_ids
 
@@ -107,11 +108,13 @@ def faculty_rows(db, offering, assessment, enrollments):
     """One row per enrolled, targeted student with their latest version and grading state."""
     scores = {s.student_id: s for s in db.scalars(select(AssessmentScore).where(
         AssessmentScore.assessment_id == assessment.id))}
+    rev = revision(db, assessment.id, "published")
     out = []
     for enrollment, account in enrollments:
         subs = versions(db, assessment.id, account.id)
         last = subs[-1] if subs else None
         score = scores.get(account.id)
+        shown = latest_release(db, assessment.id, account.id) if score and score.score is not None else None
         out.append({
             "student_id": account.id, "student": account.display_name,
             "student_number": account.student_number, "versions": len(subs),
@@ -123,5 +126,9 @@ def faculty_rows(db, offering, assessment, enrollments):
                                            and last and score.selected_submission_id == last.id),
             "new_version_since_grading": bool(score and score.score is not None and last
                                               and score.selected_submission_id != last.id),
+            # a scored result the student does not yet see exactly as it is now: it still needs to be returned
+            "to_return": bool(score and score.score is not None and not (
+                shown and shown.score == score.score and shown.feedback == score.feedback
+                and rev and shown.max_points == rev.max_points)),
             "permission_open": open_permission(db, assessment.id, account.id, now()) is not None})
     return out

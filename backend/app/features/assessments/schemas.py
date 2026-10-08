@@ -112,3 +112,15 @@ class ScheduleInput(BaseModel):
 
 class ParseInput(BaseModel):
     text: str = Field(max_length=200000)
+
+
+class BatchCell(BaseModel):
+    assessment_id: uuid.UUID
+    student_id: uuid.UUID
+    score: Decimal | None = Field(default=None, ge=0, le=100000)
+    feedback: str = Field(default="", max_length=5000)
+    expected_revision: int | None = None
+
+
+class BatchScores(BaseModel):
+    cells: list[BatchCell] = Field(min_length=1, max_length=500)

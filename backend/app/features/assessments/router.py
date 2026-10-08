@@ -12,6 +12,7 @@ from . import (
     attempts,
     attendance,
     definitions,
+    gradebook_edit,
     grading,
     learner,
     planning,
@@ -28,6 +29,7 @@ from .schemas import (
     AssessmentSettings,
     AttemptSubmit,
     AttendanceInput,
+    BatchScores,
     Correction,
     GradePublishInput,
     ParseInput,
@@ -207,6 +209,12 @@ def record_score(offering_id: UUID, assessment_id: UUID, student_id: UUID, data:
     last = submissions.latest(db, a.id, student_id) if a.kind == "activity" else None
     row = scores.set_score(db, actor, offering, a, student_id, data, last.id if last else None)
     return {"score": row.score, "feedback": row.feedback, "revision": row.revision}
+
+
+@router.put(T + "/gradebook/scores")
+def record_scores_batch(offering_id: UUID, data: BatchScores, actor=Depends(faculty), db: Session = Depends(get_db)):
+    """Edit many gradebook scores at once. All or nothing: one conflict or invalid cell saves nothing."""
+    return gradebook_edit.save_batch(db, actor, own(db, offering_id, actor), data.cells)
 
 
 @router.post(T + "/assessments/{assessment_id}/release")

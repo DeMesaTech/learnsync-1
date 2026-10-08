@@ -47,7 +47,7 @@ def error_response(request, status, code, message, fields=None):
 @app.exception_handler(HTTPException)
 async def http_error(request, exc):
     detail = exc.detail if isinstance(exc.detail, dict) else {"code": "request_failed", "message": str(exc.detail)}
-    return error_response(request, exc.status_code, detail["code"], detail["message"])
+    return error_response(request, exc.status_code, detail["code"], detail["message"], detail.get("fields"))
 
 @app.exception_handler(RequestValidationError)
 async def validation_error(request, exc):

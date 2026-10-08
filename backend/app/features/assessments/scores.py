@@ -31,8 +31,9 @@ def enrolled_student_ids(db, offering_id):
         Enrollment.offering_id == offering_id, Enrollment.status == "enrolled")))
 
 
-def set_score(db, actor, offering, assessment, student_id, data, submission_id=None):
-    """Faculty entry for offline quizzes, exams, manual assessments and graded activities."""
+def apply_score(db, actor, offering, assessment, student_id, data, submission_id=None):
+    """Faculty entry for offline quizzes, exams, manual assessments and graded activities. Does NOT commit:
+    the caller decides (a single score commits at once; a batch commits only if every cell is accepted)."""
     rev = revision(db, assessment.id, "published")
     if not rev:
         fail(409, "not_published", "Publish the assessment before recording scores.")
@@ -65,6 +66,11 @@ def set_score(db, actor, offering, assessment, student_id, data, submission_id=N
               {"student_id": str(student_id), "score": None if data.score is None
                else str(data.score)})
         flag_graded_change(db, offering.id, rev, f"{rev.title}: a score changed.", [student_id])
+    return row
+
+
+def set_score(db, actor, offering, assessment, student_id, data, submission_id=None):
+    row = apply_score(db, actor, offering, assessment, student_id, data, submission_id)
     db.commit()
     return row
 
