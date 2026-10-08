@@ -149,7 +149,7 @@ function Branch({node,depth,here,bare=false}:{node:TNode;depth:number;here:{from
     {node.rows.length>0&&<ul className="seq compact">{[...node.rows].sort((a,b)=>rank(a)-rank(b)).map(r=><li key={r.key} className={r.chips.some(c=>c.cls==='next')?'next':undefined}>
       <span className="grow"><Link state={here} to={r.to}>{r.title}</Link>{(r.detail||r.result)&&<span className="muted">{r.detail}{r.detail&&r.result?' · ':''}{r.result&&<strong>{r.result}</strong>}</span>}</span>
       {r.chips.map(c=><span key={c.text} className={`badge ${c.cls??''}`}>{c.text}</span>)}
-      {r.kind==='item'&&r.todo&&<Link state={here} className="start" to={r.to} title="Start this lesson" aria-hidden="true" tabIndex={-1}>▶</Link>}</li>)}</ul>}
+      {r.kind==='item'&&r.todo&&<Link state={here} className="start" to={r.to} title="Open this" aria-hidden="true" tabIndex={-1}>▶</Link>}</li>)}</ul>}
     {node.kids.map(k=><Branch key={k.id} node={k} depth={depth+1} here={here}/>)}
   </section>;
 }
@@ -167,13 +167,13 @@ export function StudentClasswork(){
   const error=items.error??work.error;if(error)return <p role="alert">{error.message}</p>;
   if(!items.data||!work.data)return <p>Loading…</p>;
   const nearest=work.data.find(w=>w.bucket==='todo');                // sorted by deadline, so this is the nearest
-  const lessons=items.data.filter(i=>i.kind==='lesson');const finished=lessons.filter(i=>i.completed).length;
+  const lessons=items.data;const finished=lessons.filter(i=>i.completed).length;      // lessons, files and links are one sequence
   const next=items.data.find(i=>i.up_next);
   const KIND_NAME={lesson:'Lesson',file:'File',reference:'Link'} as const;
   const rows:SRow[]=[
     ...items.data.map(i=>({key:'i'+i.id,kind:'item' as const,cat:'lesson' as const,title:i.title,anchor:i.anchor_node_id,to:`${base}/lessons/${i.id}`,label:KIND_NAME[i.kind],
-      detail:i.kind==='file'?(i.file?.name??''):'',chips:[...(i.up_next?[{text:'Up next',cls:'next'}]:[]),...(i.kind==='lesson'?[i.completed?{text:'✓ Completed',cls:'done'}:{text:'Not marked complete'}]:[])],
-      todo:i.kind==='lesson'&&!i.completed,done:i.kind==='lesson'&&!!i.completed})),
+      detail:i.kind==='file'?(i.file?.name??''):'',chips:[...(i.up_next?[{text:'Up next',cls:'next'}]:[]),...[i.completed?{text:'✓ Completed',cls:'done'}:{text:'Not marked complete'}]],
+      todo:!i.completed,done:!!i.completed})),
     ...work.data.map(w=>({key:'w'+w.id,kind:'work' as const,cat:(w.kind==='online_quiz'?'quiz':'activity') as 'quiz'|'activity',title:w.title,anchor:w.anchor_node_id??null,to:`${base}/work/${w.id}`,label:w.kind==='online_quiz'?'Quiz':'Activity',
       detail:workDetail(w),
       chips:[...(w===nearest?[{text:'Up next',cls:'next'}]:[]),...(w.state==='in_progress'?[{text:'In progress'}]:[]),...(w.late_allowed?[{text:'Late submission allowed',cls:'warn'}]:[])],
@@ -188,7 +188,7 @@ export function StudentClasswork(){
     {rows.length===0?<section className="panel"><h2>Nothing yet</h2><p>Published lessons, files, links, quizzes and activities appear here.</p></section>:<>
       <div className="type-row"><ClassworkTypes base={base} current={cat} counts={Object.fromEntries(CATS.map(([k])=>[k,rows.filter(r=>r.cat===k).length]))}/></div>
       <div className="cw-bar">
-        {cat==='lesson'&&lessons.length>0&&<div className="seq-head"><p><strong>{finished} of {lessons.length}</strong> lessons complete</p>
+        {cat==='lesson'&&lessons.length>0&&<div className="seq-head"><p><strong>{finished} of {lessons.length}</strong> complete</p>
           {next&&<Link className="button primary" to={`${base}/lessons/${next.id}`}>Continue: {next.title}</Link>}</div>}
         <div className="segmented" role="group" aria-label="Show">{([['all','Everything'],['todo',cat==='lesson'?'Not completed':'To do'],['done',cat==='lesson'?'Completed':'Done']] as const).map(([k,l])=>
           <button key={k} type="button" className={filter===k?'on':''} aria-pressed={filter===k} onClick={()=>setFilter(k)}>{l} <span className="muted">{count(k)}</span></button>)}</div></div>

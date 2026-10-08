@@ -23,6 +23,7 @@
     "e2e:controls": "node e2e/control-count.mjs",
     "e2e:workspace": "node e2e/workspace.mjs",
     "e2e:admin-lists": "node e2e/admin-lists.mjs",
+    "e2e:files": "node e2e/files-links.mjs",
     "e2e:gallery": "node e2e/gallery.mjs"
   },
   "dependencies": {

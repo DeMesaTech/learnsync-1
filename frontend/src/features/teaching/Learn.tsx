@@ -59,6 +59,31 @@ export function StudentLessons(){
   </>;
 }
 
+const NOUN={lesson:'lesson',file:'file',reference:'link'} as const;
+const PREVIEWABLE=['application/pdf','image/png','image/jpeg'];
+const sizeText=(n:number)=>n>=1048576?`${(n/1048576).toFixed(1)} MB`:`${Math.max(1,Math.round(n/1024))} KB`;
+const siteOf=(url?:string|null)=>{try{return new URL(url??'').hostname.replace(/^www\./,'')}catch{return url??''}};
+
+/** The file itself: shown in the page when it is a PDF or a picture, otherwise offered as a download. */
+function FileCard({file}:{file:NonNullable<LearnItem['file']>}){
+  const preview=PREVIEWABLE.includes(file.content_type);
+  return <div className="file-card">
+    {preview&&(file.content_type==='application/pdf'
+      ?<iframe className="file-frame" src={`/api/files/${file.id}/preview`} title={`Preview of ${file.name}`}/>
+      :<img className="file-image" src={`/api/files/${file.id}/preview`} alt={`Preview of ${file.name}`}/>)}
+    <div className="actions"><a className="button primary" href={`/api/files/${file.id}/download`}>Download {file.name}</a>
+      <span className="muted">{sizeText(file.size)}{preview?'':' · this type opens in your own app'}</span></div>
+  </div>;
+}
+
+/** A link: the site, the teacher's note and one button that opens it in a new tab. */
+function LinkCard({url,note}:{url?:string|null;note?:string}){
+  return <div className="link-card"><p className="eyebrow">{siteOf(url)||'Link'}</p>
+    {note&&<p className="pre">{note}</p>}
+    <p><a className="button primary" href={url??'#'} target="_blank" rel="noopener noreferrer">Open the link<span className="sr-only"> (opens in a new tab)</span> ↗</a></p>
+    <p className="muted">{url}</p></div>;
+}
+
 export function StudentLesson(){
   const {offeringId,itemId}=useParams();
   const query=useQuery({queryKey:['learn-item',offeringId,itemId],queryFn:()=>api<LearnItem>(`/learn/offerings/${offeringId}/items/${itemId}`)});
@@ -67,20 +92,22 @@ export function StudentLesson(){
   const carried=useLocation().state;
   const toast=useToast();
   const [marking,setMarking]=useState(false);const [problem,setProblem]=useState('');
-  async function complete(){setMarking(true);setProblem('');try{await post(`/learn/offerings/${offeringId}/lessons/${itemId}/complete`,{});await Promise.all(['progress','learn-item','learn-items'].map(k=>queryClient.invalidateQueries({queryKey:[k,offeringId]})));celebrate();toast('Lesson marked complete.')}catch(e){setProblem(errorText(e))}finally{setMarking(false)}}
+  const word=NOUN[query.data?.kind??'lesson'];const Word=word.charAt(0).toUpperCase()+word.slice(1);
+  async function complete(){setMarking(true);setProblem('');try{await post(`/learn/offerings/${offeringId}/lessons/${itemId}/complete`,{});await Promise.all(['progress','learn-item','learn-items'].map(k=>queryClient.invalidateQueries({queryKey:[k,offeringId]})));celebrate();toast(`${Word} marked complete.`)}catch(e){setProblem(errorText(e))}finally{setMarking(false)}}
   if(query.isPending)return <p>Loading…</p>;
-  if(query.error)return <section className="panel"><h2>Not available</h2><p role="alert">{query.error.message}</p><Link to={back}>Back to lessons</Link></section>;
+  if(query.error)return <section className="panel"><h2>Not available</h2><p role="alert">{query.error.message}</p><Link to={back}>Back to classwork</Link></section>;
   const i=query.data;
+  const nextLabel=(k?:string)=>k==='file'?'Next file':k==='reference'?'Next link':'Next lesson';
   return <><ClassworkTypes base={`/student/offerings/${offeringId}`} current="lesson"/><article className="panel"><p className="back"><Link to={back}>← Back to {origin.label}</Link></p><h2>{i.title}</h2>
     {i.kind==='lesson'&&<div className="rich-content" dangerouslySetInnerHTML={{__html:i.body_html??''}}/>}
-    {i.kind==='lesson'&&<div className="actions">{i.completed?<span className="badge covered">✓ You marked this lesson complete</span>:<button className="primary" disabled={marking} onClick={complete}>Mark lesson as complete</button>}<Link className="button" to={`/student/offerings/${offeringId}/study`}>Ask study help</Link></div>}
-    {i.kind==='lesson'&&i.completed&&<p role="status" className="seq-head">{i.next_lesson?<Link className="button primary" state={carried} to={`${parent}/${i.next_lesson.id}`}>Next lesson: {i.next_lesson.title}</Link>
-      :i.all_completed?<><span>All published lessons completed.</span><Link className="button" to={`/student/offerings/${offeringId}/classwork`}>Back to classwork</Link></>
-      :<><span>End of the lesson sequence. Some earlier lessons are not marked complete yet.</span>{i.first_incomplete&&<Link className="button" state={carried} to={`${parent}/${i.first_incomplete.id}`}>Go to: {i.first_incomplete.title}</Link>}</>}</p>}
-    {i.kind==='lesson'&&i.lesson_number&&<p className="muted">Lesson {i.lesson_number} of {i.lesson_total}</p>}
-    {problem&&<p role="alert">{problem}</p>}
-    {i.kind==='reference'&&<><p><a href={i.reference_url??'#'} target="_blank" rel="noopener noreferrer">{i.reference_url}</a></p>{i.reference_note&&<p className="pre">{i.reference_note}</p>}</>}
-    {i.kind==='file'&&i.file&&<p><a className="button primary" href={`/api/files/${i.file.id}/download`}>Download {i.file.name}</a></p>}</article></>;
+    {i.kind==='file'&&i.file&&<FileCard file={i.file}/>}
+    {i.kind==='reference'&&<LinkCard url={i.reference_url} note={i.reference_note}/>}
+    <div className="actions">{i.completed?<span className="badge covered">✓ You marked this {word} complete</span>:<button className="primary" disabled={marking} onClick={complete}>Mark {word} as complete</button>}{i.kind==='lesson'&&<Link className="button" to={`/student/offerings/${offeringId}/study`}>Ask study help</Link>}</div>
+    {i.completed&&<p role="status" className="seq-head">{i.next_lesson?<Link className="button primary" state={carried} to={`${parent}/${i.next_lesson.id}`}>{nextLabel(i.next_lesson.kind)}: {i.next_lesson.title}</Link>
+      :i.all_completed?<><span>Everything published so far is complete.</span><Link className="button" to={`/student/offerings/${offeringId}/classwork`}>Back to classwork</Link></>
+      :<><span>End of the sequence. Some earlier items are not marked complete yet.</span>{i.first_incomplete&&<Link className="button" state={carried} to={`${parent}/${i.first_incomplete.id}`}>Go to: {i.first_incomplete.title}</Link>}</>}</p>}
+    {i.lesson_number&&<p className="muted">{Word} {i.lesson_number} of {i.lesson_total}</p>}
+    {problem&&<p role="alert">{problem}</p>}</article></>;
 }
 
 export function StudentAnnouncements(){
