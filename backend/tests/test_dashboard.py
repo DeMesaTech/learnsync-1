@@ -160,7 +160,7 @@ def test_the_todo_page_lists_everything_the_dashboard_summarises_and_only_for_st
 
 
 def test_todo_order_puts_open_work_first_and_never_offers_upcoming_work_as_the_next_step(graded):
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
     iso = lambda days: (datetime.now(UTC) + timedelta(days=days)).isoformat()
     make_manual(graded, "activity", "Later due", points="10", category_key="activity", deadline=iso(5))
     make_manual(graded, "activity", "No deadline", points="10", category_key="activity")

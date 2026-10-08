@@ -63,10 +63,10 @@ def test_invalid_cells_are_named_and_save_nothing(graded):
     assert over.status_code == 409 and list(over.json()["error"]["field_errors"]) == [f"{exam}:{s1.id}"]
     assert "above" in over.json()["error"]["field_errors"][f"{exam}:{s1.id}"]
     twice = c["fac"].put(url(c, "/gradebook/scores"), {"cells": [cell(c, exam, s1, "10", 0), cell(c, exam, s1, "11", 0)]})
-    assert twice.status_code == 409 and "twice" in list(twice.json()["error"]["field_errors"].values())[0]
+    assert twice.status_code == 409 and "twice" in next(iter(twice.json()["error"]["field_errors"].values()))
     assert revision_of(c, exam, s1)[1] is None and revision_of(c, paper, s2)[1] is None
     unknown = c["fac"].put(url(c, "/gradebook/scores"), {"cells": [cell(c, "00000000-0000-0000-0000-000000000000", s1, "1", 0)]})
-    assert unknown.status_code == 409 and "not found" in list(unknown.json()["error"]["field_errors"].values())[0].lower()
+    assert unknown.status_code == 409 and "not found" in next(iter(unknown.json()["error"]["field_errors"].values())).lower()
 
 
 def test_an_online_quiz_with_a_submitted_attempt_cannot_be_overwritten_by_hand(graded):
@@ -76,7 +76,7 @@ def test_an_online_quiz_with_a_submitted_attempt_cannot_be_overwritten_by_hand(g
     assert submit(c["st1"], c, attempt["id"], quiz["correct"]).status_code == 200
     s1 = c["students"][0]
     refused = c["fac"].put(url(c, "/gradebook/scores"), {"cells": [cell(c, quiz["aid"], s1, "1", None)]})
-    assert refused.status_code == 409 and "correct an answer" in list(refused.json()["error"]["field_errors"].values())[0]
+    assert refused.status_code == 409 and "correct an answer" in next(iter(refused.json()["error"]["field_errors"].values()))
 
 
 def test_only_the_teacher_can_batch_edit_and_limits_apply(db, graded):
