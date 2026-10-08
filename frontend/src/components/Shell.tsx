@@ -6,6 +6,7 @@ import {api,post,setCsrf} from '../app/api';
 import {studentHomeQuery} from '../features/dashboard/Dashboards';
 import {useUnread} from './seen';
 import {StudyBuddy} from '../features/study/StudyBuddy';
+import {useConfirm} from './confirm';
 
 type NavItem={to:string;label:string;icon:string;end?:boolean;dot?:boolean};
 const ROLE_LABEL={admin:'Academic administrator',faculty:'Teaching faculty',student:'Student'} as const;
@@ -33,6 +34,7 @@ function UpdatesDot({userId}:{userId:string}){
 }
 
 export function Shell(){
+  const ask=useConfirm();
   const {session,loading,error}=useAuth();const {theme,setTheme}=useTheme();
   const [open,setOpen]=useState(false);const [failure,setFailure]=useState('');
   const menuButton=useRef<HTMLButtonElement>(null);
@@ -51,7 +53,7 @@ export function Shell(){
   async function logout(){
     // A recovery copy exists only while edits are not on the server, so its presence means unsaved work.
     const unsaved=(()=>{try{return Object.keys(localStorage).some(k=>k.startsWith(`learnsync:draft:${user.id}:`))}catch{return false}})();
-    if(unsaved&&!confirm('Some of your changes are saved only in this browser, not on the server yet. Signing out deletes them. Sign out anyway?'))return;
+    if(unsaved&&!await ask({title:'Sign out?',message:'Some of your changes are saved only in this browser, not on the server yet. Signing out deletes them.',yes:'Sign out anyway',danger:true}))return;
     try{await post('/auth/logout',{});for(const key of Object.keys(localStorage)){if(key.startsWith('learnsync:draft:'))localStorage.removeItem(key)}setCsrf('');queryClient.clear();window.location.assign('/login')}
     catch(e){setFailure(e instanceof Error?e.message:'Sign out failed.')}
   }

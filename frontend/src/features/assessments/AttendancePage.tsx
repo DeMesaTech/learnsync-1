@@ -3,6 +3,7 @@ import {useOutletContext} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
 import {api,send,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
+import {useConfirm} from '../../components/confirm';
 import type {OfferingSummary} from '../academics/types';
 import {PERIOD_LABEL,type AttendanceSessionRow} from './types';
 
@@ -17,6 +18,7 @@ const DAY=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const today=()=>{const d=new Date();const p=(n:number)=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`};
 
 export function AttendancePage(){
+  const ask=useConfirm();
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const [sectionId,setSectionId]=useState(offering.sections[0]?.id??'');
   const [date,setDate]=useState(today());
@@ -25,7 +27,7 @@ export function AttendancePage(){
   const [view,setView]=useState<'week'|'month'>('week');
   const register=useRef<HTMLDivElement>(null);
   const unsaved=useRef(false);   // the register reports here, so leaving a day with unsaved marks asks first
-  const go=(change:()=>void)=>{if(unsaved.current&&!confirm('Discard the attendance marks you have not saved?'))return;unsaved.current=false;change()};
+  const go=async(change:()=>void)=>{if(unsaved.current&&!await ask({title:'Discard unsaved marks?',message:'The attendance marks you have not saved will be lost.',yes:'Discard marks',danger:true}))return;unsaved.current=false;change()};
   const openDay=(d:string)=>go(()=>{setDate(d);setMessage('');requestAnimationFrame(()=>{register.current?.scrollIntoView({behavior:'smooth',block:'start'});register.current?.focus({preventScroll:true})})});
   const query=useQuery({queryKey:['attendance',offering.id,sectionId],enabled:!!sectionId,
     queryFn:()=>api<{sessions:AttendanceSessionRow[];roster:Roster[]}>(`/teach/offerings/${offering.id}/attendance?section_id=${sectionId}`)});
@@ -61,6 +63,7 @@ export function AttendancePage(){
 }
 
 function Register({offering,sectionId,date,period,roster,initial,closed,setMessage,unsaved,sessionId}:{offering:OfferingSummary;sectionId:string;date:string;period:'midterm'|'finals';roster:Roster[];initial:Record<string,string>;closed:boolean;setMessage:(m:string)=>void;unsaved:MutableRefObject<boolean>;sessionId?:string}){
+  const ask=useConfirm();
   const [marks,setMarks]=useState<Record<string,string>>(initial);
   async function save(){
     const cleared=Object.keys(initial).filter(id=>!marks[id]);          // a mark returned to "not marked"
@@ -69,7 +72,8 @@ function Register({offering,sectionId,date,period,roster,initial,closed,setMessa
     catch(e){setMessage(errorText(e))}
   }
   async function remove(){
-    if(!sessionId||!confirm(`Remove the attendance record for ${date}? Every mark for that day is deleted and the grade is recalculated.`))return;
+    if(!sessionId)return;
+    if(!await ask({title:`Remove the record for ${date}?`,message:'Every mark for that day is deleted and the grade is recalculated.',yes:'Remove record',danger:true}))return;
     try{await send('DELETE',`/teach/offerings/${offering.id}/attendance/${sessionId}`);setMessage(`The record for ${date} was removed.`);queryClient.invalidateQueries({queryKey:['attendance',offering.id]});queryClient.invalidateQueries({queryKey:['gradebook',offering.id]})}
     catch(e){setMessage(errorText(e))}
   }

@@ -1,3 +1,5 @@
+import {useRef} from 'react';
+import {useUndo} from '../../components/undo';
 import {emptyChapter,newId,type Chapter,type Course,type GradingPolicy,type Outline} from './types';
 
 type Change<T>=(next:T)=>void;
@@ -34,7 +36,9 @@ export function OutcomesStep({outline,onChange}:{outline:Outline;onChange:Change
 }
 
 export function ChaptersStep({outline,onChange}:{outline:Outline;onChange:Change<Outline>}){
+  const undo=useUndo();const latestSet=useRef<(c:Chapter[])=>void>(()=>{});
   const set=(chapters:Chapter[])=>onChange({...outline,chapters});
+  latestSet.current=set;
   const patch=(i:number,change:Partial<Chapter>)=>set(replace(outline.chapters,i,{...outline.chapters[i],...change}));
   return <section><h2>Course coverage</h2>
     <p className="muted">Chapters and topics keep a stable identity when you rename or reorder them, so lessons attached to a topic stay attached.</p>
@@ -43,7 +47,7 @@ export function ChaptersStep({outline,onChange}:{outline:Outline;onChange:Change
       <div className="page-heading"><h3>{c.kind==='exam'?'Examination':'Chapter'} {i+1}</h3>
         <div className="actions"><button type="button" aria-label={`Move chapter ${i+1} up`} disabled={i===0} onClick={()=>set(move(outline.chapters,i,-1))}>↑</button>
           <button type="button" aria-label={`Move chapter ${i+1} down`} disabled={i===outline.chapters.length-1} onClick={()=>set(move(outline.chapters,i,1))}>↓</button>
-          <button type="button" onClick={()=>{if(confirm('Remove this chapter and its topics? Lessons attached to them must be re-attached or archived before publishing.'))set(remove(outline.chapters,i))}}>Remove</button></div></div>
+          <button type="button" onClick={()=>{const before=outline.chapters;set(remove(outline.chapters,i));undo(`${c.kind==='exam'?'Examination':'Chapter'} ${i+1} removed (its topics too). Lessons attached to them must be re-attached or archived before publishing.`,()=>latestSet.current(before))}}>Remove</button></div></div>
       <div className="grid-2"><label>Title<input value={c.title} maxLength={300} onChange={e=>patch(i,{title:e.target.value})}/></label>
         <label>Time allotment<input value={c.weeks} maxLength={60} placeholder="Week 2" onChange={e=>patch(i,{weeks:e.target.value})}/></label>
         <label>Type<select value={c.kind} onChange={e=>patch(i,{kind:e.target.value as Chapter['kind']})}><option value="chapter">Chapter</option><option value="exam">Examination</option></select></label></div>
@@ -65,6 +69,7 @@ export function ChaptersStep({outline,onChange}:{outline:Outline;onChange:Change
 
 const PRESETS=[['attendance','Attendance'],['quiz','Quizzes'],['activity','Activities'],['exam','Examinations']];
 export function GradingStep({policy,onChange}:{policy:GradingPolicy|null;onChange:Change<GradingPolicy|null>}){
+  const undo=useUndo();const latestChange=useRef(onChange);latestChange.current=onChange;
   if(!policy)return <section className="panel"><h2>Grading policy</h2>
     <p>No grading policy yet. You must confirm one before grades can be calculated. LearnSync does not guess percentages for you.</p>
     <button type="button" className="primary" onClick={()=>onChange({categories:[],periods:[{key:'midterm',label:'Midterm',share:50},{key:'finals',label:'Finals',share:50}],transmutation:'raw',passing:75,late_attendance_fraction:0.5})}>Set up grading policy</button></section>;
@@ -86,5 +91,5 @@ export function GradingStep({policy,onChange}:{policy:GradingPolicy|null;onChang
     <div className="grid-2"><label>Scores are<select value={policy.transmutation} onChange={e=>set({transmutation:e.target.value as GradingPolicy['transmutation']})}><option value="raw">Raw percentage</option><option value="transmuted">Transmuted (50 + raw ÷ 2)</option></select></label>
       <label>Passing grade<input type="number" min={0} max={100} value={policy.passing} onChange={e=>set({passing:Number(e.target.value)})}/></label>
       <label>Late attendance counts as<input type="number" min={0} max={1} step="0.05" value={policy.late_attendance_fraction} onChange={e=>set({late_attendance_fraction:Number(e.target.value)})}/></label></div>
-    <button type="button" onClick={()=>{if(confirm('Remove the grading policy from this draft?'))onChange(null)}}>Remove grading policy</button></section>;
+    <button type="button" onClick={()=>{const before=policy;onChange(null);undo('Grading policy removed.',()=>latestChange.current(before))}}>Remove grading policy</button></section>;
 }

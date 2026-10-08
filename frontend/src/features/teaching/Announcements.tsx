@@ -3,6 +3,7 @@ import {useOutletContext} from 'react-router-dom';
 import {useInfiniteQuery} from '@tanstack/react-query';
 import {api,post,send,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
+import {useConfirm} from '../../components/confirm';
 import {Dialog} from '../../components/Dialog';
 import type {OfferingSummary} from '../academics/types';
 import type {Announcement} from './types';
@@ -10,6 +11,7 @@ import type {Announcement} from './types';
 const PAGE=25;   // newest first; "Load more" asks the server for the next page
 interface Page{items:Announcement[];has_more:boolean}
 export function FacultyAnnouncements(){
+  const ask=useConfirm();
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const closed=offering.term_status==='closed';
   const base=`/teach/offerings/${offering.id}/announcements`;
@@ -19,7 +21,7 @@ export function FacultyAnnouncements(){
   const [message,setMessage]=useState('');
   const refresh=()=>queryClient.invalidateQueries({queryKey:['announcements',offering.id]});
   async function act(a:Announcement,action:'publish'|'archive'){
-    if(action==='publish'&&!confirm('Publish this announcement? Students in the chosen sections will see it.'))return;
+    if(action==='publish'&&!await ask({title:'Publish this announcement?',message:'Students in the chosen sections will see it.',yes:'Publish'}))return;
     try{await post(`${base}/${a.id}/${action}`,{});setMessage('');refresh()}catch(e){setMessage(errorText(e))}
   }
   const names=(ids:string[])=>ids.length===0?'All sections':ids.map(id=>offering.sections.find(s=>s.id===id)?.name??'').join(', ');

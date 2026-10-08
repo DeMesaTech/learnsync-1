@@ -3,6 +3,7 @@ import {useOutletContext} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
 import {api,post,send,upload,errorText} from '../../app/api';
 import {queryClient,useAuth} from '../../app/providers';
+import {useConfirm} from '../../components/confirm';
 import type {OfferingSummary} from '../academics/types';
 import {SaveIndicator,draftKey,useAutosave,useFlushOnLeave} from './autosave';
 import {OutlineView} from './OutlineView';
@@ -75,6 +76,7 @@ function CoveragePanel({offering,published,closed}:{offering:OfferingSummary;pub
 }
 
 function DraftEditor({offering,draft,published,warnings,onChanged}:{offering:OfferingSummary;draft:SyllabusRev;published:SyllabusRev|null;warnings:string[];onChanged:()=>void}){
+  const ask=useConfirm();
   const {session}=useAuth();
   const url=`/teach/offerings/${offering.id}/syllabus`;
   const key=draftKey(session?.user?.id,offering.id,'syllabus');
@@ -94,7 +96,7 @@ function DraftEditor({offering,draft,published,warnings,onChanged}:{offering:Off
     catch(e){setMessage(errorText(e))}
   }
   async function discard(){
-    if(!confirm(published?'Discard this draft? The published syllabus stays as it is.':'Discard this draft and start over?'))return;
+    if(!await ask({title:'Discard this draft?',message:published?'The published syllabus stays as it is.':'You will start over.',yes:'Discard draft',danger:true}))return;
     await auto.flush();
     try{await send('DELETE',`${url}/draft?expected_counter=${auto.counter()}`);auto.discardRecovered();onChanged()}
     catch(e){setMessage(errorText(e))}

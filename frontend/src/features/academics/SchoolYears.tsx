@@ -4,9 +4,11 @@ import {useQuery} from '@tanstack/react-query';
 import {api,post,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
 import {Dialog} from '../../components/Dialog';
+import {useConfirm} from '../../components/confirm';
 import type {SchoolYear,Term} from './types';
 
 export function SchoolYears(){
+  const ask=useConfirm();
   const years=useQuery({queryKey:['school-years'],queryFn:()=>api<SchoolYear[]>('/school-years')});
   const [creating,setCreating]=useState(false);
   const [reopening,setReopening]=useState<Term|null>(null);
@@ -14,7 +16,7 @@ export function SchoolYears(){
   const allTerms=years.data?.flatMap(y=>y.terms.map(t=>({...t,label:`${y.label} · ${t.name}`})))??[];
 
   async function close(term:Term){
-    if(!confirm(`Close ${term.name}? Teaching records become read-only until it is reopened.`))return;
+    if(!await ask({title:`Close ${term.name}?`,message:'Teaching records become read-only until it is reopened.',yes:'Close term',danger:true}))return;
     try{await post(`/terms/${term.id}/close`,{});setMessage('Term closed.');queryClient.invalidateQueries({queryKey:['school-years']})}
     catch(e){setMessage(errorText(e))}
   }

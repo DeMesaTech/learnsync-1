@@ -9,17 +9,31 @@ import type {OfferingSummary} from '../academics/types';
 import {PERIOD_LABEL,fmt,type Cell,type Gradebook,type GradeRow} from './types';
 
 interface Publication{published:number;unchanged:number;pending:{student_id:string;student:string;reasons:string[]}[]}
+interface Stats{ready:number;changes:number;unchanged:number;review:number;notReady:string[]}
+
+/** What publishing a period would do, from the working values the page already has. */
+export function periodStats(book:Gradebook,period:string):Stats{
+  const ready=book.rows.filter(r=>r.grades[period]?.grade!=null);
+  const changes=ready.filter(r=>{const p=r.published[period];return !p||p.needs_review||Number(p.grade)!==Number(r.grades[period]!.grade)});
+  return {ready:ready.length,changes:changes.length,unchanged:ready.length-changes.length,
+    review:book.rows.filter(r=>r.published[period]?.needs_review).length,
+    notReady:book.rows.filter(r=>r.grades[period]?.grade==null).map(r=>r.display_name)};
+}
+const cellKey=(columnId:string,studentId:string)=>`${columnId}:${studentId}`;
 
 export function GradebookPage(){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const closed=offering.term_status==='closed';
   const here=useHere();
   const query=useQuery({queryKey:['gradebook',offering.id],queryFn:()=>api<Gradebook>(`/teach/offerings/${offering.id}/gradebook`)});
-  const [editing,setEditing]=useState<{row:GradeRow;columnId:string}|null>(null);
   const [detail,setDetail]=useState<GradeRow|null>(null);
-  const [outcome,setOutcome]=useState<{period:string;result:Publication}|null>(null);
+  const [publishing,setPublishing]=useState<string|null>(null);
   const [message,setMessage]=useState('');
   const [find,setFind]=useState('');const [section,setSection]=useState('');const [only,setOnly]=useState('');   // view filters: they never change what Publish acts on
+  const [editing,setEditing]=useState(false);
+  const [edits,setEdits]=useState<Record<string,string>>({});          // cellKey -> typed score, only for cells that differ
+  const [rejected,setRejected]=useState<Record<string,string>>({});    // cellKey -> why the server refused it
+  const [saving,setSaving]=useState(false);
   const refresh=()=>queryClient.invalidateQueries({queryKey:['gradebook',offering.id]});
 
   if(query.isPending)return <p>Loading gradebook…</p>;
@@ -35,32 +49,59 @@ export function GradebookPage(){
   const rows=book.rows.filter(r=>(!section||r.section===section)&&`${r.display_name} ${r.student_number}`.toLowerCase().includes(find.trim().toLowerCase()));
   const byPeriod=(period:string)=>book.columns.filter(c=>c.period===period);
   const label=(key:string|null)=>book.policy.categories.find(c=>c.key===key)?.label??key??'';
-
-  async function publish(period:string){
-    const ready=book.rows.filter(r=>r.grades[period]?.grade!==null).length;
-    if(!confirm(`Publish ${PERIOD_LABEL[period]} grades for all ${ready} ready student${ready===1?'':'s'} in this subject, across all sections (table filters do not limit this)? Students see them immediately. Anyone who is not ready is skipped.`))return;
-    try{const result=await post<Publication>(`/teach/offerings/${offering.id}/grades/publish`,{period});setOutcome({period,result});refresh()}
-    catch(e){setMessage(errorText(e))}
-  }
+  const stats=Object.fromEntries(periods.map(p=>[p,periodStats(book,p)])) as Record<string,Stats>;
+  const next=periods.find(p=>stats[p].changes>0);
+  const courseUnlocked=book.policy.periods.every(p=>book.rows.some(r=>r.published[p.key]));
   const flaggedRows=book.rows.filter(r=>Object.values(r.published).some(p=>p.needs_review));
-  const flagged=flaggedRows.length;
+  const changed=Object.keys(edits).length;
+
+  const editable=(kind:string,cell?:Cell)=>!!cell&&!(kind==='online_quiz'&&cell.attempt_state==='submitted');
+  function typeScore(column:string,student:string,original:Cell,value:string){
+    const key=cellKey(column,student);const before=original.score===null?'':String(original.score);
+    setEdits(prev=>{const n={...prev};if(value.trim()===before.trim())delete n[key];else n[key]=value;return n});
+    setRejected(prev=>{if(!prev[key])return prev;const n={...prev};delete n[key];return n});
+  }
+  async function saveAll(){
+    setMessage('');setRejected({});setSaving(true);
+    const cells=Object.entries(edits).map(([key,value])=>{const [assessment_id,student_id]=key.split(':');
+      const cell=book.rows.find(r=>r.student_id===student_id)!.cells[assessment_id];
+      return {assessment_id,student_id,score:value.trim()===''?null:value.trim(),feedback:cell.feedback,expected_revision:cell.revision}});
+    try{await send('PUT',`/teach/offerings/${offering.id}/gradebook/scores`,{cells});
+      setEditing(false);setEdits({});setMessage(`Saved ${cells.length} score${cells.length===1?'':'s'}. Students see changes only after you return the results.`);await refresh()}
+    catch(e){
+      if(e instanceof ApiError&&e.code==='batch_rejected'){setRejected(e.fields);setMessage(`${e.message} Fix the marked cells, or reload if someone else changed them.`)}
+      else setMessage(errorText(e));
+    }finally{setSaving(false)}
+  }
+  const leaveEditing=()=>{setEditing(false);setEdits({});setRejected({});setMessage('')};
+
+  const periodRow=(p:string)=><li key={p}><span className="grow"><strong>{PERIOD_LABEL[p]??p}</strong>
+    <span className="muted">{stats[p].changes>0?`${stats[p].changes} ready to publish`:stats[p].ready>0?'Nothing new to publish':'No grades are ready yet'}{stats[p].review>0?` · ${stats[p].review} need review`:''}{stats[p].notReady.length>0&&stats[p].ready>0?` · ${stats[p].notReady.length} not ready`:''}</span></span>
+    <button className={p===next?'primary':''} disabled={closed||stats[p].ready===0||(p==='course'&&!courseUnlocked)} title={p==='course'&&!courseUnlocked?'Publish Midterm and Finals first':undefined} onClick={()=>setPublishing(p)}>Publish {PERIOD_LABEL[p]??p}…</button></li>;
 
   return <>
     <div className="page-heading"><div><h2>Gradebook</h2>
-      <p className="muted">Working values. Students see only the results you release and the grades you publish. Policy version {book.policy_version} · {book.policy.transmutation==='transmuted'?'transmuted':'raw'} scores · passing {book.policy.passing}.</p></div></div>
-    {message&&<p role="alert">{message}</p>}
-    {flagged>0&&<p className="warn" role="status">{flagged} student{flagged===1?' has':'s have'} a published grade that needs your review because working data changed. Republish when you are ready; students keep seeing the last published grade until then.</p>}
-    {flagged>0&&<ul className="seq" aria-label="Grades needing review">{flaggedRows.map(r=><li key={r.student_id}><span className="grow"><strong>{r.display_name}</strong><span className="muted">{Object.entries(r.published).filter(([,p])=>p.needs_review).map(([k,p])=>`${PERIOD_LABEL[k]??k}: ${p.review_reason??'working data changed'}`).join(' · ')}</span></span><button onClick={()=>setDetail(r)}>Review</button></li>)}</ul>}
-    <section className="panel"><h3>Publish grades</h3>
-      <p className="muted">Grades and ranks to share or download are on the Class standing tab. Each button publishes the current working grade for every ready student in this subject, across all sections; the filters on the table below do not limit publication. It never changes released assessment results.</p>
-      <div className="actions">{periods.map(p=><button key={p} disabled={closed} onClick={()=>publish(p)}>Publish {PERIOD_LABEL[p]??p}</button>)}</div></section>
+      <p className="muted">Working values: students see only the results you return and the grades you publish. Policy version {book.policy_version} · {book.policy.transmutation==='transmuted'?'transmuted':'raw'} scores · passing {book.policy.passing}.</p></div>
+      {!editing&&<button disabled={closed} onClick={()=>{setEditing(true);setMessage('')}}>Edit scores</button>}</div>
+    {message&&<p role="status">{message}</p>}
+
+    <section className="panel" aria-labelledby="pub-h"><h3 id="pub-h">Ready to publish</h3>
+      {next?<ul className="rows">{periodRow(next)}</ul>:<p className="muted">{periods.some(p=>stats[p].ready>0)?'Everything that is ready has been published.':'No grades are ready yet. They appear when all graded work for a period is scored.'}</p>}
+      <details className="more"><summary>All periods{flaggedRows.length>0?` · ${flaggedRows.length} need review`:''}</summary>
+        <ul className="rows">{periods.filter(p=>p!==next).map(periodRow)}</ul>
+        {periods.includes('course')&&!courseUnlocked&&<p className="muted">The Course grade unlocks once Midterm and Finals have each been published.</p>}
+        {flaggedRows.length>0&&<><p className="warn" role="status">{flaggedRows.length} student{flaggedRows.length===1?' has':'s have'} a published grade that needs your review because working data changed. Students keep seeing the last published grade until you republish.</p>
+          <ul className="rows" aria-label="Grades needing review">{flaggedRows.map(r=><li key={r.student_id}><span className="grow"><strong>{r.display_name}</strong><span className="muted">{Object.entries(r.published).filter(([,p])=>p.needs_review).map(([k,p])=>`${PERIOD_LABEL[k]??k}: ${p.review_reason??'working data changed'}`).join(' · ')}</span></span><button onClick={()=>setDetail(r)}>Review</button></li>)}</ul></>}
+      </details></section>
 
     <section className="panel"><h3>Scores and grades</h3>
-      <p className="muted">— means pending (not scored yet). 0.00 is a real recorded zero. “Unreleased change” means the student still sees an older result.</p>
-      <div className="actions"><label>Find a student<input type="search" value={find} onChange={e=>setFind(e.target.value)} placeholder="Name or student number"/></label>
-        <label>Section<select value={section} onChange={e=>setSection(e.target.value)}><option value="">All sections</option>{sections.map(s=><option key={s} value={s}>{s}</option>)}</select></label>
-        <label>Period<select value={only} onChange={e=>setOnly(e.target.value)}><option value="">All periods</option>{book.policy.periods.map(p=><option key={p.key} value={p.key}>{PERIOD_LABEL[p.key]??p.key}</option>)}</select></label></div>
-      <p className="muted" role="status">Showing {rows.length} of {book.rows.length} students.</p>
+      <p className="muted">— means pending (not scored yet). 0.00 is a real recorded zero. “Unreleased change” means the student still sees an older result. Grades and ranks to share or download are on the Class standing tab.</p>
+      <details className="more"><summary>Filter students</summary>
+        <div className="actions"><label>Find a student<input type="search" value={find} onChange={e=>setFind(e.target.value)} placeholder="Name or student number"/></label>
+          <label>Section<select value={section} onChange={e=>setSection(e.target.value)}><option value="">All sections</option>{sections.map(s=><option key={s} value={s}>{s}</option>)}</select></label>
+          <label>Period<select value={only} onChange={e=>setOnly(e.target.value)}><option value="">All periods</option>{book.policy.periods.map(p=><option key={p.key} value={p.key}>{PERIOD_LABEL[p.key]??p.key}</option>)}</select></label></div></details>
+      <p className="muted" role="status">Showing {rows.length} of {book.rows.length} students.{editing?' Editing: type a score in any cell, then save once.':''}</p>
+      {editing&&<div className="actions sticky-bar"><button className="primary" disabled={changed===0||saving} onClick={saveAll}>{saving?'Saving…':changed===0?'Save scores':`Save ${changed} changed score${changed===1?'':'s'}`}</button><button disabled={saving} onClick={leaveEditing}>Cancel</button><span className="muted">{changed===0?'No changes yet.':'Nothing is saved until you press Save.'}</span></div>}
       <div className="table-wrap gradebook" role="region" aria-label="Gradebook, scrolls sideways" tabIndex={0}><table>
         <thead>
           <tr><th className="sticky">Student</th>{shown.filter(p=>p!=='course').map(p=><th key={p} colSpan={byPeriod(p).length+1}>{PERIOD_LABEL[p]??p}</th>)}<th>Course</th></tr>
@@ -69,25 +110,44 @@ export function GradebookPage(){
             <th>Grade</th></tr></thead>
         <tbody>{rows.map(r=><tr key={r.student_id}>
           <th className="sticky" scope="row"><button className="linklike" onClick={()=>setDetail(r)}>{r.display_name}</button><br/><span className="muted">{r.section??''}</span></th>
-          {shown.filter(p=>p!=='course').flatMap(p=>[...byPeriod(p).map(c=><td key={c.id}><CellView cell={r.cells[c.id]} kind={c.kind} onEdit={()=>setEditing({row:r,columnId:c.id})} disabled={closed}/></td>),
+          {shown.filter(p=>p!=='course').flatMap(p=>[...byPeriod(p).map(c=><td key={c.id}><CellView cell={r.cells[c.id]} kind={c.kind} column={c.title} student={r.display_name} editing={editing&&editable(c.kind,r.cells[c.id])} value={edits[cellKey(c.id,r.student_id)]} problem={rejected[cellKey(c.id,r.student_id)]}
+            onType={v=>typeScore(c.id,r.student_id,r.cells[c.id],v)}/></td>),
             <td key={p+'g'}><GradeCell row={r} period={p} onReview={setDetail}/></td>])}
           <td><GradeCell row={r} period="course" onReview={setDetail}/></td></tr>)}</tbody></table></div></section>
 
-
-    {editing&&<ScoreDialog offeringId={offering.id} book={book} editing={editing} onClose={()=>setEditing(null)} onSaved={()=>{setEditing(null);refresh()}}/>}
     {detail&&<DetailDialog row={detail} here={here} base={`/faculty/offerings/${offering.id}`} onClose={()=>setDetail(null)}/>}
-    {outcome&&<Dialog title={`${PERIOD_LABEL[outcome.period]} grades`} onClose={()=>setOutcome(null)}>
-      <p>{outcome.result.published} published · {outcome.result.unchanged} unchanged · {outcome.result.pending.length} not ready.</p>
-      {outcome.result.pending.length>0&&<><h3>Not ready</h3><ul>{outcome.result.pending.map(p=><li key={p.student_id}><strong>{p.student}</strong>: {p.reasons.join('; ')}</li>)}</ul></>}
-      <div className="actions"><button className="primary" onClick={()=>setOutcome(null)}>Done</button></div></Dialog>}
+    {publishing&&<PublishDialog offeringId={offering.id} period={publishing} stats={stats[publishing]} onClose={()=>setPublishing(null)} onPublished={refresh}/>}
   </>;
 }
 
-function CellView({cell,kind,onEdit,disabled}:{cell?:Cell;kind:string;onEdit:()=>void;disabled:boolean}){
+function PublishDialog({offeringId,period,stats,onClose,onPublished}:{offeringId:string;period:string;stats:Stats;onClose:()=>void;onPublished:()=>void}){
+  const [result,setResult]=useState<Publication|null>(null);const [error,setError]=useState('');const [busy,setBusy]=useState(false);
+  const name=PERIOD_LABEL[period]??period;
+  async function go(){setBusy(true);setError('');
+    try{setResult(await post<Publication>(`/teach/offerings/${offeringId}/grades/publish`,{period}));onPublished()}
+    catch(e){setError(errorText(e))}finally{setBusy(false)}}
+  if(result)return <Dialog title={`${name} grades published`} onClose={onClose}>
+    <p role="status">{result.published} published · {result.unchanged} unchanged · {result.pending.length} not ready.</p>
+    {result.pending.length>0&&<><h3>Not ready</h3><ul>{result.pending.map(p=><li key={p.student_id}><strong>{p.student}</strong>: {p.reasons.join('; ')}</li>)}</ul></>}
+    <div className="actions"><button className="primary" onClick={onClose}>Done</button></div></Dialog>;
+  return <Dialog title={`Review and publish ${name}`} onClose={onClose}>
+    <p>Students see these grades <strong>immediately</strong>. The table filters do not limit this: it covers every ready student in this subject, across all sections.</p>
+    <ul className="rows"><li><strong>{stats.changes}</strong><span className="muted">grade{stats.changes===1?'':'s'} will be published or updated</span></li>
+      <li><strong>{stats.unchanged}</strong><span className="muted">already published and unchanged</span></li>
+      <li><strong>{stats.notReady.length}</strong><span className="muted">not ready, so skipped{stats.notReady.length>0?`: ${stats.notReady.slice(0,5).join(', ')}${stats.notReady.length>5?', …':''}`:''}</span></li></ul>
+    <p className="muted">Publishing never changes results you already returned for individual assessments.</p>
+    {error&&<p role="alert">{error}</p>}
+    <div className="actions"><button onClick={onClose}>Cancel</button><button className="primary" disabled={busy||stats.changes===0} onClick={go}>{busy?'Publishing…':stats.changes===0?'Nothing new to publish':`Publish ${stats.changes} grade${stats.changes===1?'':'s'}`}</button></div></Dialog>;
+}
+
+function CellView({cell,kind,column,student,editing,value,problem,onType}:{cell?:Cell;kind:string;column:string;student:string;editing:boolean;value?:string;problem?:string;onType:(v:string)=>void}){
   if(!cell)return <span className="muted" title="Does not apply to this student's section">n/a</span>;
   const state=kind==='online_quiz'&&cell.score===null?(cell.attempt_state==='in_progress'?'In progress':'Not attempted'):null;
+  const shownValue=value??(cell.score===null?'':String(cell.score));
   return <div className="cell">
-    <button className="linklike" disabled={disabled||kind==='online_quiz'&&cell.attempt_state==='submitted'} onClick={onEdit} aria-label={cell.score===null?'Pending, edit score':`Score ${fmt(cell.score)}, edit`}>{cell.score===null?'—':fmt(cell.score)}</button>
+    {editing?<input className="score-input" inputMode="decimal" aria-label={`${column}, score for ${student}`} aria-invalid={!!problem} value={shownValue} placeholder="—" onChange={e=>onType(e.target.value)}/>
+      :<span>{cell.score===null?'—':fmt(cell.score)}</span>}
+    {problem&&<span className="error" role="alert"> {problem}</span>}
     {state&&<span className="muted"> {state}</span>}
     {cell.unreleased_change&&<span className="badge"> Unreleased change</span>}</div>;
 }
@@ -99,29 +159,10 @@ function GradeCell({row,period,onReview}:{row:GradeRow;period:string;onReview:(r
     {p&&<><br/><span className="muted">Published {fmt(p.grade)} (v{p.release_number})</span>{p.needs_review&&<button className="badge linklike" onClick={()=>onReview(row)} aria-label={`Needs review: ${row.display_name}, open details`}>Needs review</button>}</>}</div>;
 }
 
-function ScoreDialog({offeringId,book,editing,onClose,onSaved}:{offeringId:string;book:Gradebook;editing:{row:GradeRow;columnId:string};onClose:()=>void;onSaved:()=>void}){
-  const column=book.columns.find(c=>c.id===editing.columnId)!;
-  const cell=editing.row.cells[editing.columnId];
-  const [score,setScore]=useState(cell?.score===null||cell?.score===undefined?'':String(cell.score));
-  const [feedback,setFeedback]=useState(cell?.feedback??'');
-  const [error,setError]=useState('');
-  async function save(){
-    setError('');
-    try{await send('PUT',`/teach/offerings/${offeringId}/assessments/${column.id}/scores/${editing.row.student_id}`,{score:score.trim()===''?null:score.trim(),feedback,expected_revision:cell?.revision??0});onSaved()}
-    catch(e){setError(errorText(e))}
-  }
-  return <Dialog title={`${column.title}: ${editing.row.display_name}`} onClose={onClose}>
-    <label>Score (out of {fmt(column.max_points)}). Leave empty for pending; 0 is a real score.<input inputMode="decimal" value={score} onChange={e=>setScore(e.target.value)}/></label>
-    <label>Feedback for the student<textarea value={feedback} maxLength={5000} onChange={e=>setFeedback(e.target.value)}/></label>
-    <p className="muted">Saving changes your working score. The student sees it only after you release the results.</p>
-    {error&&<p role="alert">{error}</p>}
-    <div className="actions"><button onClick={onClose}>Cancel</button><button className="primary" onClick={save}>Save score</button></div></Dialog>;
-}
-
 function DetailDialog({row,base,here,onClose}:{row:GradeRow;base:string;here:Origin;onClose:()=>void}){
   const flagged=Object.entries(row.published).filter(([,p])=>p.needs_review);
   return <Dialog title={`${row.display_name}: how the grade is calculated`} onClose={onClose}>
-    {flagged.length>0&&<div className="warn" role="status">{flagged.map(([k,p])=><p key={k}><strong>{PERIOD_LABEL[k]??k} needs review.</strong> Students see {fmt(p.grade)} (v{p.release_number}); the working grade is now {row.grades[k]?.grade==null?'pending':fmt(row.grades[k]?.grade)}. {p.review_reason??'Working data changed.'}</p>)}<p>Fix anything pending below (links beside each item), then close this and press Publish for that period. Nothing changes for the student until you do.</p></div>}
+    {flagged.length>0&&<div className="warn" role="status">{flagged.map(([k,p])=><p key={k}><strong>{PERIOD_LABEL[k]??k} needs review.</strong> Students see {fmt(p.grade)} (v{p.release_number}); the working grade is now {row.grades[k]?.grade==null?'pending':fmt(row.grades[k]?.grade)}. {p.review_reason??'Working data changed.'}</p>)}<p>Fix anything pending below (links beside each item), then close this and publish that period. Nothing changes for the student until you do.</p></div>}
     {Object.entries(row.grades).filter(([k])=>k!=='course').map(([period,g])=><section key={period}>
       <h3>{PERIOD_LABEL[period]??period}: {g.grade===null?'Pending':fmt(g.grade)}</h3>
       <ul>{g.categories.map(c=><li key={c.key}><strong>{c.label}</strong> ({c.weight}%): {c.status==='ok'?`${fmt(c.percent)}% (${fmt(c.earned)} of ${fmt(c.possible)})`:c.status==='pending'?`Pending: ${c.missing.join('; ')}`:c.missing.join('; ')}{c.status!=='ok'&&<> <Link to={c.key==='attendance'?`${base}/attendance`:`${base}/assessments`}>{c.key==='attendance'?'Open attendance':'Open assessments'}</Link></>}</li>)}</ul>

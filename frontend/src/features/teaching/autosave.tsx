@@ -1,4 +1,5 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
+import {useConfirm} from '../../components/confirm';
 import {useBlocker} from 'react-router-dom';
 import {ApiError} from '../../app/api';
 
@@ -124,14 +125,15 @@ export function SaveIndicator({status,message,storageFailed,onRetry}:{status:Sav
 
 /** Navigation guard: try to save first; if that fails, ask before leaving (the browser copy is kept). */
 export function useFlushOnLeave(status:SaveStatus,flush:()=>Promise<boolean>){
+  const ask=useConfirm();
   const blocker=useBlocker(()=>status!=='saved');
   useEffect(()=>{
     if(blocker.state!=='blocked')return;
-    void flush().then(ok=>{
-      if(ok||confirm('Your latest changes could not be saved to the server. They are kept in this browser, but leaving now may lose them if the page is cleared. Leave anyway?'))blocker.proceed();
+    void flush().then(async ok=>{
+      if(ok||await ask({title:'Leave without saving?',message:'Your latest changes could not be saved to the server. They are kept in this browser, but leaving now may lose them if the page is cleared.',yes:'Leave anyway',no:'Stay',danger:true}))blocker.proceed();
       else blocker.reset();
     });
-  },[blocker,flush]);
+  },[blocker,flush,ask]);
 }
 
 /** Recovery and conflict notices shared by editors. `reload` fetches the server's current draft. */

@@ -1,3 +1,5 @@
+import {useRef} from 'react';
+import {useUndo} from '../../components/undo';
 import {newId} from '../teaching/types';
 import type {Question,QType} from './types';
 
@@ -12,6 +14,7 @@ export function blankQuestion(type:QType='multiple_choice'):Question{
 
 /** locked: students already started attempts, so keys, points and question identity cannot change. */
 export function QuestionList({questions,onChange,locked}:{questions:Question[];onChange:(q:Question[])=>void;locked:boolean}){
+  const undo=useUndo();const latest=useRef(onChange);latest.current=onChange;   // undo must reach the CURRENT draft, not the one at removal time
   const set=(i:number,q:Question)=>onChange(questions.map((x,j)=>j===i?q:x));
   return <section>
     <h2>Questions</h2>
@@ -22,7 +25,7 @@ export function QuestionList({questions,onChange,locked}:{questions:Question[];o
         {!locked&&<div className="actions">
           <button type="button" aria-label={`Move question ${i+1} up`} disabled={i===0} onClick={()=>onChange(move(questions,i,-1))}>↑</button>
           <button type="button" aria-label={`Move question ${i+1} down`} disabled={i===questions.length-1} onClick={()=>onChange(move(questions,i,1))}>↓</button>
-          <button type="button" onClick={()=>{if(confirm('Remove this question?'))onChange(questions.filter((_,j)=>j!==i))}}>Remove</button></div>}</div>
+          <button type="button" onClick={()=>{const before=questions;onChange(questions.filter((_,j)=>j!==i));undo(`Question ${i+1} removed.`,()=>latest.current(before))}}>Remove</button></div>}</div>
       {q.source&&<p className="muted">Drafted from: <strong>{q.source.title}</strong>. Check the answer against that material.</p>}
       <div className="grid-2">
         <label>Type<select value={q.type} disabled={locked} onChange={e=>set(i,{...blankQuestion(e.target.value as QType),key:q.key,prompt:q.prompt,points:q.points,explanation:q.explanation,source:q.source})}>

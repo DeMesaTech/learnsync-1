@@ -3,6 +3,7 @@ import {Link,useNavigate,useOutletContext,useParams} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
 import {api,post,send,upload,errorText} from '../../app/api';
 import {queryClient,useAuth} from '../../app/providers';
+import {useConfirm} from '../../components/confirm';
 import {Dialog} from '../../components/Dialog';
 import type {OfferingSummary} from '../academics/types';
 import {SaveIndicator,draftKey,useAutosave,useFlushOnLeave} from './autosave';
@@ -112,6 +113,7 @@ function ReadOnlyItem({offering,item}:{offering:OfferingSummary;item:Item}){
 }
 
 function ItemEditor({offering,item,refetch}:{offering:OfferingSummary;item:Item;refetch:()=>void}){
+  const ask=useConfirm();
   const draft=item.draft!;
   const {session}=useAuth();
   const navigate=useNavigate();
@@ -136,7 +138,7 @@ function ItemEditor({offering,item,refetch}:{offering:OfferingSummary;item:Item;
   }
   async function discard(){
     const published=!!item.published;
-    if(!confirm(published?'Discard this draft? The published version stays as it is.':'Delete this item? It was never published.'))return;
+    if(!await ask({title:published?'Discard this draft?':'Delete this item?',message:published?'The published version stays as it is.':'It was never published.',yes:published?'Discard draft':'Delete',danger:true}))return;
     await auto.flush();
     try{
       if(published)await send('DELETE',`${base}/draft?expected_counter=${auto.counter()}`);else await send('DELETE',base);

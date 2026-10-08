@@ -4,12 +4,14 @@ import {useQuery,type UseQueryResult} from '@tanstack/react-query';
 import {api,post,send,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
 import {Dialog} from '../../components/Dialog';
+import {useConfirm} from '../../components/confirm';
 import {useOrigin} from '../../components/origin';
 import type {OfferingSummary} from '../academics/types';
 import {VerdictBadge} from './AnswerReview';
 import {KIND_LABEL,fmt,when,type Assessment,type AttemptDetail,type AttemptRow,type ScoreRow} from './types';
 
 export function ScoresPage(){
+  const ask=useConfirm();
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const {assessmentId}=useParams();
   const closed=offering.term_status==='closed';
@@ -25,17 +27,18 @@ export function ScoresPage(){
   if(a.isPending)return <p>Loading…</p>;
   if(a.error||!a.data?.published)return <section className="panel"><h2>Not available</h2><p role="alert">{a.error?.message??'Publish this assessment first.'}</p><Link to={`/faculty/offerings/${offering.id}/assessments`}>Back to assessments</Link></section>;
   const rev=a.data.published;const kind=a.data.kind;
+  const toReturn=rows.data?.filter(r=>r.to_return).length??0;
 
   async function release(){
-    if(!confirm('Release the current scores and feedback to students? They will see them straight away.'))return;
-    try{const r=await post<{released:number}>(`${base}/release`,{student_ids:null});setMessage(r.released===0?'Nothing new to release.':`Released ${r.released} result${r.released===1?'':'s'}.`);refresh()}
+    if(!await ask({title:`Return ${toReturn} graded result${toReturn===1?'':'s'}?`,message:'Students will see the scores and feedback straight away.',yes:`Return ${toReturn}`}))return;
+    try{const r=await post<{released:number}>(`${base}/release`,{student_ids:null});setMessage(r.released===0?'Nothing new to return.':`Returned ${r.released} result${r.released===1?'':'s'}.`);refresh()}
     catch(e){setMessage(errorText(e))}
   }
   return <>
     <p className="back"><Link to={origin.to}>← Back to {origin.label}</Link></p>
     <div className="page-heading"><div><p className="eyebrow">{KIND_LABEL[kind]} · out of {fmt(rev.max_points)}</p><h2>{rev.title}</h2>
-      <p className="muted">Students only see a result after you release it. Online quiz totals are released automatically when a student submits.</p></div>
-      <button className="primary" disabled={closed} onClick={release}>Release results</button></div>
+      <p className="muted">Students only see a result after you return it. Online quiz totals are returned automatically when a student submits.</p></div>
+      <button className={toReturn>0?'primary':''} disabled={closed||toReturn===0} onClick={release}>{toReturn>0?`Return ${toReturn} graded result${toReturn===1?'':'s'}`:'All graded results returned'}</button></div>
     {message&&<p role="status">{message}</p>}
     {kind==='online_quiz'&&<Attempts base={base} attempts={attempts} closed={closed} onChanged={refresh} setMessage={setMessage}/>}
     {rows.isPending||(kind==='online_quiz'&&attempts.isPending)?<p>Loading students…</p>:rows.error?<p role="alert">{rows.error.message}</p>:kind==='online_quiz'&&attempts.error?<p role="alert">{attempts.error.message}</p>:
@@ -116,10 +119,11 @@ function PermissionDialog({base,row,onClose,onDone}:{base:string;row:ScoreRow;on
 }
 
 function Attempts({base,attempts,closed,onChanged,setMessage}:{base:string;attempts:UseQueryResult<AttemptRow[]>;closed:boolean;onChanged:()=>void;setMessage:(m:string)=>void}){
+  const ask=useConfirm();
   const [review,setReview]=useState<string|null>(null);
   const open=attempts.data?.filter(x=>x.state==='in_progress').length??0;
   async function closeOpen(){
-    if(!confirm('Close all open attempts? Whatever each student saved is scored as their submission.'))return;
+    if(!await ask({title:'Close all open attempts?',message:'Whatever each student saved is scored as their submission.',yes:'Close attempts',danger:true}))return;
     try{const r=await post<{closed:number}>(`${base}/attempts/close-open`,{});setMessage(`Closed ${r.closed} open attempt${r.closed===1?'':'s'}.`);onChanged()}
     catch(e){setMessage(errorText(e))}
   }

@@ -3,6 +3,7 @@ import {Link,useLocation,useNavigate,useOutletContext,useParams} from 'react-rou
 import {useQuery} from '@tanstack/react-query';
 import {ApiError,api,post,send,upload,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
+import {useConfirm} from '../../components/confirm';
 import {useOrigin} from '../../components/origin';
 import type {OfferingSummary} from '../academics/types';
 import {fmt,when,type AttemptView,type LearnItem} from './types';
@@ -122,6 +123,7 @@ function Finished({attempt,back}:{attempt:AttemptView;back:string}){
 type SaveState='saved'|'saving'|'unsaved'|'failed';
 
 function Taking({offering,attempt,url,back}:{offering:OfferingSummary;attempt:AttemptView;url:string;back:string}){
+  const ask=useConfirm();
   const carriedState=useLocation().state;
   const [answers,setAnswers]=useState<Record<string,unknown>>(attempt.answers);
   const [state,setState]=useState<SaveState>('saved');
@@ -162,7 +164,7 @@ function Taking({offering,attempt,url,back}:{offering:OfferingSummary;attempt:At
   },[]);
 
   async function submit(){
-    if(!confirm('Submit your answers? You cannot change them afterwards.'))return;
+    if(!await ask({title:'Submit your answers?',message:'You cannot change them afterwards.',yes:'Submit answers'}))return;
     setSubmitting(true);setMessage('');clearTimeout(timer.current);
     if(running.current)await running.current;
     try{

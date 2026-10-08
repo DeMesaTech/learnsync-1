@@ -275,3 +275,9 @@ tbody th.sticky{text-transform:none;letter-spacing:normal;font-size:inherit;colo
 .more{margin-top:12px;border-top:1px solid var(--border);padding-top:8px}
 .more>summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:600}
 pre.code{white-space:pre-wrap;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-size:.85rem;overflow:auto}
+
+/* ---- undo toast ---- */
+.toast-region{position:fixed;left:max(16px,env(safe-area-inset-left));bottom:max(16px,env(safe-area-inset-bottom));z-index:7;max-width:min(520px,calc(100vw - 32px))}
+.toast{display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;background:var(--text);color:var(--surface);border-radius:var(--radius);box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.toast button{min-height:44px;background:transparent;color:inherit;border-color:currentColor}
+dialog[data-confirm]{width:min(460px,calc(100vw - 24px))}

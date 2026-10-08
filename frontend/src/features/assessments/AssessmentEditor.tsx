@@ -3,6 +3,7 @@ import {Link,useNavigate,useOutletContext,useParams} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
 import {api,post,send,errorText} from '../../app/api';
 import {queryClient,useAuth} from '../../app/providers';
+import {useConfirm} from '../../components/confirm';
 import type {OfferingSummary} from '../academics/types';
 import {DraftNotices,SaveIndicator,draftKey,useAutosave,useFlushOnLeave} from '../teaching/autosave';
 import {nodeLabels,type SyllabusState} from '../teaching/types';
@@ -70,6 +71,7 @@ function PasteQuestions({offeringId,locked,onAdd}:{offeringId:string;locked:bool
 }
 
 function Editor({offering,assessment,refetch}:{offering:OfferingSummary;assessment:Assessment;refetch:()=>void}){
+  const ask=useConfirm();
   const draft=assessment.draft!;
   const {session}=useAuth();
   const navigate=useNavigate();
@@ -110,7 +112,7 @@ function Editor({offering,assessment,refetch}:{offering:OfferingSummary;assessme
   }
   async function discard(){
     const published=!!assessment.published;
-    if(!confirm(published?'Discard this draft? The published version stays as it is.':'Delete this assessment? It was never published.'))return;
+    if(!await ask({title:published?'Discard this draft?':'Delete this assessment?',message:published?'The published version stays as it is.':'It was never published.',yes:published?'Discard draft':'Delete',danger:true}))return;
     await auto.flush();
     try{
       if(published)await send('DELETE',`${base}/draft?expected_counter=${auto.counter()}`);else await send('DELETE',base);

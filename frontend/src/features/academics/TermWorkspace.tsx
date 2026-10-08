@@ -5,6 +5,7 @@ import {useQuery} from '@tanstack/react-query';
 import {api,post,send,errorText,ApiError,type Account} from '../../app/api';
 import {queryClient} from '../../app/providers';
 import {Dialog} from '../../components/Dialog';
+import {useConfirm} from '../../components/confirm';
 import {yearLabel,type Member,type OfferingSummary,type SchoolYear,type Section,type Subject} from './types';
 
 export function TermWorkspace(){
@@ -113,6 +114,7 @@ function OfferingDialog({termId,sections,offering,onClose,onDone}:{termId:string
 }
 
 function MembersDialog({section,closed,onClose}:{section:Section;closed:boolean;onClose:()=>void}){
+  const ask=useConfirm();
   const members=useQuery({queryKey:['members',section.id],queryFn:()=>api<Member[]>(`/sections/${section.id}/members`)});
   const [search,setSearch]=useState('');
   const results=useQuery({queryKey:['student-search',search],enabled:search.length>=2&&!closed,
@@ -120,7 +122,7 @@ function MembersDialog({section,closed,onClose}:{section:Section;closed:boolean;
   const [message,setMessage]=useState('');
   const refresh=()=>queryClient.invalidateQueries({queryKey:['members',section.id]});
   async function add(a:Account){try{await post(`/sections/${section.id}/members`,{student_id:a.id});setMessage(`${a.display_name} added.`);setSearch('');refresh()}catch(e){setMessage(errorText(e))}}
-  async function withdraw(m:Member){if(!confirm(`Withdraw ${m.display_name} from ${section.name}? Their enrollment history is kept.`))return;
+  async function withdraw(m:Member){if(!await ask({title:`Withdraw ${m.display_name}?`,message:`They leave ${section.name}. Their enrollment history is kept.`,yes:'Withdraw',danger:true}))return;
     try{await send('DELETE',`/sections/${section.id}/members/${m.student_id}`);setMessage(`${m.display_name} withdrawn.`);refresh()}catch(e){setMessage(errorText(e))}}
   return <Dialog title={`${section.name} students`} onClose={onClose}>
     {!closed&&<><label>Add a student<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by name or email"/></label>

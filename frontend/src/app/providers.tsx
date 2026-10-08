@@ -1,6 +1,8 @@
 import {createContext,useContext,useEffect,useState,type ReactNode} from 'react';
 import {QueryClient,QueryClientProvider,useQuery} from '@tanstack/react-query';
 import {getSession,type SessionInfo,type Theme} from './api';
+import {ConfirmProvider} from '../components/confirm';
+import {UndoProvider} from '../components/undo';
 export const queryClient=new QueryClient({defaultOptions:{queries:{retry:false,refetchOnWindowFocus:false},mutations:{retry:false}}});
 const AuthContext=createContext<{session:SessionInfo|undefined;loading:boolean;error:Error|null}>({session:undefined,loading:true,error:null});
 const ThemeContext=createContext<{theme:Theme;setTheme:(t:Theme)=>void}>({theme:'system',setTheme:()=>{}});
@@ -14,4 +16,4 @@ function Contexts({children}:{children:ReactNode}){
  useEffect(()=>{const media=matchMedia('(prefers-color-scheme: dark)');const apply=()=>{document.documentElement.dataset.theme=theme==='system'?(media.matches?'dark':'light'):theme};apply();media.addEventListener('change',apply);return()=>media.removeEventListener('change',apply)},[theme]);
  return <AuthContext.Provider value={{session:query.data,loading:query.isPending,error:query.error}}><ThemeContext.Provider value={{theme,setTheme}}>{children}</ThemeContext.Provider></AuthContext.Provider>
 }
-export function Providers({children}:{children:ReactNode}){return <QueryClientProvider client={queryClient}><Contexts>{children}</Contexts></QueryClientProvider>}
+export function Providers({children}:{children:ReactNode}){return <QueryClientProvider client={queryClient}><Contexts><UndoProvider><ConfirmProvider>{children}</ConfirmProvider></UndoProvider></Contexts></QueryClientProvider>}
