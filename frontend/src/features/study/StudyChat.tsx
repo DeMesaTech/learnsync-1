@@ -17,12 +17,16 @@ interface ChatProps{offeringId:string;canAsk:boolean;closedNote?:string;active:s
 /** The conversation itself (messages, lesson helpers, composer, delete). The subject comes in as props, so the same
  *  component serves the floating Study buddy and the dedicated page. Which conversation is open is the parent's choice. */
 export function StudyChat({offeringId,canAsk,closedNote='',active,onActive,onState,compact=false}:ChatProps){
-  const closed=!canAsk;   // history stays readable and deletable; asking does not
   const [confirmDelete,setConfirmDelete]=useState(false);
   const base=`/learn/offerings/${offeringId}/study/conversations`;
   const [text,setText]=useState('');const [focus,setFocus]=useState('');
   const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [waiting,setWaiting]=useState('');
   const attempt=useRef<{id:string;text:string}|null>(null);   // a retry of the same question reuses its id, so it is never stored or answered twice
+  // asking pauses only while the student has a quiz open in this subject; the server decides and the chat re-checks often
+  const quiz=useQuery({queryKey:['study-paused',offeringId],enabled:canAsk,refetchInterval:10000,refetchOnWindowFocus:true,
+    queryFn:()=>api<{paused:boolean}>(`/learn/offerings/${offeringId}/study/status`)});
+  const paused=canAsk&&quiz.data?.paused===true;
+  const closed=!canAsk||paused;   // history stays readable and deletable; asking does not
   const status=useQuery({queryKey:['ai-status'],queryFn:()=>api<AiStatus>('/ai/status')});
   const items=useQuery({queryKey:['learn-items',offeringId],queryFn:()=>api<LearnItem[]>(`/learn/offerings/${offeringId}/items`)});
   const conversation=useInfiniteQuery({queryKey:['study-conv',active],enabled:!!active,initialPageParam:'',
@@ -34,6 +38,7 @@ export function StudyChat({offeringId,canAsk,closedNote='',active,onActive,onSta
   }
   const ready=status.data?.configured!==false;
   const refreshLists=()=>Promise.all([queryClient.invalidateQueries({queryKey:['study-all']}),queryClient.invalidateQueries({queryKey:['study-list']})]);
+  useEffect(()=>{if(paused)onState?.('paused')},[paused]);   // eslint-disable-line react-hooks/exhaustive-deps
   const flash=(s:ChatState)=>{onState?.(s);if(s==='happy')window.setTimeout(()=>onState?.('idle'),2200)};
 
   const ask=(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();void submit({text:text.trim(),selected_item_id:focus||null},text.trim())};
@@ -49,7 +54,7 @@ export function StudyChat({offeringId,canAsk,closedNote='',active,onActive,onSta
       attempt.current=null;if(!body.action)setText('');
       await Promise.all([queryClient.invalidateQueries({queryKey:['study-conv',id]}),refreshLists()]);
       flash('happy')
-    }catch(err){setError(errorText(err));flash(err instanceof ApiError&&err.code==='quiz_in_progress'?'paused':'idle')}   // the question stays in the box, so Send again retries it
+    }catch(err){setError(errorText(err));flash(err instanceof ApiError&&err.code==='quiz_in_progress'?'paused':'idle');if(err instanceof ApiError&&err.code==='quiz_in_progress')void quiz.refetch()}   // the question stays in the box, so Send again retries it
     finally{setBusy(false);setWaiting('')}
   }
 
@@ -66,7 +71,8 @@ export function StudyChat({offeringId,canAsk,closedNote='',active,onActive,onSta
   return <>
     <SimulatorNotice status={status.data}/>
     {status.data&&!status.data.configured&&<p className="warn" role="status">Study help is not set up on this server yet. Ask your teacher or administrator.</p>}
-    {closed&&closedNote&&<p className="warn" role="status">{closedNote}</p>}
+    {!canAsk&&closedNote&&<p className="warn" role="status">{closedNote}</p>}
+    {paused&&<p className="warn" role="status">Study buddy is paused while you have a quiz open in this subject. Submit or finish the quiz and it comes back by itself.</p>}
     <details className="privacy"><summary><span aria-hidden="true">🔒</span> Private to you: teachers cannot read your chats <span className="muted">· how chats are handled</span></summary><p>Chats are private within LearnSync: teachers and administrators cannot open them. To answer, the text of your question and the lesson passages it needs are sent to the AI provider. Answers can be wrong, so check them against the lesson. Chats never change your progress or grades. Deleting a conversation removes it from LearnSync; copies may stay in backups until those expire.</p></details>
     <div className={compact?'study-compact':''}>
       <section className="panel convo" aria-label="Conversation">
@@ -93,7 +99,7 @@ export function StudyChat({offeringId,canAsk,closedNote='',active,onActive,onSta
         {active&&(compact?<details className="helper-fold"><summary>Lesson helpers</summary>{helper}</details>:helper)}
         <form className="composer" onSubmit={ask}>
           <label className="sr-only" htmlFor="study-q">Your question</label>
-          <textarea id="study-q" ref={box} rows={2} value={text} maxLength={1500} placeholder={closed?'Asking is closed for this subject.':'Ask about a lesson…  (Enter to send, Shift+Enter for a new line)'} disabled={busy||closed||!ready}
+          <textarea id="study-q" ref={box} rows={2} value={text} maxLength={1500} placeholder={paused?'Paused while your quiz is open.':closed?'Asking is closed for this subject.':'Ask about a lesson…  (Enter to send, Shift+Enter for a new line)'} disabled={busy||closed||!ready}
             onChange={e=>{setText(e.target.value);e.target.style.height='auto';e.target.style.height=`${Math.min(e.target.scrollHeight,200)}px`}}
             onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();e.currentTarget.form?.requestSubmit()}}}/>
           <div className="composer-row">

@@ -47,9 +47,16 @@ def conversations(offering_id: UUID, limit: int = Query(25, ge=1, le=100), curso
     return study.list_conversations(db, actor, offering, limit, cursor)
 
 
+@router.get(L + "/study/status")
+def study_status(offering_id: UUID, actor=Depends(student), db: Session = Depends(get_db)):
+    """Is asking paused right now? Only because the student has a quiz attempt open in this subject."""
+    learner_offering(db, offering_id, actor)
+    return {"paused": study.open_attempt_exists(db, offering_id, actor.id)}
+
+
 @router.post(L + "/study/conversations", status_code=201)
 def new_conversation(offering_id: UUID, actor=Depends(student), db: Session = Depends(get_db)):
-    offering, _ = learner_offering(db, offering_id, actor, write=True)
+    offering, _ = learner_offering(db, offering_id, actor)
     c = study.create_conversation(db, actor, offering)
     return {"id": c.id, "title": "New conversation", "updated_at": c.updated_at}
 

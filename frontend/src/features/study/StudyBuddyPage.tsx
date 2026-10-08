@@ -8,7 +8,7 @@ import {Owl} from './Owl';
 import type {AllConversationsPage} from './types';
 
 interface Open{offeringId:string;id:string|null;canAsk:boolean;note:string}
-const NOTE='You can read and delete earlier chats here, but this subject is no longer open for new questions (the term is closed or you are no longer enrolled).';
+const NOTE='You can read and delete earlier chats here, but this subject is no longer open for new questions (you are no longer enrolled).';
 
 /** Every Study buddy conversation across the student's subjects: a list on the left, the chat on the right. */
 export function StudyBuddyPage(){

@@ -100,7 +100,7 @@ def list_all_conversations(db, student, limit=25, cursor=None, offering_id=None)
     shown = rows[:limit]
     return {"items": [{"id": c.id, "title": c.title or "New conversation", "updated_at": c.updated_at,
                        "offering_id": c.offering_id, "subject_code": s.code, "subject_title": s.title,
-                       "can_ask": term == "open" and enrolled == "enrolled"}
+                       "can_ask": enrolled == "enrolled"}   # only an open quiz pauses asking, and that is checked on the subject
                       for c, s, term, enrolled in shown],
             "has_more": len(rows) > limit,
             "next_cursor": (f"{shown[-1][0].updated_at.isoformat()}~{shown[-1][0].id}" if len(rows) > limit else None)}
@@ -161,8 +161,9 @@ def open_attempt_exists(db, offering_id, student_id):
 
 
 def guard_new_message(db, student, offering_id):
-    """Eligibility for NEW study messages: enrolled, term open, and no open quiz attempt here."""
-    offering, enrollment = learner_offering(db, offering_id, student, write=True)
+    """Eligibility for NEW study messages: still enrolled, and no open quiz attempt here. A closed term does not stop
+    study help; only a quiz in progress does."""
+    offering, enrollment = learner_offering(db, offering_id, student)
     if open_attempt_exists(db, offering_id, student.id):
         fail(409, "quiz_in_progress", "Study help is paused while you have a quiz attempt open in "
                                       "this subject. Finish or submit the quiz first.")

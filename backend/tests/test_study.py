@@ -293,12 +293,17 @@ def test_the_assistant_is_paused_during_an_open_quiz_attempt(graded, ai):
     quiz = make_quiz(graded)
     st1 = graded["st1"]
     cid = conversation(st1, graded)
+    status_url = f"/api/learn/offerings/{graded['oid']}/study/status"
+    assert st1.get(status_url).json() == {"paused": False}
     attempt = start(st1, graded, quiz["aid"]).json()
+    assert st1.get(status_url).json() == {"paused": True}                                # the chat can show it before a send
     paused = ask(st1, graded, cid, "What is profit?")
     assert paused.status_code == 409 and paused.json()["error"]["code"] == "quiz_in_progress"
     assert ai.calls == []
     submit(st1, graded, attempt["id"], quiz["correct"])
+    assert st1.get(status_url).json() == {"paused": False}
     assert ask(st1, graded, cid, "What is profit?").status_code == 200
+    assert graded["fac"].get(status_url).status_code == 403
 
 
 def test_study_eligibility_ownership_and_privacy(db, course, ai):
@@ -313,12 +318,12 @@ def test_study_eligibility_ownership_and_privacy(db, course, ai):
     assert fac.get(base).status_code == 403 and course["admin"].get(base).status_code == 403
     assert ask(st1, course, cid, "What is a market?").status_code == 200
     course["admin"].post(f"/api/terms/{course['term']['id']}/close")
-    assert st1.post(base).status_code == 409                                            # no new chats in a closed term
-    assert ask(st1, course, cid, "What is a market?").json()["error"]["code"] == "term_closed"
-    assert st1.get(f"{base}/{cid}").status_code == 200                                  # reading stays possible
+    assert st1.post(base).status_code == 201                                            # a closed term does not stop study help
+    assert ask(st1, course, cid, "What is a market?").status_code == 200
+    assert st1.get(f"{base}/{cid}").status_code == 200
     course["admin"].post(f"/api/terms/{course['term']['id']}/reopen", {"reason": "Test"})
     s1 = course["students"][0]
-    course["admin"].delete(f"/api/sections/{course['sec_a']['id']}/members/{s1.id}")
+    course["admin"].delete(f"/api/sections/{course['sec_a']['id']}/members/{s1.id}?reason=Left%20the%20programme")
     assert ask(st1, course, cid, "What is a market?").status_code == 404                # withdrawn: nothing new
     assert st1.get(f"{base}/{cid}").status_code == 200                                  # but their own history is theirs
 
@@ -346,7 +351,7 @@ def test_a_student_can_delete_their_own_conversation_and_nothing_else(db, course
     # a withdrawn student keeps read and delete rights over their own history, but cannot ask
     kept = conversation(st1, course)
     ask(st1, course, kept, "What is a market?")
-    course["admin"].delete(f"/api/sections/{course['sec_a']['id']}/members/{course['students'][0].id}")
+    course["admin"].delete(f"/api/sections/{course['sec_a']['id']}/members/{course['students'][0].id}?reason=Left%20the%20programme")
     assert [c["id"] for c in st1.get(base).json()["items"]] == [kept]
     assert ask(st1, course, kept, "Again?").status_code == 404
     assert st1.delete(f"{base}/{kept}").status_code == 204
@@ -734,7 +739,7 @@ def test_the_all_conversations_list_is_the_students_own_and_says_where_they_can_
 
     from app.main import app
     assert TestClient(app).get(url).status_code == 401
-    # history survives a closed term, but asking no longer applies
+    # history and asking both survive a closed term
     assert course["admin"].post(f"/api/terms/{course['term']['id']}/close").status_code in (200, 204)
     closed = {c["id"]: c["can_ask"] for c in st1.get(url).json()["items"]}
-    assert closed == {first: False, second: False}
+    assert closed == {first: True, second: True}                                     # only an open quiz pauses asking
