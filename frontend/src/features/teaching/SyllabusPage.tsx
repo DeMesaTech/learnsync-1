@@ -1,3 +1,4 @@
+import {useToast} from '../../components/undo';
 import {ClassworkTypes,FACULTY_CATS} from '../../components/ClassworkTypes';
 import {useState,type FormEvent} from 'react';
 import {useOutletContext} from 'react-router-dom';
@@ -78,7 +79,7 @@ function CoveragePanel({offering,published,closed}:{offering:OfferingSummary;pub
 }
 
 function DraftEditor({offering,draft,published,warnings,onChanged}:{offering:OfferingSummary;draft:SyllabusRev;published:SyllabusRev|null;warnings:string[];onChanged:()=>void}){
-  const ask=useConfirm();
+  const ask=useConfirm();const toast=useToast();
   const {session}=useAuth();
   const url=`/teach/offerings/${offering.id}/syllabus`;
   const key=draftKey(session?.user?.id,offering.id,'syllabus');
@@ -94,7 +95,7 @@ function DraftEditor({offering,draft,published,warnings,onChanged}:{offering:Off
   async function publish(){
     setMessage('');
     if(!await auto.flush()){setMessage('Resolve the save problem above before publishing.');return}
-    try{await post(`${url}/draft/publish`,{expected_counter:auto.counter()});auto.discardRecovered();onChanged()}
+    try{await post(`${url}/draft/publish`,{expected_counter:auto.counter()});auto.discardRecovered();toast('Syllabus published.');onChanged()}
     catch(e){setMessage(errorText(e))}
   }
   async function discard(){

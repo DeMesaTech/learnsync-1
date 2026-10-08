@@ -366,3 +366,8 @@ details.topic[open]>summary::before{content:'▾'}
 .type-tabs a{display:inline-flex;align-items:center;min-height:44px;padding:6px 16px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);text-decoration:none;font-weight:600}
 .type-tabs a.active{background:var(--action);border-color:var(--action);color:var(--action-text)}
 .type-tabs a.active .muted{color:inherit;opacity:.85}
+/* confetti burst (components/celebrate.ts) */
+.confetti{position:fixed;inset:0;pointer-events:none;z-index:9;overflow:hidden}
+.confetti i{position:absolute;top:30%;width:9px;height:14px;border-radius:2px;opacity:0;animation:confetti-fall 1.5s ease-out forwards}
+@keyframes confetti-fall{0%{opacity:1;transform:translate(0,0) rotate(0)}100%{opacity:0;transform:translate(var(--x),var(--y)) rotate(var(--r))}}
+@media(prefers-reduced-motion:reduce){.confetti{display:none}}

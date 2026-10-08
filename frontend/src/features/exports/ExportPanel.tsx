@@ -1,4 +1,5 @@
 import {useState} from 'react';
+import {useToast} from '../../components/undo';
 import {PERIOD_LABEL} from '../assessments/types';
 import type {OfferingSummary} from '../academics/types';
 
@@ -8,6 +9,7 @@ export function ExportPanel({offering,periods,initial,ranked=false}:{offering:Of
   const [own,setOwn]=useState<Choice>({period:periods[0]??'midterm',basis:'published',section:''});
   const {period,basis,section}=initial??own;   // on Class standing the page's own choices are exported: what you see is what you download
   const setPeriod=(p:string)=>setOwn({...own,period:p});const setBasis=(b:'published'|'working')=>setOwn({...own,basis:b});const setSection=(s:string)=>setOwn({...own,section:s});
+  const toast=useToast();
   const [busy,setBusy]=useState('');const [message,setMessage]=useState('');
   async function download(format:'pdf'|'xlsx'){
     setBusy(format);setMessage('');
@@ -19,7 +21,7 @@ export function ExportPanel({offering,periods,initial,ranked=false}:{offering:Of
       const url=URL.createObjectURL(await response.blob());
       const link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();
       setTimeout(()=>URL.revokeObjectURL(url),10000);
-      setMessage(`Downloaded ${name}.`);
+      setMessage(`Downloaded ${name}.`);toast(`Downloaded ${name}.`);
     }catch(e){setMessage(e instanceof Error?e.message:'The export could not be created.')}
     finally{setBusy('')}
   }

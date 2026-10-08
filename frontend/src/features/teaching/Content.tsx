@@ -1,3 +1,4 @@
+import {useToast} from '../../components/undo';
 import {useEffect,useState,type FormEvent} from 'react';
 import {Link,useNavigate,useOutletContext,useParams} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
@@ -72,7 +73,7 @@ function ReadOnlyItem({offering,item}:{offering:OfferingSummary;item:Item}){
 }
 
 function ItemEditor({offering,item,refetch}:{offering:OfferingSummary;item:Item;refetch:()=>void}){
-  const ask=useConfirm();
+  const ask=useConfirm();const toast=useToast();
   const draft=item.draft!;
   const {session}=useAuth();
   const navigate=useNavigate();
@@ -92,7 +93,7 @@ function ItemEditor({offering,item,refetch}:{offering:OfferingSummary;item:Item;
   async function publish(){
     setMessage('');
     if(!await auto.flush()){setMessage('Resolve the save problem above before publishing.');return}
-    try{await post(`${base}/draft/publish`,{expected_counter:auto.counter()});auto.discardRecovered();queryClient.invalidateQueries({queryKey:['items',offering.id]});navigate(back)}
+    try{await post(`${base}/draft/publish`,{expected_counter:auto.counter()});auto.discardRecovered();queryClient.invalidateQueries({queryKey:['items',offering.id]});toast('Published. Students can see it now.');navigate(back)}
     catch(e){setMessage(errorText(e))}
   }
   async function discard(){

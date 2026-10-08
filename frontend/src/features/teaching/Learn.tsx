@@ -5,6 +5,8 @@ import {api,post,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
 import {useHere,useOrigin} from '../../components/origin';
 import {ClassworkTypes} from '../../components/ClassworkTypes';
+import {celebrate} from '../../components/celebrate';
+import {useToast} from '../../components/undo';
 import type {OfferingSummary} from '../academics/types';
 import {OutlineView} from './OutlineView';
 import {groupByNode,nodeLabels,type LearnItem,type LearnSyllabus,type Announcement} from './types';
@@ -63,8 +65,9 @@ export function StudentLesson(){
   const parent=`/student/offerings/${offeringId}/classwork`;
   const origin=useOrigin(parent,'Classwork');const back=origin.to;
   const carried=useLocation().state;
+  const toast=useToast();
   const [marking,setMarking]=useState(false);const [problem,setProblem]=useState('');
-  async function complete(){setMarking(true);setProblem('');try{await post(`/learn/offerings/${offeringId}/lessons/${itemId}/complete`,{});await Promise.all(['progress','learn-item','learn-items'].map(k=>queryClient.invalidateQueries({queryKey:[k,offeringId]})))}catch(e){setProblem(errorText(e))}finally{setMarking(false)}}
+  async function complete(){setMarking(true);setProblem('');try{await post(`/learn/offerings/${offeringId}/lessons/${itemId}/complete`,{});await Promise.all(['progress','learn-item','learn-items'].map(k=>queryClient.invalidateQueries({queryKey:[k,offeringId]})));celebrate();toast('Lesson marked complete.')}catch(e){setProblem(errorText(e))}finally{setMarking(false)}}
   if(query.isPending)return <p>Loading…</p>;
   if(query.error)return <section className="panel"><h2>Not available</h2><p role="alert">{query.error.message}</p><Link to={back}>Back to lessons</Link></section>;
   const i=query.data;

@@ -4,6 +4,7 @@ import {useQuery,type UseQueryResult} from '@tanstack/react-query';
 import {api,send,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
 import {useConfirm} from '../../components/confirm';
+import {useToast} from '../../components/undo';
 import type {OfferingSummary} from '../academics/types';
 import {useFlushOnLeave,type SaveStatus} from '../teaching/autosave';
 import {PERIOD_LABEL,type AttendanceSessionRow} from './types';
@@ -49,6 +50,7 @@ export function AttendancePage(){
 
 /** Downloads the recorded attendance of one section as Excel or PDF: the range on screen, or every recorded date. */
 function AttendanceExport({offering,sectionId,from,to,label}:{offering:OfferingSummary;sectionId:string;from:string;to:string;label:string}){
+  const toast=useToast();
   const [range,setRange]=useState<'view'|'custom'|'all'>('view');
   const [start,setStart]=useState(from);const [end,setEnd]=useState(to);
   const invalid=range==='custom'&&(!start||!end||end<start);
@@ -63,7 +65,7 @@ function AttendanceExport({offering,sectionId,from,to,label}:{offering:OfferingS
       const url=URL.createObjectURL(await response.blob());
       const link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();
       setTimeout(()=>URL.revokeObjectURL(url),10000);
-      setMessage(`Downloaded ${name}.`);
+      setMessage(`Downloaded ${name}.`);toast(`Downloaded ${name}.`);
     }catch(e){setMessage(e instanceof Error?e.message:'The export could not be created.')}
     finally{setBusy('')}
   }
@@ -83,6 +85,7 @@ interface ViewProps{offering:OfferingSummary;sectionId:string;setSectionId:(id:s
 
 /** Students down, dates across. Each change is saved on its own (debounced per date); a failed save is flagged with Retry. */
 function GridView({offering,sectionId,setSectionId,query,setMode}:ViewProps){
+  const toast=useToast();
   const closed=offering.term_status==='closed';
   const [view,setView]=useState<'week'|'month'>('week');
   const [anchor,setAnchor]=useState(today());
@@ -160,7 +163,7 @@ function GridView({offering,sectionId,setSectionId,query,setMode}:ViewProps){
   const cycle=(d:string,s:string)=>{const now=valueOf(d,s);setMarks(d,{[s]:CYCLE[(CYCLE.indexOf(now)+1)%CYCLE.length]})};
   async function saveDays(){
     setNote('');
-    try{await send('PUT',`/teach/offerings/${offering.id}/schedule`,{meeting_days:classDays});await queryClient.invalidateQueries({queryKey:['offering']});setNote('Class days saved.')}
+    try{await send('PUT',`/teach/offerings/${offering.id}/schedule`,{meeting_days:classDays});await queryClient.invalidateQueries({queryKey:['offering']});setNote('Class days saved.');toast('Class days saved.')}
     catch(e){setNote(errorText(e))}
   }
   const go=(change:()=>void)=>{void flushAll().then(change)};
@@ -244,18 +247,18 @@ function DayView({offering,sectionId,setSectionId,query,setMode}:ViewProps){
 }
 
 function Register({offering,sectionId,date,period,roster,initial,closed,setMessage,unsaved,sessionId}:{offering:OfferingSummary;sectionId:string;date:string;period:'midterm'|'finals';roster:Roster[];initial:Record<string,string>;closed:boolean;setMessage:(m:string)=>void;unsaved:MutableRefObject<boolean>;sessionId?:string}){
-  const ask=useConfirm();
+  const ask=useConfirm();const toast=useToast();
   const [marks,setMarks]=useState<Record<string,string>>(initial);
   async function save(){
     const cleared=Object.keys(initial).filter(id=>!marks[id]);          // a mark returned to "not marked"
     const body={section_id:sectionId,session_date:date,period,marks:{...Object.fromEntries(Object.entries(marks).filter(([,v])=>v)),...Object.fromEntries(cleared.map(id=>[id,null]))}};
-    try{await send('PUT',`/teach/offerings/${offering.id}/attendance`,body);setMessage('Attendance saved.');queryClient.invalidateQueries({queryKey:['attendance',offering.id]});queryClient.invalidateQueries({queryKey:['gradebook',offering.id]})}
+    try{await send('PUT',`/teach/offerings/${offering.id}/attendance`,body);setMessage('Attendance saved.');toast('Attendance saved.');queryClient.invalidateQueries({queryKey:['attendance',offering.id]});queryClient.invalidateQueries({queryKey:['gradebook',offering.id]})}
     catch(e){setMessage(errorText(e))}
   }
   async function remove(){
     if(!sessionId)return;
     if(!await ask({title:`Remove the record for ${date}?`,message:'Every mark for that day is deleted and the grade is recalculated.',yes:'Remove record',danger:true}))return;
-    try{await send('DELETE',`/teach/offerings/${offering.id}/attendance/${sessionId}`);setMessage(`The record for ${date} was removed.`);queryClient.invalidateQueries({queryKey:['attendance',offering.id]});queryClient.invalidateQueries({queryKey:['gradebook',offering.id]})}
+    try{await send('DELETE',`/teach/offerings/${offering.id}/attendance/${sessionId}`);setMessage(`The record for ${date} was removed.`);toast(`The record for ${date} was removed.`);queryClient.invalidateQueries({queryKey:['attendance',offering.id]});queryClient.invalidateQueries({queryKey:['gradebook',offering.id]})}
     catch(e){setMessage(errorText(e))}
   }
   const dirty=JSON.stringify(Object.entries(marks).filter(([,v])=>v).sort())!==JSON.stringify(Object.entries(initial).filter(([,v])=>v).sort());

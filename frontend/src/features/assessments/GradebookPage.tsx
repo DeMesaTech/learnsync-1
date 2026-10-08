@@ -1,3 +1,4 @@
+import {useToast} from '../../components/undo';
 import {useState} from 'react';
 import {Link,useOutletContext} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
@@ -24,7 +25,7 @@ const cellKey=(columnId:string,studentId:string)=>`${columnId}:${studentId}`;
 export function GradebookPage(){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const closed=offering.term_status==='closed';
-  const here=useHere();
+  const here=useHere();const toast=useToast();
   const query=useQuery({queryKey:['gradebook',offering.id],queryFn:()=>api<Gradebook>(`/teach/offerings/${offering.id}/gradebook`)});
   const [detail,setDetail]=useState<GradeRow|null>(null);
   const [publishing,setPublishing]=useState<string|null>(null);
@@ -67,7 +68,7 @@ export function GradebookPage(){
       const cell=book.rows.find(r=>r.student_id===student_id)!.cells[assessment_id];
       return {assessment_id,student_id,score:value.trim()===''?null:value.trim(),feedback:cell.feedback,expected_revision:cell.revision}});
     try{await send('PUT',`/teach/offerings/${offering.id}/gradebook/scores`,{cells});
-      setEditing(false);setEdits({});setMessage(`Saved ${cells.length} score${cells.length===1?'':'s'}. Students see changes only after you return the results.`);await refresh()}
+      toast(`Saved ${cells.length} score${cells.length===1?'':'s'}.`);setEditing(false);setEdits({});setMessage(`Saved ${cells.length} score${cells.length===1?'':'s'}. Students see changes only after you return the results.`);await refresh()}
     catch(e){
       if(e instanceof ApiError&&e.code==='batch_rejected'){setRejected(e.fields);setMessage(`${e.message} Fix the marked cells, or reload if someone else changed them.`)}
       else setMessage(errorText(e));
@@ -122,9 +123,9 @@ export function GradebookPage(){
 
 function PublishDialog({offeringId,period,stats,onClose,onPublished}:{offeringId:string;period:string;stats:Stats;onClose:()=>void;onPublished:()=>void}){
   const [result,setResult]=useState<Publication|null>(null);const [error,setError]=useState('');const [busy,setBusy]=useState(false);
-  const name=PERIOD_LABEL[period]??period;
+  const name=PERIOD_LABEL[period]??period;const toast=useToast();
   async function go(){setBusy(true);setError('');
-    try{setResult(await post<Publication>(`/teach/offerings/${offeringId}/grades/publish`,{period}));onPublished()}
+    try{setResult(await post<Publication>(`/teach/offerings/${offeringId}/grades/publish`,{period}));toast(`${name} grades published.`);onPublished()}
     catch(e){setError(errorText(e))}finally{setBusy(false)}}
   if(result)return <Dialog title={`${name} grades published`} onClose={onClose}>
     <p role="status">{result.published} published · {result.unchanged} unchanged · {result.pending.length} not ready.</p>

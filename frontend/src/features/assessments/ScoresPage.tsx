@@ -1,3 +1,4 @@
+import {useToast} from '../../components/undo';
 import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {Link,useOutletContext,useParams} from 'react-router-dom';
 import {useQuery,type UseQueryResult} from '@tanstack/react-query';
@@ -11,7 +12,7 @@ import {VerdictBadge} from './AnswerReview';
 import {KIND_LABEL,fmt,when,type Assessment,type AttemptDetail,type AttemptRow,type ScoreRow} from './types';
 
 export function ScoresPage(){
-  const ask=useConfirm();
+  const ask=useConfirm();const toast=useToast();
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const {assessmentId}=useParams();
   const closed=offering.term_status==='closed';
@@ -31,7 +32,7 @@ export function ScoresPage(){
 
   async function release(){
     if(!await ask({title:`Return ${toReturn} graded result${toReturn===1?'':'s'}?`,message:'Students will see the scores and feedback straight away.',yes:`Return ${toReturn}`}))return;
-    try{const r=await post<{released:number}>(`${base}/release`,{student_ids:null});setMessage(r.released===0?'Nothing new to return.':`Returned ${r.released} result${r.released===1?'':'s'}.`);refresh()}
+    try{const r=await post<{released:number}>(`${base}/release`,{student_ids:null});{const text=r.released===0?'Nothing new to return.':`Returned ${r.released} result${r.released===1?'':'s'}.`;setMessage(text);toast(text)};refresh()}
     catch(e){setMessage(errorText(e))}
   }
   return <>

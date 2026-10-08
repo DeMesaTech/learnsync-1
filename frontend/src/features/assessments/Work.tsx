@@ -4,7 +4,9 @@ import {Link,useLocation,useNavigate,useOutletContext,useParams} from 'react-rou
 import {useQuery} from '@tanstack/react-query';
 import {ApiError,api,post,send,upload,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
+import {celebrate} from '../../components/celebrate';
 import {useConfirm} from '../../components/confirm';
+import {useToast} from '../../components/undo';
 import {useOrigin} from '../../components/origin';
 import type {OfferingSummary} from '../academics/types';
 import {fmt,when,type AttemptView,type LearnItem} from './types';
@@ -56,7 +58,7 @@ export function WorkDetail(){
   const [message,setMessage]=useState('');
   const [busy,setBusy]=useState(false);
   const base=`/student/offerings/${offering.id}/work`;
-  const origin=useOrigin(`/student/offerings/${offering.id}/classwork`,'Classwork');const carried=useLocation().state;
+  const origin=useOrigin(`/student/offerings/${offering.id}/classwork`,'Classwork');const carried=useLocation().state;const toast=useToast();
   if(query.isPending)return <p>Loading…</p>;
   const item=query.data?.find(i=>i.id===assessmentId);
   if(!item)return <section className="panel"><h2>Not available</h2><Link to={`/student/offerings/${offering.id}/classwork`}>Back to classwork</Link></section>;
@@ -70,7 +72,7 @@ export function WorkDetail(){
     e.preventDefault();setMessage('');
     const form=new FormData(e.currentTarget);   // read before awaiting
     setBusy(true);
-    try{await upload(`/learn/offerings/${offering.id}/assessments/${item!.id}/submissions`,form);setMessage('Submitted. Your teacher can see it now.');await query.refetch()}
+    try{await upload(`/learn/offerings/${offering.id}/assessments/${item!.id}/submissions`,form);setMessage('Submitted. Your teacher can see it now.');toast('Submitted. Your teacher can see it now.');await query.refetch()}
     catch(err){setMessage(errorText(err))}finally{setBusy(false)}
   }
   return <>
@@ -125,7 +127,7 @@ function Finished({attempt,back}:{attempt:AttemptView;back:string}){
 type SaveState='saved'|'saving'|'unsaved'|'failed';
 
 function Taking({offering,attempt,url,back}:{offering:OfferingSummary;attempt:AttemptView;url:string;back:string}){
-  const ask=useConfirm();
+  const ask=useConfirm();const toast=useToast();
   const carriedState=useLocation().state;
   const [answers,setAnswers]=useState<Record<string,unknown>>(attempt.answers);
   const [state,setState]=useState<SaveState>('saved');
@@ -171,7 +173,7 @@ function Taking({offering,attempt,url,back}:{offering:OfferingSummary;attempt:At
     if(running.current)await running.current;
     try{
       const result=await post<AttemptView>(`${url}/submit`,{idempotency_key:submitKey.current,answers:latest.current});
-      dirty.current=false;queryClient.setQueryData(['attempt',attempt.id],result);queryClient.invalidateQueries({queryKey:['learn-work',offering.id]});queryClient.invalidateQueries({queryKey:['learn-results',offering.id]});setDone(result);
+      dirty.current=false;queryClient.setQueryData(['attempt',attempt.id],result);queryClient.invalidateQueries({queryKey:['learn-work',offering.id]});queryClient.invalidateQueries({queryKey:['learn-results',offering.id]});setDone(result);celebrate();toast('Quiz submitted.');
     }catch(e){
       setMessage(e instanceof ApiError&&['term_closed','closed','attempt_closed'].includes(e.code)?`${e.message} Your saved answers were kept.`:`${errorText(e)} Your answers are still here. Try submitting again.`);
     }finally{setSubmitting(false)}

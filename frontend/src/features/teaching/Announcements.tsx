@@ -1,3 +1,4 @@
+import {useToast} from '../../components/undo';
 import {useState,type FormEvent} from 'react';
 import {useOutletContext} from 'react-router-dom';
 import {useInfiniteQuery} from '@tanstack/react-query';
@@ -42,10 +43,11 @@ export function FacultyAnnouncements(){
 }
 
 function Editor({offering,existing,onClose,onDone}:{offering:OfferingSummary;existing:Announcement|null;onClose:()=>void;onDone:()=>void}){
+  const toast=useToast();
   const [chosen,setChosen]=useState<string[]>(existing?.section_ids??[]);const [error,setError]=useState('');
   async function submit(e:FormEvent<HTMLFormElement>){
     e.preventDefault();const f=new FormData(e.currentTarget);const body={title:f.get('title'),body:f.get('body'),section_ids:chosen};
-    try{if(existing)await send('PUT',`/teach/offerings/${offering.id}/announcements/${existing.id}`,body);else await post(`/teach/offerings/${offering.id}/announcements`,body);onDone()}
+    try{if(existing)await send('PUT',`/teach/offerings/${offering.id}/announcements/${existing.id}`,body);else await post(`/teach/offerings/${offering.id}/announcements`,body);toast(existing?'Announcement updated.':'Announcement saved.');onDone()}
     catch(err){setError(errorText(err))}
   }
   return <Dialog title={existing?'Edit announcement':'New announcement'} onClose={onClose}><form onSubmit={submit}>
