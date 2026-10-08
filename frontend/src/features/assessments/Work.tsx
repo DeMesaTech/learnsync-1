@@ -1,3 +1,4 @@
+import {ClassworkTypes} from '../../components/ClassworkTypes';
 import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {Link,useLocation,useNavigate,useOutletContext,useParams} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
@@ -34,7 +35,7 @@ export function WorkList(){
 
 const SECTIONS:[string,string,string][]=[['todo','To do','Earliest deadline first.'],['again','Another attempt available',''],['upcoming','Upcoming','Not open yet.'],['awaiting','Submitted · awaiting feedback',''],['done','Completed',''],['closed','Closed','No longer open and nothing was submitted.']];
 
-function detail(i:LearnItem){
+export function detail(i:LearnItem){
   const due=i.deadline?`${i.late_allowed?'was due':'due'} ${when(i.deadline)}`:'no deadline';
   const left=i.max_attempts!==undefined?Math.max(i.max_attempts-(i.attempts_used??0),0):0;
   switch(i.bucket){
@@ -55,10 +56,10 @@ export function WorkDetail(){
   const [message,setMessage]=useState('');
   const [busy,setBusy]=useState(false);
   const base=`/student/offerings/${offering.id}/work`;
-  const origin=useOrigin(base,'My work');const carried=useLocation().state;
+  const origin=useOrigin(`/student/offerings/${offering.id}/classwork`,'Classwork');const carried=useLocation().state;
   if(query.isPending)return <p>Loading…</p>;
   const item=query.data?.find(i=>i.id===assessmentId);
-  if(!item)return <section className="panel"><h2>Not available</h2><Link to={base}>Back to my work</Link></section>;
+  if(!item)return <section className="panel"><h2>Not available</h2><Link to={`/student/offerings/${offering.id}/classwork`}>Back to classwork</Link></section>;
 
   async function startQuiz(){
     setBusy(true);setMessage('');
@@ -73,6 +74,7 @@ export function WorkDetail(){
     catch(err){setMessage(errorText(err))}finally{setBusy(false)}
   }
   return <>
+    <ClassworkTypes base={`/student/offerings/${offering.id}`} current={item.kind==='online_quiz'?'quiz':'activity'}/>
     <p className="back"><Link to={origin.to}>← Back to {origin.label}</Link></p>
     <section className="panel"><p className="eyebrow">{item.kind==='online_quiz'?'Quiz':'Activity'} · {STATE_LABEL[item.state]??item.state}</p><h2>{item.title}</h2>
       {item.instructions&&<p className="pre">{item.instructions}</p>}

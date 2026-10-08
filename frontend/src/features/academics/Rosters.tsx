@@ -83,7 +83,7 @@ export function FacultySubjects(){
       query.data.length===0?<section className="panel"><h2>Nothing assigned yet</h2><p>When an administrator assigns you a subject, it appears here.</p></section>:
       <div className="cards">{query.data.map(o=><SubjectCard key={o.id} code={o.subject.code} title={o.subject.title} meta={o.term_status==='closed'?`${o.term} · closed`:o.term}
         detail={`${o.sections.map(x=>x.name).join(', ')||'No sections'} · ${o.enrolled} student${o.enrolled===1?'':'s'}`} to={`/faculty/offerings/${o.id}`} action="Open"
-        links={[['Content',`/faculty/offerings/${o.id}/content`],['Assessments',`/faculty/offerings/${o.id}/assessments`],['Gradebook',`/faculty/offerings/${o.id}/gradebook`]]}/>)}</div>}
+        links={[['Classwork',`/faculty/offerings/${o.id}/classwork`],['Gradebook',`/faculty/offerings/${o.id}/gradebook`]]}/>)}</div>}
   </>;
 }
 
@@ -97,7 +97,7 @@ export function StudentSubjects(){
         return <SubjectCard key={s.offering_id} code={s.subject.code} title={s.subject.title}
           meta={s.enrollment_status==='withdrawn'?'Withdrawn':s.term_status==='closed'?`${s.term} · past term`:s.term}
           detail={`${s.subject.units} units · ${s.faculty.display_name}${active?'':' · course content is no longer available, but you can still see your own results'}`}
-          to={active?`${o}/lessons`:`${o}/results`} action={active?'Open':'View results'}
+          to={active?`${o}/classwork`:`${o}/results`} action={active?'Open':'View results'}
           links={active?[['Progress',`${o}/progress`],['Grades & results',`${o}/results`],['Study buddy',`/student/study-buddy?subject=${s.offering_id}`]]:[]}/>})}</div>}
   </>;
 }

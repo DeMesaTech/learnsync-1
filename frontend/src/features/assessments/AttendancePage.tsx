@@ -47,6 +47,38 @@ export function AttendancePage(){
   </>;
 }
 
+/** Downloads the recorded attendance of one section as Excel or PDF: the range on screen, or every recorded date. */
+function AttendanceExport({offering,sectionId,from,to,label}:{offering:OfferingSummary;sectionId:string;from:string;to:string;label:string}){
+  const [range,setRange]=useState<'view'|'custom'|'all'>('view');
+  const [start,setStart]=useState(from);const [end,setEnd]=useState(to);
+  const invalid=range==='custom'&&(!start||!end||end<start);
+  const [busy,setBusy]=useState('');const [message,setMessage]=useState('');
+  async function download(format:'pdf'|'xlsx'){
+    setBusy(format);setMessage('');
+    try{
+      const query=new URLSearchParams({format,section_id:sectionId,...(range==='view'?{start:from,end:to}:range==='custom'?{start,end}:{})});
+      const response=await fetch(`/api/teach/offerings/${offering.id}/exports/attendance?${query}`,{credentials:'same-origin'});
+      if(!response.ok){const body=await response.json().catch(()=>({}));throw new Error(body.error?.message||'The export could not be created.')}
+      const name=/filename="([^"]+)"/.exec(response.headers.get('Content-Disposition')??'')?.[1]??`attendance.${format}`;
+      const url=URL.createObjectURL(await response.blob());
+      const link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),10000);
+      setMessage(`Downloaded ${name}.`);
+    }catch(e){setMessage(e instanceof Error?e.message:'The export could not be created.')}
+    finally{setBusy('')}
+  }
+  return <details className="more"><summary>Export</summary>
+    <fieldset><legend>Export attendance (recorded dates only)</legend>
+      <label className="inline"><input type="radio" name="att-export-range" checked={range==='view'} onChange={()=>setRange('view')}/> {label}</label>
+      <label className="inline"><input type="radio" name="att-export-range" checked={range==='custom'} onChange={()=>setRange('custom')}/> Custom range</label>
+      {range==='custom'&&<div className="grid-2"><label>From<input type="date" value={start} onChange={e=>setStart(e.target.value)}/></label><label>To<input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label></div>}
+      {invalid&&<p role="alert" className="error">Choose a start date and an end date that is not before it.</p>}
+      <label className="inline"><input type="radio" name="att-export-range" checked={range==='all'} onChange={()=>setRange('all')}/> All recorded dates</label>
+      <div className="actions"><button disabled={!!busy||invalid} onClick={()=>download('xlsx')}>{busy==='xlsx'?'Preparing…':'Download Excel'}</button>
+        <button disabled={!!busy||invalid} onClick={()=>download('pdf')}>{busy==='pdf'?'Preparing…':'Download PDF'}</button></div></fieldset>
+    {message&&<p role="status">{message}</p>}</details>;
+}
+
 interface ViewProps{offering:OfferingSummary;sectionId:string;setSectionId:(id:string)=>void;query:UseQueryResult<Data>;setMode:(m:Mode)=>void}
 
 /** Students down, dates across. Each change is saved on its own (debounced per date); a failed save is flagged with Retry. */
@@ -54,8 +86,6 @@ function GridView({offering,sectionId,setSectionId,query,setMode}:ViewProps){
   const closed=offering.term_status==='closed';
   const [view,setView]=useState<'week'|'month'>('week');
   const [anchor,setAnchor]=useState(today());
-  const [added,setAdded]=useState<string[]>([]);
-  const [addDate,setAddDate]=useState(today());
   const [edits,setEdits]=useState<Record<string,Record<string,Status|null>>>({});     // typed but not yet confirmed saved
   const [periods,setPeriods]=useState<Record<string,Period>>({});
   const [errors,setErrors]=useState<Record<string,string>>({});
@@ -73,7 +103,8 @@ function GridView({offering,sectionId,setSectionId,query,setMode}:ViewProps){
   const last=view==='week'?shift(first,6):iso(new Date(parse(anchor).getFullYear(),parse(anchor).getMonth()+1,0));
   const span:string[]=[];for(let d=first;d<=last;d=shift(d,1))span.push(d);
   const meeting=offering.meeting_days??0;
-  const dates=span.filter(d=>byDate.has(d)||(meeting&(1<<dayOf(d)))!==0||added.includes(d));
+  const dates=span;                                                       // every day is shown, class day or not
+  const isClass=(d:string)=>(meeting&(1<<dayOf(d)))!==0;
   const nearest=(d:string):Period=>{
     const before=[...sessions].filter(s=>s.date<d).sort((a,b)=>a.date<b.date?1:-1)[0];
     const after=[...sessions].filter(s=>s.date>d).sort((a,b)=>a.date<b.date?-1:1)[0];
@@ -142,26 +173,25 @@ function GridView({offering,sectionId,setSectionId,query,setMode}:ViewProps){
         <div className="tabs" role="group" aria-label="Grid range">{(['week','month'] as const).map(v=><button key={v} className={view===v?'active':''} aria-pressed={view===v} onClick={()=>go(()=>setView(v))}>{v==='week'?'Week':'Month'}</button>)}</div>
         <button onClick={()=>step(-1)}>← Previous</button><button onClick={()=>go(()=>setAnchor(today()))}>Today</button><button onClick={()=>step(1)}>Next →</button></div></div>
       {offering.sections.length>1&&<label>Section<select value={sectionId} onChange={e=>go(()=>setSectionId(e.target.value))}>{offering.sections.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>}
-      <details className="more"><summary>Dates and class days</summary>
-        <div className="actions"><label>Add a date<input type="date" value={addDate} onChange={e=>setAddDate(e.target.value)}/></label>
-          <button disabled={!addDate} onClick={()=>{setAdded(a=>a.includes(addDate)?a:[...a,addDate]);setAnchor(addDate)}}>Add date</button></div>
-        <fieldset><legend>Class days (the grid shows these dates)</legend><div className="chips">{DAY.map((n,i)=><label className="inline" key={n}><input type="checkbox" checked={(classDays&(1<<i))!==0} onChange={e=>setClassDays(e.target.checked?classDays|(1<<i):classDays&~(1<<i))}/> {n}</label>)}</div>
+      <details className="more"><summary>Class days</summary>
+        <fieldset><legend>Class days (marked in the grid; every day is always shown)</legend><div className="chips">{DAY.map((n,i)=><label className="inline" key={n}><input type="checkbox" checked={(classDays&(1<<i))!==0} onChange={e=>setClassDays(e.target.checked?classDays|(1<<i):classDays&~(1<<i))}/> {n}</label>)}</div>
           <button disabled={classDays===(offering.meeting_days??0)} onClick={saveDays}>Save class days</button></fieldset>
         {note&&<p role="status">{note}</p>}</details>
+      <AttendanceExport offering={offering} sectionId={sectionId} from={first} to={last} label={view==='week'?'This week':'This month'}/>
       <p role="status" className="muted">{closed?'This term is closed, so attendance is read-only.':status==='saved'?'All changes saved.':status==='saving'?'Saving…':status==='failed'?`${unsaved} change${unsaved===1?'':'s'} not saved. Use Retry below.`:'Saving in a moment…'}</p>
       {Object.entries(errors).map(([d,m])=><p key={d} role="alert" className="error">{pretty(d)}: {m} <button onClick={()=>void flush(d)}>Retry</button></p>)}
     </section>
     {query.isPending?<p>Loading…</p>:query.error?<p role="alert">{query.error.message}</p>:roster.length===0?<section className="panel"><p className="muted">No students are enrolled through this section.</p></section>:
-      dates.length===0?<section className="panel"><h3>No class days in this {view}</h3><p className="muted">Set the class days above, or add a date to start taking attendance.</p></section>:
       <section className="panel"><div className="table-wrap" role="region" aria-label="Attendance grid, scrolls sideways" tabIndex={0}>
         <table className="att-grid" ref={table}><caption className="sr-only">Attendance: students down, dates across. Use the arrow keys to move between cells, then P, L, A or E to mark and Delete to clear. Enter or Space changes the status.</caption>
           <thead><tr><th scope="col" className="sticky">Student</th>{dates.map(d=>{const rec=byDate.get(d);const marked=roster.filter(r=>valueOf(d,r.student_id)!==null).length;
-            return <th scope="col" key={d}><div className="att-head"><strong>{DAY[dayOf(d)]} {parse(d).getDate()}</strong>
-              {rec?<span className="muted">{PERIOD_LABEL[rec.period]}</span>
-                :<select aria-label={`Grading period for ${pretty(d)}`} value={periodOf(d)} disabled={closed} onChange={e=>setPeriods(p=>({...p,[d]:e.target.value as Period}))}><option value="midterm">Midterm</option><option value="finals">Finals</option></select>}
-              <span className="muted">{marked}/{roster.length} marked</span>
-              <button disabled={closed||marked===roster.length} onClick={()=>markRest(d)}>Mark rest present</button>
-              {added.includes(d)&&!rec&&<button className="linklike" onClick={()=>setAdded(a=>a.filter(x=>x!==d))}>Hide</button>}</div></th>})}</tr></thead>
+            const full=view==='week'||isClass(d)||!!rec;      // a month is wide: only class days and recorded days carry the controls
+            return <th scope="col" key={d} className={meeting>0&&!isClass(d)&&!rec?'att-off':undefined}><div className="att-head"><strong>{DAY[dayOf(d)]} {parse(d).getDate()}</strong>
+              {meeting>0&&!isClass(d)&&!rec&&<span className="muted">no class</span>}
+              {full&&(rec?<span className="muted">{PERIOD_LABEL[rec.period]}</span>
+                :<select aria-label={`Grading period for ${pretty(d)}`} value={periodOf(d)} disabled={closed} onChange={e=>setPeriods(p=>({...p,[d]:e.target.value as Period}))}><option value="midterm">Midterm</option><option value="finals">Finals</option></select>)}
+              {(marked>0||full)&&<span className="muted">{marked}/{roster.length} marked</span>}
+              {full&&<button disabled={closed||marked===roster.length} onClick={()=>markRest(d)}>Mark rest present</button>}</div></th>})}</tr></thead>
           <tbody>{roster.map((r,ri)=><tr key={r.student_id}><th scope="row" className="sticky">{r.display_name}<br/><span className="muted">{r.student_number}</span></th>
             {dates.map((d,ci)=>{const v=valueOf(d,r.student_id);const failed=!!errors[d]&&edits[d]?.[r.student_id]!==undefined;
               return <td key={d}><button type="button" className={`att-cell ${v??'none'}${failed?' err':''}`} data-r={ri} data-c={ci} tabIndex={active.r===ri&&active.c===ci?0:-1} disabled={closed}
@@ -197,6 +227,7 @@ function DayView({offering,sectionId,setSectionId,query,setMode}:ViewProps){
       <label>Date<input type="date" value={date} onChange={e=>go(()=>setDate(e.target.value))}/></label></div>
       <label>Grading period<select value={existing?existing.period:period} disabled={!!existing} onChange={e=>setPeriod(e.target.value as Period)}><option value="midterm">Midterm</option><option value="finals">Finals</option></select></label>
       {existing&&<p className="muted">This day is already recorded under {PERIOD_LABEL[existing.period]}. Changing marks updates it.</p>}
+      <AttendanceExport offering={offering} sectionId={sectionId} from={cells[0]} to={cells[cells.length-1]} label={view==='week'?'The week shown':'The month shown'}/>
     </section>
     <section className="panel" aria-labelledby="week-h"><div className="page-heading"><h3 id="week-h">{view==='week'?`Week of ${parse(week[0]).toLocaleDateString(undefined,{month:'short',day:'numeric'})} – ${parse(week[6]).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}`:parse(date).toLocaleDateString(undefined,{month:'long',year:'numeric'})}</h3>
       <div className="actions"><div className="tabs" role="group" aria-label="Calendar view">{(['week','month'] as const).map(v=><button key={v} className={view===v?'active':''} aria-pressed={view===v} onClick={()=>setView(v)}>{v==='week'?'Week':'Month'}</button>)}</div>

@@ -15,7 +15,7 @@ export function ScoresPage(){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const {assessmentId}=useParams();
   const closed=offering.term_status==='closed';
-  const origin=useOrigin(`/faculty/offerings/${offering.id}/assessments`,'Assessments');
+  const origin=useOrigin(`/faculty/offerings/${offering.id}/classwork`,'Classwork');
   const base=`/teach/offerings/${offering.id}/assessments/${assessmentId}`;
   const a=useQuery({queryKey:['assessment',assessmentId],queryFn:()=>api<Assessment>(base)});
   const rows=useQuery({queryKey:['scores',assessmentId],queryFn:()=>api<ScoreRow[]>(`${base}/scores`)});
@@ -25,7 +25,7 @@ export function ScoresPage(){
   // the table's rows as of right now (after a save has refreshed them), so a feedback-only save with a blank score still counts as ungraded
   const current=():ScoreRow[]=>{const d=queryClient.getQueryData<ScoreRow[]>(['scores',assessmentId])??[];const at=queryClient.getQueryData<AttemptRow[]>(['attempts',assessmentId]);return a.data?.kind==='online_quiz'?d.filter(r=>!at?.some(x=>x.student_id===r.student_id)):d};
   if(a.isPending)return <p>Loading…</p>;
-  if(a.error||!a.data?.published)return <section className="panel"><h2>Not available</h2><p role="alert">{a.error?.message??'Publish this assessment first.'}</p><Link to={`/faculty/offerings/${offering.id}/assessments`}>Back to assessments</Link></section>;
+  if(a.error||!a.data?.published)return <section className="panel"><h2>Not available</h2><p role="alert">{a.error?.message??'Publish this assessment first.'}</p><Link to={`/faculty/offerings/${offering.id}/classwork`}>Back to classwork</Link></section>;
   const rev=a.data.published;const kind=a.data.kind;
   const toReturn=rows.data?.filter(r=>r.to_return).length??0;
 
@@ -38,7 +38,8 @@ export function ScoresPage(){
     <p className="back"><Link to={origin.to}>← Back to {origin.label}</Link></p>
     <div className="page-heading"><div><p className="eyebrow">{KIND_LABEL[kind]} · out of {fmt(rev.max_points)}</p><h2>{rev.title}</h2>
       <p className="muted">Students only see a result after you return it. Online quiz totals are returned automatically when a student submits.</p></div>
-      <button className={toReturn>0?'primary':''} disabled={closed||toReturn===0} onClick={release}>{toReturn>0?`Return ${toReturn} graded result${toReturn===1?'':'s'}`:'All graded results returned'}</button></div>
+      <div className="actions"><Link className="button" to={`/faculty/offerings/${offering.id}/assessments/${assessmentId}/edit`}>{closed?'View settings':'Edit settings'}</Link>
+      <button className={toReturn>0?'primary':''} disabled={closed||toReturn===0} onClick={release}>{toReturn>0?`Return ${toReturn} graded result${toReturn===1?'':'s'}`:'All graded results returned'}</button></div></div>
     {message&&<p role="status">{message}</p>}
     {kind==='online_quiz'&&<Attempts base={base} attempts={attempts} closed={closed} onChanged={refresh} setMessage={setMessage}/>}
     {rows.isPending||(kind==='online_quiz'&&attempts.isPending)?<p>Loading students…</p>:rows.error?<p role="alert">{rows.error.message}</p>:kind==='online_quiz'&&attempts.error?<p role="alert">{attempts.error.message}</p>:

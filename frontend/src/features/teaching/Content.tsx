@@ -9,13 +9,13 @@ import type {OfferingSummary} from '../academics/types';
 import {SaveIndicator,draftKey,useAutosave,useFlushOnLeave} from './autosave';
 import {RichEditor} from './RichEditor';
 import {ReferenceText} from '../study/ReferenceText';
-import {groupByNode,nodeLabels,type Item,type ItemDraftContent,type SyllabusState} from './types';
+import {nodeLabels,type Item,type ItemDraftContent,type SyllabusState} from './types';
 
-const KIND={lesson:'Lesson',file:'File',reference:'Link'} as const;
-const itemTitle=(i:Item)=>i.draft?.title||i.published?.title||'Untitled';
-const stateLabel=(i:Item)=>i.archived?'Archived':i.published?(i.draft?`Published v${i.published.version} with newer draft`:`Published v${i.published.version}`):'Draft · not visible to students';
+export const KIND={lesson:'Lesson',file:'File',reference:'Link'} as const;
+export const itemTitle=(i:Item)=>i.draft?.title||i.published?.title||'Untitled';
+export const stateLabel=(i:Item)=>i.archived?'Archived':i.published?(i.draft?`Published v${i.published.version} with newer draft`:`Published v${i.published.version}`):'Draft · not visible to students';
 
-function useNodes(offeringId:string){
+export function useNodes(offeringId:string){
   const query=useQuery({queryKey:['syllabus',offeringId],queryFn:()=>api<SyllabusState>(`/teach/offerings/${offeringId}/syllabus`)});
   const outline=query.data?.draft?.outline??query.data?.published?.outline;
   return outline?nodeLabels(outline):[];
@@ -27,57 +27,16 @@ function SectionChoice({offering,chosen,onChange}:{offering:OfferingSummary;chos
     {offering.sections.map(s=><label className="inline" key={s.id}><input type="checkbox" checked={chosen.includes(s.id)} onChange={e=>onChange(e.target.checked?[...chosen,s.id]:chosen.filter(x=>x!==s.id))}/> {s.name}</label>)}</fieldset>;
 }
 
-export function ContentPage(){
-  const {offering}=useOutletContext<{offering:OfferingSummary}>();
-  const closed=offering.term_status==='closed';
-  const navigate=useNavigate();
-  const [dialog,setDialog]=useState(false);
-  const [showArchived,setShowArchived]=useState(false);
-  const query=useQuery({queryKey:['items',offering.id],queryFn:()=>api<Item[]>(`/teach/offerings/${offering.id}/items`)});
-  const nodes=useNodes(offering.id);
-  const [moved,setMoved]=useState('');const [search,setSearch]=useState('');
-  const matches=(i:Item)=>itemTitle(i).toLowerCase().includes(search.trim().toLowerCase());
-  const anchorOf=(i:Item)=>(i.published??i.draft)?.anchor_node_id??null;   // the revision students see, else the draft: never a published "none" replaced by a draft topic
-  async function move(group:{id:string|null;items:Item[]},visible:Item[],item:Item,step:number){
-    const other=visible[visible.indexOf(item)+step];if(!other)return;
-    const ids=group.items.map(i=>i.id);const a=ids.indexOf(item.id),b=ids.indexOf(other.id);[ids[a],ids[b]]=[ids[b],ids[a]];
-    try{await send('PUT',`/teach/offerings/${offering.id}/items-order`,{anchor_node_id:group.id,expected_ids:group.items.map(i=>i.id),item_ids:ids});
-      await queryClient.invalidateQueries({queryKey:['items',offering.id]});setMoved(`Moved “${itemTitle(item)}” ${step<0?'up':'down'} to position ${visible.indexOf(item)+step+1} of ${visible.length}.`)}
-    catch(e){setMoved(errorText(e));queryClient.invalidateQueries({queryKey:['items',offering.id]})}
-  }
-  return <>
-    <div className="page-heading"><div><h2>Lessons, files and links</h2><p className="muted">Students only see what you publish: edits stay drafts until you publish them. Reordering takes effect for students immediately.</p></div>
-      <button className="primary" disabled={closed} onClick={()=>setDialog(true)}>New item</button></div>
-    <div className="actions"><label>Search<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Title"/></label>
-      <label className="inline"><input type="checkbox" checked={showArchived} onChange={e=>setShowArchived(e.target.checked)}/> Show archived</label></div>
-    {query.isPending?<p>Loading…</p>:query.error?<p role="alert">{query.error.message}</p>:
-      query.data.filter(i=>(showArchived||!i.archived)&&matches(i)).length===0?<section className="panel"><h2>{search?'No items match':'Nothing here yet'}</h2><p>{search?'Change the search.':'Create a lesson, upload a file or add a reference link.'}</p></section>:
-      <>{moved&&<p role="status" className="muted">{moved}</p>}
-      {groupByNode(query.data,nodes,anchorOf).map(g=>{
-        const visible=g.items.filter(i=>(showArchived||!i.archived)&&matches(i));if(visible.length===0)return null;
-        const mixed=g.id===null&&g.items.some(i=>anchorOf(i));   // an item whose topic left the syllabus: reorder after fixing it
-        const stuck=mixed?g.items.find(i=>anchorOf(i)):undefined;
-        return <section key={g.id??'other'} aria-labelledby={`c-${g.id??'other'}`}><h3 id={`c-${g.id??'other'}`}>{g.label}</h3>
-          {stuck&&<p className="warn" role="status">The order here cannot be changed because some items are attached to a topic that is no longer in the syllabus. <Link to={`/faculty/offerings/${offering.id}/content/${stuck.id}/edit`}>Open “{itemTitle(stuck)}”</Link> and choose a current topic.</p>}
-          <ul className="seq">{visible.map((i,n)=><li key={i.id}>
-            <span className="grow"><Link to={`/faculty/offerings/${offering.id}/content/${i.id}/edit`}>{itemTitle(i)}</Link>
-              <span className="muted">{KIND[i.kind]}{i.section_ids.length>0&&` · ${i.section_ids.length} section${i.section_ids.length===1?'':'s'}`}</span></span>
-            <span className={i.published&&!i.archived?'badge done':'badge'}>{stateLabel(i)}</span>
-            <span className="actions"><button type="button" aria-label={`Move ${itemTitle(i)} up`} disabled={closed||mixed||n===0} onClick={()=>move(g,visible,i,-1)}>↑</button>
-              <button type="button" aria-label={`Move ${itemTitle(i)} down`} disabled={closed||mixed||n===visible.length-1} onClick={()=>move(g,visible,i,1)}>↓</button></span></li>)}</ul></section>})}</>}
-    {dialog&&<NewItemDialog offering={offering} nodes={nodes} onClose={()=>setDialog(false)} onCreated={item=>{setDialog(false);queryClient.invalidateQueries({queryKey:['items',offering.id]});navigate(`/faculty/offerings/${offering.id}/content/${item.id}/edit`)}}/>}
-  </>;
-}
-
-function NewItemDialog({offering,nodes,onClose,onCreated}:{offering:OfferingSummary;nodes:{id:string;label:string}[];onClose:()=>void;onCreated:(i:Item)=>void}){
+export function NewItemDialog({offering,nodes,kind,onClose,onCreated}:{offering:OfferingSummary;nodes:{id:string;label:string}[];kind?:Item['kind'];onClose:()=>void;onCreated:(i:Item)=>void}){
   const [chosen,setChosen]=useState<string[]>([]);const [error,setError]=useState('');
   async function submit(e:FormEvent<HTMLFormElement>){
     e.preventDefault();const f=new FormData(e.currentTarget);
-    try{onCreated(await post<Item>(`/teach/offerings/${offering.id}/items`,{kind:f.get('kind'),title:f.get('title'),section_ids:chosen,anchor_node_id:f.get('anchor')||null}))}
+    try{onCreated(await post<Item>(`/teach/offerings/${offering.id}/items`,{kind:kind??f.get('kind'),title:f.get('title'),section_ids:chosen,anchor_node_id:f.get('anchor')||null}))}
     catch(err){setError(errorText(err))}
   }
-  return <Dialog title="New item" onClose={onClose}><form onSubmit={submit}>
-    <label>Type<select name="kind" defaultValue="lesson"><option value="lesson">Lesson (write it here)</option><option value="file">File (PDF, Word, PowerPoint, Excel, image)</option><option value="reference">Reference link</option></select></label>
+  const names={lesson:'New lesson',file:'New file',reference:'New link'} as const;
+  return <Dialog title={kind?names[kind]:'New item'} onClose={onClose}><form onSubmit={submit}>
+    {!kind&&<label>Type<select name="kind" defaultValue="lesson"><option value="lesson">Lesson (write it here)</option><option value="file">File (PDF, Word, PowerPoint, Excel, image)</option><option value="reference">Reference link</option></select></label>}
     <label>Title<input name="title" required maxLength={200}/></label>
     <label>Attach to a syllabus topic (optional)<select name="anchor" defaultValue=""><option value="">Not attached</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.label}</option>)}</select></label>
     <SectionChoice offering={offering} chosen={chosen} onChange={setChosen}/>
@@ -101,13 +60,13 @@ export function ItemEditorPage(){
     post(`${base}/draft`,{}).then(()=>query.refetch()).finally(()=>setStarting(false));
   },[needsDraft]); // eslint-disable-line react-hooks/exhaustive-deps
   if(query.isPending)return <p>Loading…</p>;
-  if(query.error||!item)return <section className="panel"><h2>Item unavailable</h2><p role="alert">{query.error?.message}</p><Link to={`/faculty/offerings/${offering.id}/content`}>Back to content</Link></section>;
+  if(query.error||!item)return <section className="panel"><h2>Item unavailable</h2><p role="alert">{query.error?.message}</p><Link to={`/faculty/offerings/${offering.id}/classwork`}>Back to classwork</Link></section>;
   if(!item.draft)return closed?<ReadOnlyItem offering={offering} item={item}/>:<p>Preparing a draft…</p>;
   return <ItemEditor key={item.draft.version} offering={offering} item={item} refetch={()=>query.refetch()}/>;
 }
 
 function ReadOnlyItem({offering,item}:{offering:OfferingSummary;item:Item}){
-  return <section className="panel"><p className="back"><Link to={`/faculty/offerings/${offering.id}/content`}>← Content</Link></p><h2>{itemTitle(item)}</h2>
+  return <section className="panel"><p className="back"><Link to={`/faculty/offerings/${offering.id}/classwork`}>← Classwork</Link></p><h2>{itemTitle(item)}</h2>
     <p className="muted">{stateLabel(item)} · This term is closed, so it cannot be edited.</p>
     {item.published?.body_html&&<div className="rich-content" dangerouslySetInnerHTML={{__html:item.published.body_html}}/>}</section>;
 }
@@ -127,7 +86,7 @@ function ItemEditor({offering,item,refetch}:{offering:OfferingSummary;item:Item;
     save:(v,counter)=>send<{counter:number}>('PUT',`${base}/draft`,{expected_counter:counter,title:v.title,body_html:v.body_html,reference_url:v.reference_url||null,reference_note:v.reference_note,anchor_node_id:v.anchor_node_id||null})});
   useFlushOnLeave(auto.status,auto.flush);
   const v=auto.value;const set=(patch:Partial<ItemDraftContent>)=>auto.setValue({...v,...patch});
-  const back=`/faculty/offerings/${offering.id}/content`;
+  const back=`/faculty/offerings/${offering.id}/classwork`;
 
   async function serverDraft(){const fresh=await api<Item>(base);if(!fresh.draft)throw new Error('The draft no longer exists.');return fresh.draft}
   async function publish(){

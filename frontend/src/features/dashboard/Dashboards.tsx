@@ -64,7 +64,7 @@ export function StudentHome(){
           </section>
           <section aria-labelledby="subjects-h"><div className="section-head"><h2 id="subjects-h">My subjects</h2><Link state={here} to="/student/subjects">All subjects, including past terms</Link></div>
             {d.subjects.length===0?<p className="panel muted">No current subjects.</p>:<div className="cards">{d.subjects.map(s=><SubjectCard key={s.offering_id} code={s.code} title={s.title} meta={s.to_do?plural(s.to_do,'item')+' to do':'Nothing to do'}
-              progress={s.percent} detail={s.total?`${s.done} of ${s.total} steps done`:'No lessons or work yet'} to={`/student/offerings/${s.offering_id}/lessons`} action="Open" links={[['Progress',`/student/offerings/${s.offering_id}/progress`],['Study buddy',`/student/study-buddy?subject=${s.offering_id}`]]}/>)}</div>}</section>
+              progress={s.percent} detail={s.total?`${s.done} of ${s.total} steps done`:'No lessons or work yet'} to={`/student/offerings/${s.offering_id}/classwork`} action="Open" links={[['Progress',`/student/offerings/${s.offering_id}/progress`],['Study buddy',`/student/study-buddy?subject=${s.offering_id}`]]}/>)}</div>}</section>
         </div>
         <div className="dash-side">
           <section className="panel"><h2>To do</h2>
@@ -114,10 +114,10 @@ export function FacultyHome(){
             {d.subjects.length===0?<p className="panel muted">No subjects are assigned to you in an open term.</p>:<div className="cards">{d.subjects.map(s=>{
               const o=`/faculty/offerings/${s.offering_id}`;const drafts=s.drafts_content+s.drafts_assessments;
               return <SubjectCard key={s.offering_id} code={s.code} title={s.title} meta="Assigned" detail={`${s.sections.join(', ')||'No sections'} · ${plural(s.students,'student')}${s.to_grade?` · ${s.to_grade} to grade`:''}${s.needs_review?` · ${s.needs_review} to review`:''}${drafts?` · ${plural(drafts,'draft')}`:''}`}
-                to={o} action="Teach" links={[['Content',`${o}/content`],['Assessments',`${o}/assessments`],['Gradebook',`${o}/gradebook`]]}/>})}</div>}</section>
+                to={o} action="Teach" links={[['Classwork',`${o}/classwork`],['Gradebook',`${o}/gradebook`]]}/>})}</div>}</section>
         </div>
         <div className="dash-side">
-          {d.queue.length>0&&<section className="panel"><h2>Activity submissions needing grading</h2><p className="muted">Top 5 by number awaiting grading.</p><ul className="rows">{d.queue.map((q,i)=><li key={i}><Link state={here} to={q.link}>{q.title}</Link><span className="muted">{q.subject} · {plural(q.count,'submission')} waiting</span></li>)}</ul></section>}
+          {d.queue.length>0&&<section className="panel"><h2>Activity submissions needing grading</h2><p className="muted">Top 5 by number awaiting grading. <Link state={here} className="touch" to="/faculty/review">See everything to review</Link></p><ul className="rows">{d.queue.map((q,i)=><li key={i}><Link state={here} to={q.link}>{q.title}</Link><span className="muted">{q.subject} · {plural(q.count,'submission')} waiting</span></li>)}</ul></section>}
           <section className="panel"><h2>Upcoming deadlines</h2>
             {d.deadlines.length===0?<p className="muted">No deadlines in the next two weeks.</p>:<ul className="rows">{d.deadlines.map((x,i)=><li key={i}><Link state={here} to={x.link}>{x.title}</Link><span className="muted">{x.subject} · {dateTime(x.deadline)}</span></li>)}</ul>}</section>
           <section className="panel"><h2>Student progress</h2>

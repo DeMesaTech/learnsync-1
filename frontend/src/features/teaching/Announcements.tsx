@@ -26,7 +26,7 @@ export function FacultyAnnouncements(){
   }
   const names=(ids:string[])=>ids.length===0?'All sections':ids.map(id=>offering.sections.find(s=>s.id===id)?.name??'').join(', ');
   return <>
-    <div className="page-heading"><div><h2>Announcements</h2><p className="muted">Short notices for your sections. Save a draft, then publish when ready.</p></div>
+    <div className="page-heading"><div><h2>Stream</h2><p className="muted">Short notices for your sections. Save a draft, then publish when ready.</p></div>
       <button className="primary" disabled={closed} onClick={()=>{setMessage('');setEditing('new')}}>New announcement</button></div>
     {message&&<p role="alert">{message}</p>}
     {query.isPending?<p>Loading…</p>:query.error?<p role="alert">{query.error.message}</p>:

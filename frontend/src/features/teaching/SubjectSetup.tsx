@@ -91,8 +91,8 @@ function Start({offering,published,message,setMessage,setWarnings,onChanged}:{of
 function Done({offering,planned}:{offering:OfferingSummary;planned:number}){
   return <section className="panel" aria-live="polite"><h2>Your subject is set up</h2>
     <p>The syllabus is published. {planned>0?`${planned} planned assessment${planned===1?'':'s'} wait${planned===1?'s':''} as drafts: students cannot see them until you finish and assign them.`:'Add lessons and assessments whenever you are ready.'}</p>
-    <div className="actions"><Link className="button primary" to={`/faculty/offerings/${offering.id}/assessments`}>Finish the planned assessments</Link>
-      <Link className="button" to={`/faculty/offerings/${offering.id}/content`}>Add lessons and materials</Link>
+    <div className="actions"><Link className="button primary" to={`/faculty/offerings/${offering.id}/classwork`}>Finish the planned assessments</Link>
+      <Link className="button" to={`/faculty/offerings/${offering.id}/classwork`}>Add lessons and materials</Link>
       <Link className="button" to={`/faculty/offerings/${offering.id}/attendance`}>Take attendance</Link></div></section>;
 }
 

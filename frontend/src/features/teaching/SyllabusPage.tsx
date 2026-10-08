@@ -1,3 +1,4 @@
+import {ClassworkTypes,FACULTY_CATS} from '../../components/ClassworkTypes';
 import {useState,type FormEvent} from 'react';
 import {useOutletContext} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
@@ -31,8 +32,9 @@ export function SyllabusPage(){
   if(query.isPending)return <p>Loading syllabus…</p>;
   if(query.error)return <p role="alert">{query.error.message}</p>;
   const {published,draft}=query.data;
-  if(draft)return <><DraftEditor key={draft.id} offering={offering} draft={draft} published={published} warnings={warnings} onChanged={refresh}/>{published&&<CoveragePanel offering={offering} published={published} closed={closed}/>}</>;
-  return <>
+  const strip=<ClassworkTypes base={`/faculty/offerings/${offering.id}`} cats={FACULTY_CATS} current="syllabus"/>;
+  if(draft)return <>{strip}<DraftEditor key={draft.id} offering={offering} draft={draft} published={published} warnings={warnings} onChanged={refresh}/>{published&&<CoveragePanel offering={offering} published={published} closed={closed}/>}</>;
+  return <>{strip}
     {message&&<p role="alert">{message}</p>}
     {published?<>
       <section className="panel"><div className="page-heading"><div><h2>Published syllabus · version {published.version}</h2>

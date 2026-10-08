@@ -81,8 +81,7 @@ export function GradebookPage(){
 
   return <>
     <div className="page-heading"><div><h2>Gradebook</h2>
-      <p className="muted">Working values: students see only the results you return and the grades you publish. Policy version {book.policy_version} · {book.policy.transmutation==='transmuted'?'transmuted':'raw'} scores · passing {book.policy.passing}.</p></div>
-      {!editing&&<button disabled={closed} onClick={()=>{setEditing(true);setMessage('')}}>Edit scores</button>}</div>
+      <p className="muted">Working values: students see only the results you return and the grades you publish. Policy version {book.policy_version} · {book.policy.transmutation==='transmuted'?'transmuted':'raw'} scores · passing {book.policy.passing}.</p></div></div>
     {message&&<p role="status">{message}</p>}
 
     <section className="panel" aria-labelledby="pub-h"><h3 id="pub-h">Ready to publish</h3>
@@ -101,6 +100,7 @@ export function GradebookPage(){
           <label>Section<select value={section} onChange={e=>setSection(e.target.value)}><option value="">All sections</option>{sections.map(s=><option key={s} value={s}>{s}</option>)}</select></label>
           <label>Period<select value={only} onChange={e=>setOnly(e.target.value)}><option value="">All periods</option>{book.policy.periods.map(p=><option key={p.key} value={p.key}>{PERIOD_LABEL[p.key]??p.key}</option>)}</select></label></div></details>
       <p className="muted" role="status">Showing {rows.length} of {book.rows.length} students.{editing?' Editing: type a score in any cell, then save once.':''}</p>
+      {!editing&&<div className="actions"><button disabled={closed} onClick={()=>{setEditing(true);setMessage('')}}>Edit scores</button><span className="muted">{closed?'This term is closed, so scores are read-only.':'Type scores straight into the table below.'}</span></div>}
       {editing&&<div className="actions sticky-bar"><button className="primary" disabled={changed===0||saving} onClick={saveAll}>{saving?'Saving…':changed===0?'Save scores':`Save ${changed} changed score${changed===1?'':'s'}`}</button><button disabled={saving} onClick={leaveEditing}>Cancel</button><span className="muted">{changed===0?'No changes yet.':'Nothing is saved until you press Save.'}</span></div>}
       <div className="table-wrap gradebook" role="region" aria-label="Gradebook, scrolls sideways" tabIndex={0}><table>
         <thead>

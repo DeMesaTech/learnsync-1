@@ -21,8 +21,9 @@ function navigation(role:'admin'|'faculty'|'student'):{label:string;items:NavIte
     {label:'Oversight',items:[{to:`${home}/issues`,label:'Reports',icon:'?'},{to:`${home}/audit`,label:'Audit history',icon:'◷'}]},
     account];
   const student=role==='student';
+  const review=role==='faculty'?[{to:`${home}/review`,label:'To review',icon:'✎'}]:[];
   return [
-    {label:'Your workspace',items:[{to:home,label:'Dashboard',icon:'⌂',end:true,dot:student},...(student?[{to:`${home}/todo`,label:'To do',icon:'☑'},{to:`${home}/study-buddy`,label:'Study buddy',icon:'✦'}]:[]),{to:`${home}/subjects`,label:'My subjects',icon:'▤'}]},
+    {label:'Your workspace',items:[{to:home,label:'Dashboard',icon:'⌂',end:true,dot:student},...(student?[{to:`${home}/todo`,label:'To do',icon:'☑'},{to:`${home}/study-buddy`,label:'Study buddy',icon:'✦'}]:review),{to:`${home}/subjects`,label:'My subjects',icon:'▤'}]},
     {label:'Account & help',items:[{to:`${home}/issues`,label:'Report a problem',icon:'?'},...account.items]}];
 }
 const initials=(name:string)=>name.split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]!.toUpperCase()).join('')||'?';

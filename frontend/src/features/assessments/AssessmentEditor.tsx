@@ -19,7 +19,7 @@ export function AssessmentEditorPage(){
   const {assessmentId}=useParams();
   const closed=offering.term_status==='closed';
   const base=`/teach/offerings/${offering.id}/assessments/${assessmentId}`;
-  const back=`/faculty/offerings/${offering.id}/assessments`;
+  const back=`/faculty/offerings/${offering.id}/classwork`;
   const query=useQuery({queryKey:['assessment',assessmentId],queryFn:()=>api<Assessment>(base)});
   const [starting,setStarting]=useState(false);
   const item=query.data;
@@ -30,8 +30,8 @@ export function AssessmentEditorPage(){
     post(`${base}/draft`,{}).then(()=>query.refetch()).finally(()=>setStarting(false));
   },[needsDraft]); // eslint-disable-line react-hooks/exhaustive-deps
   if(query.isPending)return <p>Loading…</p>;
-  if(query.error||!item)return <section className="panel"><h2>Assessment unavailable</h2><p role="alert">{query.error?.message}</p><Link to={back}>Back to assessments</Link></section>;
-  if(!item.draft)return closed?<section className="panel"><p className="back"><Link to={back}>← Assessments</Link></p><h2>{item.published?.title}</h2><p className="muted">This term is closed, so it cannot be edited.</p></section>:<p>Preparing a draft…</p>;
+  if(query.error||!item)return <section className="panel"><h2>Assessment unavailable</h2><p role="alert">{query.error?.message}</p><Link to={back}>Back to classwork</Link></section>;
+  if(!item.draft)return closed?<section className="panel"><p className="back"><Link to={back}>← Classwork</Link></p><h2>{item.published?.title}</h2><p className="muted">This term is closed, so it cannot be edited.</p></section>:<p>Preparing a draft…</p>;
   return <Editor key={item.draft.version} offering={offering} assessment={item} refetch={()=>query.refetch()}/>;
 }
 
@@ -80,7 +80,7 @@ function Editor({offering,assessment,refetch}:{offering:OfferingSummary;assessme
   const outline=syllabus.data?.published?.outline??syllabus.data?.draft?.outline;
   const nodes=outline?nodeLabels(outline):[];
   const base=`/teach/offerings/${offering.id}/assessments/${assessment.id}`;
-  const back=`/faculty/offerings/${offering.id}/assessments`;
+  const back=`/faculty/offerings/${offering.id}/classwork`;
   const quiz=assessment.kind==='online_quiz';
   const locked=quiz&&assessment.has_attempts&&!!assessment.published;
   const [message,setMessage]=useState('');
@@ -122,6 +122,12 @@ function Editor({offering,assessment,refetch}:{offering:OfferingSummary;assessme
   async function settings(patch:{section_ids?:string[];archived?:boolean}){
     try{await send('PATCH',base,patch);queryClient.invalidateQueries({queryKey:['assessments',offering.id]});refetch()}catch(e){setMessage(errorText(e))}
   }
+  async function unpublish(){
+    if(!await ask({title:'Unpublish this?',message:'Students stop seeing it right away. Your content stays as a draft and you can publish it again. This only works while no student has started it and no result exists.',yes:'Unpublish'}))return;
+    await auto.flush();
+    try{await post(`${base}/unpublish`,{});await queryClient.invalidateQueries({queryKey:['assessments',offering.id]});window.location.reload()}
+    catch(e){setMessage(errorText(e))}
+  }
   async function duplicate(){
     setMessage('');
     if(!await auto.flush()){setMessage('Resolve the save problem above first.');return}
@@ -155,8 +161,9 @@ function Editor({offering,assessment,refetch}:{offering:OfferingSummary;assessme
 
   const manage=<section className="panel"><h3>Manage</h3>
     <div className="actions"><button type="button" onClick={duplicate}>Duplicate this {KIND_LABEL[assessment.kind].toLowerCase()}</button>
+      {assessment.published&&!assessment.archived&&<button type="button" onClick={unpublish}>Unpublish</button>}
       <button type="button" onClick={()=>settings({archived:!assessment.archived})}>{assessment.archived?'Restore assessment':'Archive assessment'}</button></div>
-    <p className="muted">Archiving removes it from students and from grade calculations; records are kept. A duplicate is a hidden draft without dates.</p></section>;
+    <p className="muted">Unpublish returns it to a draft while nobody has started it. Once students have worked on it, archive it instead: archiving removes it from students and from grade calculations, and records are kept. A duplicate is a hidden draft without dates.</p></section>;
 
   const reviewBlock=needsReview&&<section className={reviewed?'panel':'warn'} role="status" aria-label="AI draft review"><p>{reviewed?<strong>✓ You have reviewed this AI draft. You can publish it.</strong>:<><strong>Drafted by AI{draft.ai_language?` in ${({same:'the language of your materials',english:'English',filipino:'Filipino',taglish:'Taglish'} as Record<string,string>)[draft.ai_language]??draft.ai_language}`:''}.</strong> AI can be wrong. Read every question, check each answer against the source shown under it, and check the language as well as the content. Students cannot see this quiz until you mark it reviewed and publish; changing anything afterwards means reviewing again.</>}</p>
     {!reviewed&&<div className="actions"><button type="button" className="primary" disabled={auto.status!=='saved'&&auto.status!=='dirty'} onClick={markReviewed}>I have read and checked every question</button></div>}</section>;
@@ -164,7 +171,7 @@ function Editor({offering,assessment,refetch}:{offering:OfferingSummary;assessme
   const assignButton=<button className="primary" disabled={needsReview&&!reviewed} title={needsReview&&!reviewed?'Mark the quiz as reviewed first':undefined} onClick={publish}>{assignLabel}</button>;
 
   return <>
-    <p className="back"><Link to={back}>← Assessments</Link></p>
+    <p className="back"><Link to={back}>← Classwork</Link></p>
     <div className="page-heading"><div><p className="eyebrow">{KIND_LABEL[assessment.kind]}{quiz?` · step ${index+1} of ${QUIZ_STEPS.length}`:''}</p><h2>{v.title||'Untitled'}</h2>
       <p className="muted">{assessment.published?`Students see version ${assessment.published.version} until you ${assignLabel.toLowerCase()}.`:'Not visible to students or the gradebook until you assign it.'}</p></div>
       <SaveIndicator status={auto.status} message={auto.message} storageFailed={auto.storageFailed} onRetry={auto.retry}/></div>
