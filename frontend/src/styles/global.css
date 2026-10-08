@@ -271,3 +271,7 @@ tbody th.sticky{text-transform:none;letter-spacing:normal;font-size:inherit;colo
 .stepper .n{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--surface-alt);font-size:.8rem}
 .stepper li.current .n{background:var(--action);color:var(--action-text)}
 .notice{padding:12px 16px;border:1px solid var(--border);border-left:4px solid var(--action);border-radius:var(--radius);background:var(--surface-alt)}
+
+.more{margin-top:12px;border-top:1px solid var(--border);padding-top:8px}
+.more>summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:600}
+pre.code{white-space:pre-wrap;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-size:.85rem;overflow:auto}
