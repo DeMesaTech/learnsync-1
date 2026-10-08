@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 from typing import Literal
 from uuid import UUID
 
@@ -13,6 +14,7 @@ from app.features.assessments.standing import student_standing
 from app.features.teaching.access import teaching_offering
 from app.security import require_role
 
+from .attendance_export import attendance_table, to_attendance_pdf
 from .render import safe_filename, to_pdf, to_xlsx
 from .standing_pdf import to_standing_pdf
 from .tables import grade_table, local_stamp
@@ -38,6 +40,24 @@ def export_grades(offering_id: UUID, format: Literal["pdf", "xlsx"],
            "section_id": str(section_id) if section_id else None, "students": len(table["rows"])})
     db.commit()
     name = safe_filename(table["filename"] + ("-PREVIEW" if basis == "working" else "")) + f".{format}"
+    return Response(body, media_type=TYPES[format], headers={
+        "Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/teach/offerings/{offering_id}/exports/attendance")
+def export_attendance(offering_id: UUID, format: Literal["pdf", "xlsx"], section_id: uuid.UUID,
+                      start: date | None = None, end: date | None = None,
+                      actor=Depends(faculty), db: Session = Depends(get_db)):
+    """The teacher's own section: recorded dates as columns, a mark per student, and totals."""
+    offering = teaching_offering(db, offering_id, actor, write=False)   # own offering; closed terms stay readable
+    table = attendance_table(db, actor, offering, section_id, start, end)
+    body = to_attendance_pdf(table) if format == "pdf" else to_xlsx(table)
+    audit(db, actor, "attendance.exported", "offering", offering.id,
+          {"format": format, "section_id": str(section_id), "start": str(start) if start else None,
+           "end": str(end) if end else None, "dates": table["dates"], "students": len(table["rows"])})
+    db.commit()
+    name = safe_filename(table["filename"]) + f".{format}"
     return Response(body, media_type=TYPES[format], headers={
         "Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff"})

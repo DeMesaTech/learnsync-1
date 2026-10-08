@@ -29,7 +29,7 @@ def safe_filename(name):
 def to_xlsx(table):
     book = Workbook()
     sheet = book.active
-    sheet.title = "Grades"
+    sheet.title = table.get("sheet", "Grades")
     row = 1
     if table["banner"]:
         cell = sheet.cell(row=row, column=1, value=safe_cell(table["banner"]))
