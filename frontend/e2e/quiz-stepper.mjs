@@ -95,6 +95,20 @@ try{
   check('the copy has no dates and is not published',!!copy&&copy.published===null&&copy.draft.deadline===null&&copy.draft.questions.length===3);
   check('students do not see the copy',!(await call(student,'GET','/dashboard/student/todo')).data.todo.some(w=>w.title==='Copy of Quiz 1'));
 
+  // ---- C2: removing a question is undoable, and deleting asks with the safe choice first
+  await page.getByRole('button',{name:/^Questions/}).click();await page.getByRole('heading',{name:/^Question 3/}).waitFor();
+  await page.getByRole('button',{name:'Remove'}).first().click();
+  await page.getByText('Question 1 removed.').waitFor();
+  check('removing a question asks nothing and offers Undo',await page.getByRole('heading',{name:/^Question 3/}).count()===0&&await page.getByRole('button',{name:'Undo'}).count()===1);
+  await page.getByRole('button',{name:'Undo'}).click();
+  await page.getByRole('heading',{name:/^Question 3/}).waitFor();
+  check('Undo puts the question back',await page.getByRole('heading',{name:/^Question 3/}).count()===1);
+  await page.getByRole('button',{name:'Delete assessment'}).click();
+  await page.locator('dialog[data-confirm]').waitFor();
+  check('deleting asks first, and the focused default is Cancel',await page.evaluate(()=>document.activeElement?.hasAttribute('data-confirm-no')));
+  await page.locator('[data-confirm-no]').click();
+  check('declining keeps the assessment',(await call(page,'GET',`/teach/offerings/${O}/assessments`)).data.some(a=>a.draft?.title==='Copy of Quiz 1'));
+
   // ---- D: an activity is one short screen
   const act2=await newPage(browser,{state:F});
   await act2.goto(`/faculty/offerings/${O}/assessments/${activityId}/edit`);await act2.waitForLoadState('networkidle');

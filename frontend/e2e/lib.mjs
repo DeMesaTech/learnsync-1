@@ -67,3 +67,10 @@ export async function archiveTestContent(page,offering,{quiz,item}){
     if(quiz)await fetch(`/api/teach/offerings/${o}/assessments/${quiz}`,{method:'PATCH',headers:H,body:JSON.stringify({archived:true})});
     if(item)await fetch(`/api/teach/offerings/${o}/items/${item}`,{method:'PATCH',headers:H,body:JSON.stringify({archived:true})})},[offering,quiz,item]);
 }
+
+// Accept every confirmation the app asks for: the browser's native confirm() and the in-app confirmation dialog
+// (a <dialog data-confirm> whose accept button carries data-confirm-yes).
+export function autoConfirm(page){
+  page.on('dialog',d=>d.accept().catch(()=>{}));
+  page.addLocatorHandler(page.locator('dialog[data-confirm]'),async d=>{await d.locator('[data-confirm-yes]').click()});
+}

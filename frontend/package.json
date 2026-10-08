@@ -17,6 +17,7 @@
     "e2e:grading": "node e2e/grading.mjs",
     "e2e:setup": "node e2e/setup-wizard.mjs",
     "e2e:stepper": "node e2e/quiz-stepper.mjs",
+    "e2e:grades": "node e2e/grades-edit.mjs",
     "e2e:states": "node e2e/sweep-states.mjs",
     "e2e:gallery": "node e2e/gallery.mjs"
   },

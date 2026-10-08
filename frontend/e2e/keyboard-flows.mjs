@@ -1,7 +1,7 @@
 // Keyboard-ONLY walkthrough of core workflows. Every control is reached with Tab/Shift+Tab and used with
 // Space/Enter/Escape/typing; nothing is clicked or focused directly. Also records whether each stop has a visible
 // focus indicator. Runs against the dev stack (API 8001, web 5173); it creates its own throwaway quiz and item.
-import {launch,newPage,sessionFor} from './lib.mjs';
+import {launch,newPage,sessionFor,autoConfirm} from './lib.mjs';
 
 const O=process.env.OFFERING??'dbe0fd57-e56c-486d-be77-275dfb54b967';
 const results=[];const noRing=new Set();
@@ -31,8 +31,11 @@ const faculty=await sessionFor(browser,'faculty1@example.com');
 const student=await sessionFor(browser,'student1@example.com');
 const admin=await sessionFor(browser,'admin@example.com');
 let current=null;
-// native confirm() dialogs are declined unless {accept:true}: submitting a quiz must go through, publishing grades must not
-const open=async(state,opts={})=>{const {accept=false,...view}=opts;const p=await newPage(browser,{state,...view});p.on('dialog',d=>accept?d.accept():d.dismiss());current=p;return p};
+// confirmations (the in-app dialog) are declined unless {accept:true}: submitting a quiz must go through, publishing grades must not.
+// {manual:true} leaves them to the script.
+const open=async(state,opts={})=>{const {accept=false,manual=false,...view}=opts;const p=await newPage(browser,{state,...view});
+  if(!manual){if(accept)autoConfirm(p);else p.addLocatorHandler(p.locator('dialog[data-confirm]'),async d=>{await d.locator('[data-confirm-no]').click()})}
+  current=p;return p};
 
 try{
   // ---------- A. student answers and submits a quiz ----------
@@ -91,13 +94,22 @@ try{
 
   // ---------- C. gradebook: edit a score, reach the publish control ----------
   await tp.goto(`/faculty/offerings/${O}/gradebook`);await tp.getByRole('heading',{name:'Gradebook'}).waitFor();await tp.waitForLoadState('networkidle');
-  await tabTo(tp,d=>d.tag==='button'&&/^(Score .*, edit|Pending, edit score)$/.test(d.name),'a score cell');await press(tp,'Enter');
+  await tabTo(tp,named(/^Edit scores$/,'button'),'Edit scores');await press(tp,'Enter');
+  await tp.getByRole('button',{name:/^Save scores|^Save \d+ changed/}).waitFor();
+  check('Edit scores turns the cells into inputs and offers one Save',(await tp.locator('input.score-input').count())>0);
+  await tabTo(tp,d=>d.tag==='input'&&/score for/.test(d.name),'a score input');
+  check('a score input is reachable by keyboard and labelled with the assessment and student',/, score for /.test((await describe(tp)).name));
+  await tp.keyboard.type('1');
+  await tp.getByRole('button',{name:/^Save 1 changed score/}).waitFor();
+  check('typing a score enables the single Save and counts the change',true);
+  await tabTo(tp,named(/^Cancel$/,'button'),'Cancel');await press(tp,'Enter');
+  check('Cancel leaves edit mode without saving anything',(await tp.locator('input.score-input').count())===0);
+  // the next period to publish is shown; when everything is already published the periods sit under "All periods"
+  if(!await tp.getByRole('button',{name:/^Publish (Midterm|Finals|Course)/}).first().isVisible().catch(()=>false)){await tabTo(tp,d=>d.tag==='summary'&&/All periods/.test(d.name),'All periods');await press(tp,'Enter')}
+  await tabTo(tp,named(/^Publish (Midterm|Finals)/,'button'),'a Publish button');await press(tp,'Enter');
   await tp.locator('dialog[open]').waitFor();
-  check('a score cell opens an editor dialog that holds focus',(await describe(tp)).inDialog);
+  check('the publish control opens a review dialog that holds focus and publishes nothing yet',(await describe(tp)).inDialog&&(await tp.locator('dialog[open]').innerText()).includes('will be published or updated'));
   await press(tp,'Escape');await tp.locator('dialog[open]').waitFor({state:'detached'});
-  check('Escape dismisses the score editor and focus returns to the cell',(await describe(tp))?.tag==='button'&&/edit/.test((await describe(tp)).name));
-  await tabTo(tp,named(/Publish Midterm/,'button'),'Publish Midterm');await press(tp,'Enter');      // the confirm() is declined by this script
-  check('the publish control is reachable and asks for confirmation before publishing',(await tp.locator('dialog[open]').count())===0);
   await tp.goto(tp.url().replace('/gradebook','/class-standing'));await tp.getByRole('button',{name:'Download PDF'}).waitFor();
   await tabTo(tp,named(/Download PDF/,'button'),'Download PDF');
   check('the export buttons are reachable by keyboard',true);
@@ -131,7 +143,7 @@ try{
   await tp2.context().close();
 
   // ---------- E. dialog with a server-side error ----------
-  const ap=await open(admin);
+  const ap=await open(admin,{manual:true});
   await ap.goto('/admin/accounts');await ap.getByRole('button',{name:'Invite user'}).waitFor();
   await tabTo(ap,named(/^Invite user$/,'button'),'Invite user');await press(ap,'Enter');await ap.locator('dialog[open]').waitFor();
   await tabTo(ap,d=>d.inDialog&&/Full name/.test(d.name),'Full name');await ap.keyboard.type('Duplicate Person');
@@ -139,10 +151,14 @@ try{
   await tabTo(ap,named(/Send invitation/,'button'),'Send invitation');await press(ap,'Enter');
   await ap.locator('dialog [role=alert]').waitFor({timeout:5000});
   check('a server error appears as an alert inside the open dialog and nothing was sent',await ap.locator('dialog[open]').count()===1);
-  let asked='';ap.removeAllListeners('dialog');ap.once('dialog',d=>{asked=d.message();void d.dismiss()});
-  await press(ap,'Escape');check('Escape after typing asks before discarding, and declining keeps the dialog open',/Close without saving/.test(asked)&&await ap.locator('dialog[open]').count()===1);
-  ap.once('dialog',d=>{void d.accept()});
-  await press(ap,'Escape');check('Escape closes it once the discard is confirmed, and focus returns to the Invite button',(await describe(ap))?.name==='Invite user');
+  await press(ap,'Escape');await ap.locator('dialog[data-confirm]').waitFor();
+  const asked=await ap.locator('dialog[data-confirm]').innerText();
+  check('the confirmation holds focus, and its default is the safe choice (Cancel is first)',(await describe(ap)).inDialog&&/Keep editing/.test((await describe(ap)).name));
+  await ap.locator('[data-confirm-no]').click();await ap.locator('dialog[data-confirm]').waitFor({state:'detached'});
+  check('Escape after typing asks before discarding, and declining keeps the dialog open',/Close without saving/.test(asked)&&await ap.locator('dialog[open]').count()===1);
+  await press(ap,'Escape');await ap.locator('dialog[data-confirm]').waitFor();await ap.locator('[data-confirm-yes]').click();
+  await ap.locator('dialog[open]').waitFor({state:'detached'});
+  check('Escape closes it once the discard is confirmed, and focus returns to the Invite button',(await describe(ap))?.name==='Invite user');
   await ap.context().close();
 }catch(e){console.log('FAILED:',e.message.slice(0,200));results.push(false);
   if(current){console.log('FOCUS WAS ON:',JSON.stringify(await describe(current).catch(()=>null)));console.log('PAGE SAID:',(await current.locator('main').innerText().catch(()=>'')).slice(0,500));await current.screenshot({path:'../var/screens/keyboard-failure.png',fullPage:true}).catch(()=>{})}}

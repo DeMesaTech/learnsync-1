@@ -3,7 +3,7 @@
 // a quiz and a grading policy -> student studies, takes the quiz -> faculty publishes grades and exports
 // -> permission boundaries -> issue report lifecycle. Exits non-zero on the first failed check.
 import {readFileSync} from 'node:fs';
-import {launch,newPage,shot,axe,layout,BASE} from './lib.mjs';
+import {launch,newPage,shot,axe,layout,BASE,autoConfirm} from './lib.mjs';
 
 const ADMIN={email:process.env.ADMIN_EMAIL,password:process.env.ADMIN_PASSWORD};
 const MAILPIT=process.env.MAILPIT??'http://127.0.0.1:18025';
@@ -40,7 +40,7 @@ async function mailLink(to,route){
 }
 
 const browser=await launch();
-const ctx=async(who,opts={})=>{const p=await newPage(browser,opts);p.on('dialog',d=>d.accept());p.who=who;return p};
+const ctx=async(who,opts={})=>{const p=await newPage(browser,opts);autoConfirm(p);p.who=who;return p};
 try{
   await fetch(`${MAILPIT}/api/v1/messages`,{method:'DELETE'});
 
@@ -169,10 +169,12 @@ try{
 
   // ---------- 6. the teacher publishes grades and exports them ----------
   await teach.goto(`/faculty/offerings/${O}/gradebook`);
-  await teach.getByRole('button',{name:'Publish Midterm'}).click();
+  await teach.getByRole('button',{name:/^Publish Midterm/}).click();                  // review first ...
+  await teach.locator('dialog').getByText(/will be published or updated/).waitFor();
+  await teach.locator('dialog').getByRole('button',{name:/^Publish \d+ grade/}).click();   // ... then publish
   await teach.locator('dialog').getByText(/1 published/).waitFor();
   check('the publication summary says one grade was published',true);
-  await teach.getByRole('button',{name:'Close dialog'}).click();
+  await teach.locator('dialog').getByRole('button',{name:'Done'}).click();
   const grade=(await call(stud,'GET',`/learn/offerings/${O}/results`)).data;
   check('the student sees the published midterm grade',grade.grades.length===1&&grade.grades[0].period==='midterm'&&Number(grade.grades[0].grade)===100,JSON.stringify(grade.grades));
   await teach.goto(`/faculty/offerings/${O}/class-standing`);

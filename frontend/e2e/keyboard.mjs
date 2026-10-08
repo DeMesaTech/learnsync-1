@@ -1,5 +1,5 @@
 // Keyboard and theme behaviour: skip link, dialog focus restoration, visible focus, live theme switching.
-import {launch,newPage,sessionFor} from './lib.mjs';
+import {launch,newPage,sessionFor,autoConfirm} from './lib.mjs';
 const results=[];
 const check=(label,ok,detail='')=>{results.push(ok);console.log(`${ok?'PASS':'FAIL'} ${label}${detail?' - '+detail:''}`)};
 const browser=await launch();
@@ -48,7 +48,7 @@ await page.getByLabel('Theme').selectOption('system');await page.waitForTimeout(
 // signing out ends the session and leaves nothing behind for the Back button
 const out=await newPage(browser,{state:await sessionFor(browser,'student1@example.com')});
 await out.goto('/student');await out.getByRole('heading',{name:/keep learning/}).waitFor();
-out.on('dialog',d=>d.accept());
+autoConfirm(out);
 await out.getByRole('button',{name:'Sign out'}).click();await out.waitForURL(/\/login/);
 await out.goBack();await out.waitForLoadState('networkidle');
 check('after sign-out the Back button does not show the dashboard',await out.getByRole('heading',{name:/keep learning/}).count()===0&&/\/login/.test(out.url()));
