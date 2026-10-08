@@ -33,3 +33,6 @@ Confirmations and undo (Phase 3): confirm only what cannot be undone or what stu
 
 ## Feedback toasts and celebration
 Use `useToast()` for a one-line result of an action that is not already obvious from the page (plain, 5 seconds) and `useUndo()` for something that can be put back (Undo, 10 seconds). One toast at a time, bottom left. `celebrate()` is only for a finished lesson or quiz.
+
+## File and link pages
+A file page shows the PDF in a frame or the picture inline (never anything else), then a Download button with the size; a link page is a card with the site name, the teacher's note, one "Open the link" button that opens a new tab with `rel="noopener noreferrer"`, and the address in small text. All three kinds end with the same "Mark lesson / file / link as complete" button and the same Next item.
