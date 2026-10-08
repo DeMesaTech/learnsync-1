@@ -597,7 +597,9 @@ def test_unpublish_keeps_a_newer_draft_the_teacher_was_editing(graded):
 
 def test_an_assessment_with_attempts_scores_or_a_released_result_cannot_be_unpublished(db, graded):
     quiz = make_quiz(graded)
+    assert graded["fac"].get(a(graded, f"/{quiz['aid']}")).json()["can_unpublish"] is True
     attempt = start(graded["st1"], graded, quiz["aid"]).json()
+    assert graded["fac"].get(a(graded, f"/{quiz['aid']}")).json()["can_unpublish"] is False     # the page hides the button
     refused = graded["fac"].post(a(graded, f"/{quiz['aid']}/unpublish"))
     assert refused.status_code == 409 and refused.json()["error"]["code"] == "has_history"
     submit(graded["st1"], graded, attempt["id"], quiz["correct"])

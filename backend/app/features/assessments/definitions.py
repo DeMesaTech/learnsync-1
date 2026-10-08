@@ -80,6 +80,7 @@ def assessment_view(db, a):
     return {"id": a.id, "kind": a.kind, "archived": a.archived,
             "section_ids": sorted(section_ids_of(db, a.id), key=str),
             "has_attempts": has_attempts(db, a.id) if a.kind == "online_quiz" else False,
+            "can_unpublish": bool(published) and not a.archived and not has_activity(db, a.id),
             "published": rev_view(db, published) if published else None,
             "draft": rev_view(db, draft) if draft else None}
 
@@ -193,15 +194,19 @@ def discard_draft(db, actor, assessment, expected_counter):
     db.commit()
 
 
+def has_activity(db, assessment_id):
+    """Anything a student or the teacher has recorded against this assessment."""
+    return any(db.scalar(select(model.id).where(model.assessment_id == assessment_id).limit(1)) is not None
+               for model in (QuizAttempt, ActivitySubmission, AssessmentScore, ResultPublication, SubmissionPermission))
+
+
 def unpublish(db, actor, offering, assessment):
     """Pull a published assessment back to a draft, but only while nothing depends on it: no attempt, upload,
     recorded score, released result or granted exception. Anything with history is archived instead."""
     published = revision(db, assessment.id, "published")
     if not published:
         fail(409, "not_published", "This assessment is not published.")
-    used = any(db.scalar(select(model.id).where(model.assessment_id == assessment.id).limit(1)) is not None
-               for model in (QuizAttempt, ActivitySubmission, AssessmentScore, ResultPublication, SubmissionPermission))
-    if used:
+    if has_activity(db, assessment.id):
         fail(409, "has_history", "Students have already worked on this or results exist, so it cannot be "
                                  "unpublished. Archive it instead.")
     start_draft(db, actor, assessment)          # keeps any newer draft the teacher was already editing
