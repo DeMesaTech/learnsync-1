@@ -45,7 +45,7 @@ for(const scheme of ['light','dark'])for(const width of [1280,375]){
       const names=await page.locator('main button').evaluateAll(bs=>bs.map(b=>b.textContent.trim()).filter(t=>/^(New|Invite|Add|Draft|Create|Import|Grant|Record|Allow)/.test(t)));
       for(const name of [...new Set(names)]){
         const button=page.locator('main button',{hasText:name}).first();
-        if(!await button.isEnabled())continue;
+        if(!await button.isVisible()||!await button.isEnabled())continue;   // a button inside a collapsed section cannot open a dialog
         await button.click();
         const opened=await page.locator('dialog[open]').waitFor({timeout:1500}).then(()=>true).catch(()=>false);
         if(opened){await page.waitForTimeout(200);await audit(page,`${role} dialog "${name}" on ${path.replace(O,'O')}`,scheme,width);if(scheme==='light'&&width===1280)covered.push(`${role} dialog "${name}"`);await page.keyboard.press('Escape');await page.locator('dialog[open]').waitFor({state:'detached'}).catch(()=>{})}
