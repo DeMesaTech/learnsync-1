@@ -1,4 +1,5 @@
 import json
+from datetime import UTC
 
 from helpers import Api, learn, make_account, t
 from test_activities import score, submit_pdf
@@ -160,7 +161,7 @@ def test_the_todo_page_lists_everything_the_dashboard_summarises_and_only_for_st
 
 def test_todo_order_puts_open_work_first_and_never_offers_upcoming_work_as_the_next_step(graded):
     from datetime import datetime, timedelta, timezone
-    iso = lambda days: (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    iso = lambda days: (datetime.now(UTC) + timedelta(days=days)).isoformat()
     make_manual(graded, "activity", "Later due", points="10", category_key="activity", deadline=iso(5))
     make_manual(graded, "activity", "No deadline", points="10", category_key="activity")
     make_manual(graded, "activity", "Due first", points="10", category_key="activity", deadline=iso(1))
@@ -206,3 +207,29 @@ def test_the_admin_setup_guide_is_derived_and_disappears_when_complete():
     other = {"id": "t2", "sections": 4, "offerings": 4, "students": 9}      # only the FIRST term counts
     steps = {x["key"]: x for x in setup_steps([first_empty, other], 3, 1)}
     assert not steps["sections"]["done"] and not steps["offerings"]["done"] and not steps["students"]["done"]
+
+
+def test_the_review_queue_lists_waiting_activity_submissions_across_subjects_oldest_first(db, graded):
+    from helpers import Api
+    activity = make_manual(graded, "activity", "Poster", points="10", category_key="activity")
+    assert graded["fac"].get("/api/dashboard/faculty/review").json() == {"items": [], "total": 0}
+    assert submit_pdf(graded["st1"], graded, activity).status_code in (200, 201)
+    assert submit_pdf(graded["st2"], graded, activity).status_code in (200, 201)
+    queue = graded["fac"].get("/api/dashboard/faculty/review").json()
+    assert queue["total"] == 2 and [i["student"] for i in queue["items"]] == [graded["students"][0].display_name, graded["students"][1].display_name]
+    first = queue["items"][0]
+    assert first["title"] == "Poster" and first["link"].endswith(f"/assessments/{activity}/scores") and first["late"] is False
+    assert first["subject"] and first["submitted_at"] <= queue["items"][1]["submitted_at"]
+    assert score(graded, activity, graded["students"][0], 9).status_code == 200                    # graded work leaves the queue
+    after = graded["fac"].get("/api/dashboard/faculty/review").json()
+    assert [i["student"] for i in after["items"]] == [graded["students"][1].display_name]
+    stranger = Api(make_account(db, "reviewer-other@example.com", "faculty").email)
+    assert stranger.get("/api/dashboard/faculty/review").json() == {"items": [], "total": 0}      # never someone else's work
+    assert graded["st1"].get("/api/dashboard/faculty/review").status_code == 403
+    assert graded["admin"].get("/api/dashboard/faculty/review").status_code == 403
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    assert TestClient(app).get("/api/dashboard/faculty/review").status_code == 401
+    assert graded["admin"].post(f"/api/terms/{graded['term']['id']}/close").status_code in (200, 204)
+    assert graded["fac"].get("/api/dashboard/faculty/review").json()["total"] == 0                 # a closed term has nothing to review

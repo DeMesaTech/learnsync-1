@@ -5,7 +5,7 @@ from app.db import get_db
 from app.security import require_role
 
 from .admin import admin_dashboard
-from .faculty import faculty_dashboard
+from .faculty import faculty_dashboard, review_queue
 from .student import student_dashboard, student_todo
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
@@ -25,6 +25,11 @@ def student_todo_list(actor=Depends(student), db: Session = Depends(get_db)):
 @router.get("/faculty")
 def faculty_home(actor=Depends(faculty), db: Session = Depends(get_db)):
     return faculty_dashboard(db, actor)
+
+
+@router.get("/faculty/review")
+def faculty_review(actor=Depends(faculty), db: Session = Depends(get_db)):
+    return review_queue(db, actor)
 
 
 @router.get("/admin")

@@ -96,3 +96,30 @@ def faculty_dashboard(db, teacher):
                        "to_grade": sum(c["to_grade"] for c in cards),
                        "needs_review": sum(c["needs_review"] for c in cards),
                        "drafts": sum(c["drafts_content"] + c["drafts_assessments"] for c in cards)}}
+
+
+def review_queue(db, teacher):
+    """Every activity submission waiting for a grade, across the teacher's own open-term subjects, oldest first.
+    The cross-subject 'To review' page; the dashboard card is the top of the same list."""
+    rows = db.execute(select(Offering).join(AcademicTerm, AcademicTerm.id == Offering.term_id)
+                      .join(Subject, Subject.id == Offering.subject_id)
+                      .where(Offering.faculty_id == teacher.id, AcademicTerm.status == "open")
+                      .order_by(Subject.code)).scalars().all()
+    summaries = {s["id"]: s for s in offering_summary(db, rows)}
+    items = []
+    for offering in rows:
+        for a in db.scalars(select(Assessment).where(Assessment.offering_id == offering.id, Assessment.archived.is_(False),
+                                                     Assessment.kind == "activity").order_by(Assessment.created_at)):
+            rev = revision(db, a.id, "published")
+            if not rev:
+                continue
+            link = f"/faculty/offerings/{offering.id}/assessments/{a.id}/scores"
+            for r in submissions.faculty_rows(db, offering, a, targeted_students(db, offering, a)):
+                if r["latest"] and not r["graded_current_version"]:
+                    items.append({"offering_id": offering.id, "assessment_id": a.id, "title": rev.title,
+                                  "subject": summaries[offering.id]["subject"]["code"],
+                                  "student_id": r["student_id"], "student": r["student"],
+                                  "submitted_at": r["latest"]["submitted_at"], "late": r["latest"]["is_late"],
+                                  "resubmitted": bool(r["new_version_since_grading"]), "link": link})
+    items.sort(key=lambda x: x["submitted_at"])
+    return {"items": items, "total": len(items)}
