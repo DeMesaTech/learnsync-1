@@ -281,3 +281,16 @@ pre.code{white-space:pre-wrap;background:var(--surface-alt);border:1px solid var
 .toast{display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;background:var(--text);color:var(--surface);border-radius:var(--radius);box-shadow:0 8px 24px rgba(0,0,0,.3)}
 .toast button{min-height:44px;background:transparent;color:inherit;border-color:currentColor}
 dialog[data-confirm]{width:min(460px,calc(100vw - 24px))}
+
+/* ---- attendance grid ---- */
+.att-grid th,.att-grid td{text-align:center;padding:4px}
+.att-grid th[scope=row]{text-align:left;white-space:nowrap}
+.att-head{display:grid;gap:4px;justify-items:center;min-width:104px}
+.att-head select{min-height:44px;font-size:.8rem}
+.att-cell{width:44px;height:44px;min-height:44px;padding:0;border-radius:8px;font-weight:700;font-size:1rem}
+.att-cell.present{background:color-mix(in srgb,var(--success) 20%,var(--surface));border-color:var(--success);color:var(--text)}
+.att-cell.late{background:color-mix(in srgb,var(--warning) 22%,var(--surface));border-color:var(--warning);color:var(--text)}
+.att-cell.absent{background:color-mix(in srgb,var(--danger) 20%,var(--surface));border-color:var(--danger);color:var(--text)}
+.att-cell.excused{background:var(--surface-alt);border-style:dashed;color:var(--text)}
+.att-cell.none{color:var(--muted)}
+.att-cell.err{outline:2px solid var(--danger);outline-offset:1px}
