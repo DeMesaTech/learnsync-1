@@ -4,6 +4,7 @@ import {useQuery} from '@tanstack/react-query';
 import {api,post,send,errorText} from '../../app/api';
 import {queryClient,useAuth} from '../../app/providers';
 import {useConfirm} from '../../components/confirm';
+import {useUndo} from '../../components/undo';
 import type {OfferingSummary} from '../academics/types';
 import {DraftNotices,SaveIndicator,draftKey,useAutosave,useFlushOnLeave} from '../teaching/autosave';
 import {nodeLabels,type SyllabusState} from '../teaching/types';
@@ -71,7 +72,7 @@ function PasteQuestions({offeringId,locked,onAdd}:{offeringId:string;locked:bool
 }
 
 function Editor({offering,assessment,refetch}:{offering:OfferingSummary;assessment:Assessment;refetch:()=>void}){
-  const ask=useConfirm();
+  const ask=useConfirm();const offer=useUndo();
   const draft=assessment.draft!;
   const {session}=useAuth();
   const navigate=useNavigate();
@@ -102,7 +103,7 @@ function Editor({offering,assessment,refetch}:{offering:OfferingSummary;assessme
   async function publish(){
     setMessage('');
     if(!await auto.flush()){setMessage('Resolve the save problem above before publishing.');return}
-    try{await post(`${base}/draft/publish`,{expected_counter:auto.counter()});auto.discardRecovered();queryClient.invalidateQueries({queryKey:['assessments',offering.id]});navigate(back)}
+    try{await post(`${base}/draft/publish`,{expected_counter:auto.counter()});auto.discardRecovered();queryClient.invalidateQueries({queryKey:['assessments',offering.id]});offer('Published.');navigate(back)}
     catch(e){setMessage(errorText(e))}
   }
   async function markReviewed(){
@@ -123,10 +124,14 @@ function Editor({offering,assessment,refetch}:{offering:OfferingSummary;assessme
     try{await send('PATCH',base,patch);queryClient.invalidateQueries({queryKey:['assessments',offering.id]});refetch()}catch(e){setMessage(errorText(e))}
   }
   async function unpublish(){
-    if(!await ask({title:'Unpublish this?',message:'Students stop seeing it right away. Your content stays as a draft and you can publish it again. This only works while no student has started it and no result exists.',yes:'Unpublish'}))return;
     await auto.flush();
-    try{await post(`${base}/unpublish`,{});await queryClient.invalidateQueries({queryKey:['assessments',offering.id]});window.location.reload()}
-    catch(e){setMessage(errorText(e))}
+    try{
+      const view=await post<Assessment>(`${base}/unpublish`,{});
+      auto.discardRecovered();await queryClient.invalidateQueries({queryKey:['assessments',offering.id]});
+      offer(`“${view.draft?.title||'This'}” is unpublished. Students no longer see it.`,async()=>{
+        try{await post(`${base}/draft/publish`,{expected_counter:view.draft!.counter});await queryClient.invalidateQueries({queryKey:['assessments',offering.id]})}catch{}});
+      navigate(back);
+    }catch(e){setMessage(errorText(e))}
   }
   async function duplicate(){
     setMessage('');
@@ -161,7 +166,7 @@ function Editor({offering,assessment,refetch}:{offering:OfferingSummary;assessme
 
   const manage=<section className="panel"><h3>Manage</h3>
     <div className="actions"><button type="button" onClick={duplicate}>Duplicate this {KIND_LABEL[assessment.kind].toLowerCase()}</button>
-      {assessment.published&&!assessment.archived&&<button type="button" onClick={unpublish}>Unpublish</button>}
+      {assessment.can_unpublish&&<button type="button" onClick={unpublish}>Unpublish</button>}
       <button type="button" onClick={()=>settings({archived:!assessment.archived})}>{assessment.archived?'Restore assessment':'Archive assessment'}</button></div>
     <p className="muted">Unpublish returns it to a draft while nobody has started it. Once students have worked on it, archive it instead: archiving removes it from students and from grade calculations, and records are kept. A duplicate is a hidden draft without dates.</p></section>;
 

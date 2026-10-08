@@ -1,12 +1,13 @@
 import type React from 'react';
 import {useEffect,useRef,useState} from 'react';
 import {Link,useNavigate,useOutletContext,useSearchParams} from 'react-router-dom';
-import {ClassworkTypes,FACULTY_CATS,catOf,CATS,type Cat} from '../../components/ClassworkTypes';
+import {ClassworkTypes,FACULTY_CATS,catOf,catOfKind,CATS,type Cat} from '../../components/ClassworkTypes';
 import {useHere} from '../../components/origin';
 import {useQuery} from '@tanstack/react-query';
 import {api,send,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
 import type {OfferingSummary} from '../academics/types';
+import {useUndo} from '../../components/undo';
 import {GenerateDialog} from '../study/Generate';
 import {NewDialog,assessmentStatus,assessmentTitle,usePolicy} from '../assessments/Assessments';
 import {detail as workDetail} from '../assessments/Work';
@@ -15,7 +16,7 @@ import {KIND,NewItemDialog,itemTitle,stateLabel,useNodes} from './Content';
 import {groupByNode,type Item,type LearnItem,type LearnSyllabus,type Outline,type SyllabusState} from './types';
 
 type Create={type:'item';kind:Item['kind']}|{type:'assessment';kind:Kind}|{type:'ai'}|null;
-interface Row{cat:Cat;key:string;type:'item'|'assessment';id:string;title:string;label:string;anchor:string|null;archived:boolean;status:string;published:boolean;to:string;meta:string}
+interface Row{canUnpublish:boolean;pending:boolean;cat:Cat;key:string;type:'item'|'assessment';id:string;title:string;label:string;anchor:string|null;archived:boolean;status:string;published:boolean;to:string;meta:string}
 
 const CREATE:[string,Create|'stream'][]=[['Lesson',{type:'item',kind:'lesson'}],['File',{type:'item',kind:'file'}],['Link',{type:'item',kind:'reference'}],
   ['Quiz',{type:'assessment',kind:'online_quiz'}],['Paper quiz',{type:'assessment',kind:'offline_quiz'}],['Activity',{type:'assessment',kind:'activity'}],['Examination',{type:'assessment',kind:'exam'}],
@@ -32,6 +33,7 @@ export function FacultyClasswork(){
   const syllabus=useQuery({queryKey:['syllabus',offering.id],queryFn:()=>api<SyllabusState>(`/teach/offerings/${offering.id}/syllabus`)});
   const nodes=useNodes(offering.id);
   const {policy}=usePolicy(offering.id);
+  const offer=useUndo();
   const [create,setCreate]=useState<Create>(null);
   const [search,setSearch]=useState('');const [archived,setArchived]=useState(false);
   const cat=catOf(useSearchParams()[0].get('type'),FACULTY_CATS);
@@ -47,14 +49,14 @@ export function FacultyClasswork(){
   const choose=(c:Create|'stream')=>{if(menu.current)menu.current.open=false;if(c==='stream')navigate(`${base}/stream`);else setCreate(c)};
 
   const rows:Row[]=[
-    ...(items.data??[]).map(i=>({cat:'lesson' as Cat,key:'i'+i.id,type:'item' as const,id:i.id,title:itemTitle(i),label:KIND[i.kind],anchor:(i.published??i.draft)?.anchor_node_id??null,archived:i.archived,
+    ...(items.data??[]).map(i=>({canUnpublish:false,pending:!!i.draft,cat:'lesson' as Cat,key:'i'+i.id,type:'item' as const,id:i.id,title:itemTitle(i),label:KIND[i.kind],anchor:(i.published??i.draft)?.anchor_node_id??null,archived:i.archived,
       status:stateLabel(i),published:!!i.published,to:`${base}/content/${i.id}/edit`,meta:`${KIND[i.kind]}${i.section_ids.length>0?` · ${i.section_ids.length} section${i.section_ids.length===1?'':'s'}`:''}`})),
     ...(assessments.data??[]).map(a=>{const rev=a.draft??a.published;
-      return {cat:(a.kind==='online_quiz'||a.kind==='offline_quiz'?'quiz':a.kind==='exam'?'exam':'activity') as Cat,key:'a'+a.id,type:'assessment' as const,id:a.id,title:assessmentTitle(a),label:KIND_LABEL[a.kind],anchor:rev?.anchor_node_id??null,archived:a.archived,status:assessmentStatus(a),published:!!a.published,
+      return {canUnpublish:a.can_unpublish,pending:!!a.draft,cat:catOfKind(a.kind),key:'a'+a.id,type:'assessment' as const,id:a.id,title:assessmentTitle(a),label:KIND_LABEL[a.kind],anchor:rev?.anchor_node_id??null,archived:a.archived,status:assessmentStatus(a),published:!!a.published,
         to:a.published?`${base}/assessments/${a.id}/scores`:`${base}/assessments/${a.id}/edit`,
         meta:`${KIND_LABEL[a.kind]}${rev?.ai_generated?` · AI draft${rev.reviewed?' reviewed':' needs review'}`:''}${rev?.include_in_grade?` · ${fmt(rev.max_points??0)} pts`:' · not graded'}${a.published?.deadline?` · due ${new Date(a.published.deadline).toLocaleDateString()}`:''}`}})];
   const match=(r:Row)=>r.title.toLowerCase().includes(search.trim().toLowerCase());
-  const byStatus=(r:Row,k:'all'|'published'|'draft')=>k==='all'||(k==='published'?r.published:!r.published);
+  const byStatus=(r:Row,k:'all'|'published'|'draft')=>k==='all'||(k==='published'?r.published&&!r.pending:!r.published||r.pending);   // Drafts: never published, or a newer draft waiting to be published
   const shown=(r:Row)=>r.cat===cat&&(archived||!r.archived)&&match(r)&&byStatus(r,status);
   const outline=syllabus.data?.draft?.outline??syllabus.data?.published?.outline;
   const known=new Set(nodes.map(n=>n.id));
@@ -69,6 +71,16 @@ export function FacultyClasswork(){
       await queryClient.invalidateQueries({queryKey:['items',offering.id]});setMoved(`Moved “${row.title}” ${step<0?'up':'down'} to position ${visible.indexOf(row)+step+1} of ${visible.length}.`)}
     catch(e){setMoved(errorText(e));queryClient.invalidateQueries({queryKey:['items',offering.id]})}
   }
+  async function unpublish(r:Row){
+    try{
+      const view=await send<Assessment>('POST',`/teach/offerings/${offering.id}/assessments/${r.id}/unpublish`,{});
+      await Promise.all([queryClient.invalidateQueries({queryKey:['assessments',offering.id]}),queryClient.invalidateQueries({queryKey:['assessment',r.id]})]);
+      offer(`“${r.title}” is unpublished. Students no longer see it.`,async()=>{
+        try{await send('POST',`/teach/offerings/${offering.id}/assessments/${r.id}/draft/publish`,{expected_counter:view.draft!.counter});
+          await queryClient.invalidateQueries({queryKey:['assessments',offering.id]})}
+        catch(e){setMoved(errorText(e))}})}
+    catch(e){setMoved(errorText(e))}
+  }
   const created=(to:string)=>{setCreate(null);queryClient.invalidateQueries({queryKey:['items',offering.id]});queryClient.invalidateQueries({queryKey:['assessments',offering.id]});navigate(to)};
 
   const stranded=rows.find(r=>r.type==='item'&&r.anchor&&!known.has(r.anchor));   // its topic left the syllabus: fix it before reordering
@@ -81,7 +93,7 @@ export function FacultyClasswork(){
         {items.length>1&&!closed&&!stranded&&<button type="button" className="linklike" aria-pressed={reorder===n.id} onClick={()=>setReorder(reorder===n.id?null:n.id)}>{reorder===n.id?'Done reordering':'Reorder'}</button>}</header>
       {n.rows.length>0&&<ul className="seq compact">{n.rows.map(r=><li key={r.key}>
         <span className="grow"><Link to={r.to}>{r.title}</Link><span className="muted">{r.meta}</span></span>
-        <span className={r.published&&!r.archived?'badge done':'badge'}>{r.status}</span>
+        <span className={r.published&&!r.archived?'badge done':'badge'}>{r.status}</span>{r.canUnpublish&&!closed&&<button type="button" className="linklike" onClick={()=>unpublish(r)}>Unpublish</button>}
         {reorder===n.id&&r.type==='item'&&<span className="actions"><button type="button" aria-label={`Move ${r.title} up`} disabled={closed||items.indexOf(r)===0} onClick={()=>move(n,items,r,-1)}>↑</button>
           <button type="button" aria-label={`Move ${r.title} down`} disabled={closed||items.indexOf(r)===items.length-1} onClick={()=>move(n,items,r,1)}>↓</button></span>}</li>)}</ul>}
       {n.kids.map(k=>branch(k,depth+1))}</section>};
@@ -98,12 +110,13 @@ export function FacultyClasswork(){
         <button key={k} type="button" className={status===k?'on':''} aria-pressed={status===k} onClick={()=>setStatuses({...statuses,[cat]:k})}>{l} <span className="muted">{count(k)}</span></button>)}</div></div>
     <details className="more"><summary>Search and archived</summary><div className="actions"><label>Search<input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Title"/></label>
       <label className="inline"><input type="checkbox" checked={archived} onChange={e=>setArchived(e.target.checked)}/> Show archived</label></div></details>
+    {moved&&<p role="status" className="muted">{moved}</p>}
     {(items.isPending||assessments.isPending)?<p>Loading…</p>:items.error||assessments.error?<p role="alert">{(items.error??assessments.error)!.message}</p>:
       tree.length===0?<section className="panel"><h2>{search||status!=='all'?'Nothing matches':`No ${label.toLowerCase()} yet`}</h2><p>{search||status!=='all'?'Change the search or the filter.':'Use Create to add one.'}</p></section>:
-      <>{moved&&<p role="status" className="muted">{moved}</p>}
+      <>
       {stranded&&<p className="warn" role="status">Items cannot be reordered because some are attached to a topic that is no longer in the syllabus. <Link to={stranded.to}>Open “{stranded.title}”</Link> and choose a current topic.</p>}
       {tree.length===1&&tree[0].id==='other'?<ul className="seq compact" aria-label={label}>{tree[0].rows.map(r=><li key={r.key}><span className="grow"><Link to={r.to}>{r.title}</Link><span className="muted">{r.meta}</span></span>
-        <span className={r.published&&!r.archived?'badge done':'badge'}>{r.status}</span></li>)}</ul>:tree.map(n=>branch(n,0))}</>}
+        <span className={r.published&&!r.archived?'badge done':'badge'}>{r.status}</span>{r.canUnpublish&&!closed&&<button type="button" className="linklike" onClick={()=>unpublish(r)}>Unpublish</button>}</li>)}</ul>:tree.map(n=>branch(n,0))}</>}
     {create?.type==='item'&&<NewItemDialog offering={offering} nodes={nodes} kind={create.kind} onClose={()=>setCreate(null)} onCreated={i=>created(`${base}/content/${i.id}/edit`)}/>}
     {create?.type==='assessment'&&<NewDialog offering={offering} kind={create.kind} onClose={()=>setCreate(null)} onCreated={a=>created(`${base}/assessments/${a.id}/edit`)}/>}
     {create?.type==='ai'&&<GenerateDialog offering={offering} onClose={()=>setCreate(null)} onCreated={a=>created(`${base}/assessments/${a.id}/edit`)}/>}

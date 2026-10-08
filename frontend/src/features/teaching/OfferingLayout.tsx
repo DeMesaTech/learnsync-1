@@ -2,6 +2,8 @@ import {Link,NavLink,Outlet,useLocation,useMatch,useParams} from 'react-router-d
 import {useQuery} from '@tanstack/react-query';
 import {api} from '../../app/api';
 import type {OfferingSummary} from '../academics/types';
+import {ClassworkTypes,FACULTY_CATS,catOfKind} from '../../components/ClassworkTypes';
+import type {Assessment} from '../assessments/types';
 import type {SyllabusState} from './types';
 
 interface Tab{label:string;to:string;segments:string[];hidden?:boolean}
@@ -19,6 +21,18 @@ function MainTabs({role,base}:{role:'faculty'|'student';base:string}){
       {label:'Grades',to:`${base}/grades`,segments:['grades','results','progress']}];
   return <nav className="tabs" aria-label="Subject sections">{tabs.filter(t=>!t.hidden).map(t=>{const on=t.segments.includes(segment);
     return <Link key={t.label} to={t.to} className={on?'active':undefined} aria-current={on?'page':undefined}>{t.label}</Link>})}</nav>;
+}
+
+/** The teacher's lesson and assessment editor and score pages keep the Classwork pills in view. */
+function EditorPills({offeringId}:{offeringId:string}){
+  const lesson=useMatch('/faculty/offerings/:offeringId/content/:itemId/edit');
+  const work=useMatch('/faculty/offerings/:offeringId/assessments/:assessmentId/:page');
+  const id=work&&(work.params.page==='edit'||work.params.page==='scores')?work.params.assessmentId:undefined;
+  const query=useQuery({queryKey:['assessment',id],queryFn:()=>api<Assessment>(`/teach/offerings/${offeringId}/assessments/${id}`),enabled:!!id});
+  const base=`/faculty/offerings/${offeringId}`;
+  if(lesson)return <ClassworkTypes base={base} cats={FACULTY_CATS} current="lesson"/>;
+  if(id&&query.data)return <ClassworkTypes base={base} cats={FACULTY_CATS} current={catOfKind(query.data.kind)}/>;
+  return null;
 }
 
 /** Shared header + tabs for one subject. role selects the route prefix and tab set. */
@@ -43,6 +57,7 @@ export function OfferingLayout({role}:{role:'faculty'|'student'}){
         <nav className="tabs" aria-label="Subject sections"><NavLink to={`/student/study-buddy?subject=${query.data.id}`}>Study buddy chats</NavLink><NavLink to={`${base}/results`}>Grades & results</NavLink></nav></>:<>
       {needsSetup&&<p className="notice" role="status"><strong>This subject is not set up yet.</strong> A guided setup takes a few minutes. <Link className="touch" to={`${base}/setup`}>Set up this subject</Link></p>}
       {!setup&&<MainTabs role={role} base={base}/>}</>}
+      {role==='faculty'&&!setup&&<EditorPills offeringId={query.data.id}/>}
       <Outlet context={{offering:query.data}}/>
     </>}
   </>;
