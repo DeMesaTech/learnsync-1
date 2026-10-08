@@ -537,7 +537,7 @@ def test_withdrawn_student_gets_no_course_content(course):
     st1 = course["st1"]
     assert st1.get(learn(course, f"/items/{item['id']}")).status_code == 200
     s1 = course["students"][0]
-    course["admin"].delete(f"/api/sections/{course['sec_a']['id']}/members/{s1.id}")
+    course["admin"].delete(f"/api/sections/{course['sec_a']['id']}/members/{s1.id}?reason=Left%20the%20programme")
     for path in ("/syllabus", "/items", f"/items/{item['id']}", "/announcements"):
         assert st1.get(learn(course, path)).status_code == 404, path
     # the subject is still listed (labelled withdrawn) so the student keeps their history

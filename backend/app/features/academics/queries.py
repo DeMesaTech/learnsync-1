@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from app.errors import fail
 from app.features.accounts.models import Account
@@ -71,6 +71,54 @@ def section_members(db, section_id):
         .order_by(Account.display_name))
     return [{"student_id": r.id, "display_name": r.display_name, "email": r.email,
              "student_number": r.student_number} for r in rows]
+
+
+def section_roster_page(db, section_id, page, page_size, search, status):
+    """Students of a section, a page at a time, with search and a status filter (active, withdrawn, all)."""
+    if not db.get(Section, section_id):
+        fail(404, "not_found", "Section not found.")
+    query = (select(Account.id, Account.display_name, Account.email, Account.student_number, SectionMember.status)
+             .join(SectionMember, SectionMember.student_id == Account.id)
+             .where(SectionMember.section_id == section_id))
+    if status in ("active", "withdrawn"):
+        query = query.where(SectionMember.status == status)
+    query = _search(query, search)
+    total = db.scalar(select(func.count()).select_from(query.subquery()))
+    rows = db.execute(query.order_by(Account.display_name, Account.id)
+                      .limit(page_size).offset((page - 1) * page_size))
+    return {"total": total, "page": page, "page_size": page_size,
+            "items": [{"student_id": r.id, "display_name": r.display_name, "email": r.email,
+                       "student_number": r.student_number, "status": r.status} for r in rows]}
+
+
+def section_candidates(db, section_id, page, page_size, search, account="all"):
+    """Students who could be added: not deactivated and not already active in any section of this term
+    (a student has one active section per term; withdraw them first to move them)."""
+    section = db.get(Section, section_id)
+    if not section:
+        fail(404, "not_found", "Section not found.")
+    placed = select(SectionMember.student_id).join(Section, Section.id == SectionMember.section_id).where(
+        Section.term_id == section.term_id, SectionMember.status == "active")
+    query = (select(Account.id, Account.display_name, Account.email, Account.student_number, Account.status)
+             .where(Account.role == "student", Account.status != "inactive", Account.id.not_in(placed)))
+    if account in ("active", "invited"):
+        query = query.where(Account.status == account)
+    query = _search(query, search)
+    total = db.scalar(select(func.count()).select_from(query.subquery()))
+    rows = db.execute(query.order_by(Account.display_name, Account.id)
+                      .limit(page_size).offset((page - 1) * page_size))
+    return {"total": total, "page": page, "page_size": page_size,
+            "items": [{"student_id": r.id, "display_name": r.display_name, "email": r.email,
+                       "student_number": r.student_number, "account_status": r.status} for r in rows]}
+
+
+def _search(query, search):
+    text = (search or "").strip()
+    if not text:
+        return query
+    like = f"%{text.replace('%', '').replace('_', '')}%"
+    return query.where(or_(Account.display_name.ilike(like), Account.email.ilike(like),
+                           Account.student_number.ilike(like)))
 
 
 def offering_summary(db, offerings):

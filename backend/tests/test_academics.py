@@ -1,6 +1,8 @@
 from fastapi.testclient import TestClient
 from helpers import Api, make_account
+from sqlalchemy import select
 
+from app.features.accounts.models import AuditEvent
 from app.main import app
 
 
@@ -65,14 +67,21 @@ def test_placement_mismatch_is_rejected(world):
     assert response.json()["error"]["code"] == "placement_mismatch"
 
 
-def test_one_active_section_per_term_and_withdrawal_history(world):
+def test_one_active_section_per_term_and_withdrawal_history(db, world):
     s1 = world["students"][0]
     a, b = world["sections"]
     admin, oid = world["admin"], world["offering"]["id"]
     assert add_member(world, a, s1).status_code == 204
     second = add_member(world, b, s1)
     assert second.status_code == 409 and second.json()["error"]["code"] == "already_in_section"
-    assert admin.delete(f"/api/sections/{a['id']}/members/{s1.id}").status_code == 204
+    url = f"/api/sections/{a['id']}/members/{s1.id}"
+    assert admin.delete(url).status_code == 422                                  # no reason at all
+    blank = admin.delete(url + "?reason=%20%20")
+    assert blank.status_code == 422 and blank.json()["error"]["code"] == "reason_required"
+    assert roster(admin, oid)[str(s1.id)]["status"] == "enrolled"              # a refused withdrawal changed nothing
+    assert admin.delete(url + "?reason=Left%20the%20programme").status_code == 204
+    event = db.scalars(select(AuditEvent).where(AuditEvent.action == "section.member_withdrawn")).one()
+    assert event.details["reason"] == "Left the programme"
     # A withdrawn student stays visible as history rather than being deleted.
     assert roster(admin, oid)[str(s1.id)]["status"] == "withdrawn"
     assert Api("faculty@example.com").get("/api/me/offerings").json()[0]["enrolled"] == 0
@@ -190,8 +199,85 @@ def test_faculty_roster_defaults_to_active_students(world):
     s1 = world["students"][0]
     admin, oid = world["admin"], world["offering"]["id"]
     add_member(world, world["sections"][0], s1)
-    admin.delete(f"/api/sections/{world['sections'][0]['id']}/members/{s1.id}")
+    admin.delete(f"/api/sections/{world['sections'][0]['id']}/members/{s1.id}?reason=Left%20the%20programme")
     faculty = Api("faculty@example.com")
     assert faculty.get(f"/api/offerings/{oid}/students").json() == []
     history = faculty.get(f"/api/offerings/{oid}/students?history=true").json()
     assert [r["status"] for r in history] == ["withdrawn"]
+
+
+# ---------------- bulk assignment and the paginated section roster ----------------
+
+def make_subject(w, code, **over):
+    return w["admin"].post("/api/subjects", {"code": code, "title": f"Title {code}", "units": "3",
+                                             "year_level": 1, "semester": 1, **over}).json()
+
+
+def test_a_teacher_can_be_given_several_subjects_with_their_own_sections_at_once(db, world):
+    admin, term, faculty = world["admin"], world["term"], world["faculty"]
+    a, b = make_subject(world, "ENT 201"), make_subject(world, "ENT 202")
+    sec_a, sec_b = world["sections"]
+    url = f"/api/terms/{term['id']}/offerings/bulk"
+    made = admin.post(url, {"faculty_id": str(faculty.id), "items": [
+        {"subject_id": a["id"], "section_ids": [sec_a["id"]]},
+        {"subject_id": b["id"], "section_ids": [sec_a["id"], sec_b["id"]]}]})
+    assert made.status_code == 201, made.text
+    by_code = {o["subject"]["code"]: o for o in made.json()}
+    assert [s["name"] for s in by_code["ENT 201"]["sections"]] == ["1A"]
+    assert sorted(s["name"] for s in by_code["ENT 202"]["sections"]) == ["1A", "1B"]
+    assert len(admin.get(f"/api/terms/{term['id']}/offerings").json()) == 3          # the fixture's offering plus two
+    events = db.scalars(select(AuditEvent).where(AuditEvent.action == "offering.created")).all()
+    assert len(events) == 3
+
+
+def test_a_bulk_assignment_is_all_or_nothing_and_names_the_subject_that_failed(db, world):
+    admin, term, faculty = world["admin"], world["term"], world["faculty"]
+    good = make_subject(world, "ENT 301")
+    second_year = make_subject(world, "ENT 302", year_level=2)                      # 1A and 1B are first-year sections
+    url = f"/api/terms/{term['id']}/offerings/bulk"
+    refused = admin.post(url, {"faculty_id": str(faculty.id), "items": [
+        {"subject_id": good["id"], "section_ids": [world["sections"][0]["id"]]},
+        {"subject_id": second_year["id"], "section_ids": [world["sections"][0]["id"]]}]})
+    assert refused.status_code == 422 and refused.json()["error"]["code"] == "placement_mismatch"
+    assert "ENT 302" in refused.json()["error"]["message"] and "Nothing was saved" in refused.json()["error"]["message"]
+    assert len(admin.get(f"/api/terms/{term['id']}/offerings").json()) == 1          # ENT 301 was not kept
+    allowed = admin.post(url, {"faculty_id": str(faculty.id), "items": [
+        {"subject_id": second_year["id"], "section_ids": [world["sections"][0]["id"]], "placement_override_reason": "Irregular cohort"}]})
+    assert allowed.status_code == 201
+    twice = admin.post(url, {"faculty_id": str(faculty.id), "items": [{"subject_id": good["id"]}, {"subject_id": good["id"]}]})
+    assert twice.status_code == 422 and twice.json()["error"]["code"] == "duplicate_subject"
+    exists = admin.post(url, {"faculty_id": str(faculty.id), "items": [{"subject_id": world["subject"]["id"]}]})
+    assert exists.status_code == 409 and "ENT 101" in exists.json()["error"]["message"]
+    for who in ("faculty@example.com", "student@example.com"):
+        assert Api(who).post(url, {"faculty_id": str(faculty.id), "items": [{"subject_id": good["id"]}]}).status_code == 403
+
+
+def test_the_section_roster_pages_searches_and_filters_and_candidates_exclude_placed_students(db, world):
+    admin, sec_a, sec_b = world["admin"], *world["sections"]
+    people = [make_account(db, f"roster{i}@example.com", "student", f"R-{i:02d}") for i in range(7)]
+    for person in people[:5]:
+        assert add_member(world, sec_a, person).status_code == 204
+    assert add_member(world, sec_b, people[5]).status_code == 204
+    admin.delete(f"/api/sections/{sec_a['id']}/members/{people[0].id}?reason=Moved%20away")
+    base = f"/api/sections/{sec_a['id']}/roster"
+    page1 = admin.get(base + "?page_size=2").json()
+    assert page1["total"] == 4 and len(page1["items"]) == 2 and page1["page"] == 1           # active only by default
+    assert len(admin.get(base + "?page_size=2&page=2").json()["items"]) == 2
+    assert admin.get(base + "?page_size=2&page=3").json()["items"] == []
+    withdrawn = admin.get(base + "?status=withdrawn").json()
+    assert withdrawn["total"] == 1 and withdrawn["items"][0]["status"] == "withdrawn"
+    assert admin.get(base + "?status=all").json()["total"] == 5
+    assert admin.get(base + "?search=R-03").json()["total"] == 1
+    assert admin.get(base + "?search=roster4%40").json()["total"] == 1
+    cand = admin.get(f"/api/sections/{sec_a['id']}/candidates?page_size=100").json()
+    emails = {c["email"] for c in cand["items"]}
+    assert "roster6@example.com" in emails and "roster0@example.com" in emails                # free, or withdrawn and free again
+    assert not emails & {f"roster{i}@example.com" for i in (1, 2, 3, 4, 5)}                   # active in this or another section of the term
+    assert admin.get(f"/api/sections/{sec_a['id']}/candidates?search=roster6").json()["total"] == 1
+    assert Api("faculty@example.com").get(base).status_code == 403
+    assert admin.get(f"/api/sections/{uuid_zero()}/roster").status_code == 404
+
+
+def uuid_zero():
+    import uuid
+    return uuid.UUID(int=0)

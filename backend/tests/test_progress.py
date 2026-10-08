@@ -146,7 +146,7 @@ def test_days_and_weeks_use_manila_time_and_monday_weeks(db):
 def test_withdrawn_students_get_no_new_events_and_no_progress_page(db, graded):
     item = lesson(graded, "Forms", BODY)
     s1 = graded["students"][0]
-    graded["admin"].delete(f"/api/sections/{graded['sec_a']['id']}/members/{s1.id}")
+    graded["admin"].delete(f"/api/sections/{graded['sec_a']['id']}/members/{s1.id}?reason=Left%20the%20programme")
     assert complete(graded, item).status_code == 404
     assert graded["st1"].get(learn(graded, "/progress")).status_code == 404
     assert events(db) == 0

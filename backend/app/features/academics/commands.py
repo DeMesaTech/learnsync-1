@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 from sqlalchemy import delete, select
 
 from app.errors import fail
@@ -197,7 +198,10 @@ def add_member(db, actor, section_id, student_id):
     db.commit()
 
 
-def withdraw_member(db, actor, section_id, student_id):
+def withdraw_member(db, actor, section_id, student_id, reason):
+    reason = (reason or "").strip()
+    if len(reason) < 3:
+        fail(422, "reason_required", "Give a reason for the withdrawal (at least 3 characters). It is kept in the audit history.")
     section = get_or_404(db, Section, section_id, "Section")
     open_term(db, section.term_id)
     member = db.scalar(select(SectionMember).where(
@@ -209,7 +213,7 @@ def withdraw_member(db, actor, section_id, student_id):
     db.flush()
     recompute_for_section(db, section.id)
     audit(db, actor, "section.member_withdrawn", "section", section.id,
-          {"student_id": str(student_id)})
+          {"student_id": str(student_id), "reason": reason})
     db.commit()
 
 
@@ -238,32 +242,63 @@ def check_sections(db, offering_term_id, subject, section_ids, override_reason=N
     return overridden
 
 
-def create_offering(db, actor, term_id, data):
-    term = open_term(db, term_id)
-    subject = get_or_404(db, Subject, data.subject_id, "Subject")
+def add_offering(db, actor, term, faculty_id, subject_id, section_ids, override_reason):
+    """Create one offering inside the caller's transaction (the caller commits)."""
+    subject = get_or_404(db, Subject, subject_id, "Subject")
     if subject.status != "active":
         fail(422, "subject_archived", "Archived subjects cannot be offered.")
-    account_with_role(db, data.faculty_id, "faculty")
-    section_ids = list(dict.fromkeys(data.section_ids))
-    overridden = check_sections(db, term.id, subject, section_ids, data.placement_override_reason)
+    section_ids = list(dict.fromkeys(section_ids))
+    overridden = check_sections(db, term.id, subject, section_ids, override_reason)
     if db.scalar(select(Offering.id).where(Offering.subject_id == subject.id,
                                            Offering.term_id == term.id,
-                                           Offering.faculty_id == data.faculty_id)):
+                                           Offering.faculty_id == faculty_id)):
         fail(409, "offering_exists", "This teacher already has this subject in this term.")
-    offering = Offering(subject_id=subject.id, term_id=term.id, faculty_id=data.faculty_id)
+    offering = Offering(subject_id=subject.id, term_id=term.id, faculty_id=faculty_id)
     db.add(offering)
     db.flush()
     for section_id in section_ids:
         db.add(OfferingSection(offering_id=offering.id, section_id=section_id))
     db.flush()
     recompute_offering(db, offering)
-    details = {"subject": subject.code, "faculty_id": str(data.faculty_id)}
+    details = {"subject": subject.code, "faculty_id": str(faculty_id)}
     if overridden:
-        details["placement_override"] = {"sections": overridden,
-                                         "reason": data.placement_override_reason}
+        details["placement_override"] = {"sections": overridden, "reason": override_reason}
     audit(db, actor, "offering.created", "offering", offering.id, details)
+    return offering
+
+
+def create_offering(db, actor, term_id, data):
+    term = open_term(db, term_id)
+    account_with_role(db, data.faculty_id, "faculty")
+    offering = add_offering(db, actor, term, data.faculty_id, data.subject_id, data.section_ids,
+                            data.placement_override_reason)
     db.commit()
     return offering
+
+
+def create_offerings_bulk(db, actor, term_id, data):
+    """Assign several subjects, each with its own sections, to one teacher: all or nothing.
+    A refusal names the subject that caused it and nothing is saved."""
+    term = open_term(db, term_id)
+    account_with_role(db, data.faculty_id, "faculty")
+    subject_ids = [item.subject_id for item in data.items]
+    if len(set(subject_ids)) != len(subject_ids):
+        fail(422, "duplicate_subject", "Each subject can appear only once in a bulk assignment.")
+    made = []
+    for item in data.items:
+        try:
+            made.append(add_offering(db, actor, term, data.faculty_id, item.subject_id,
+                                     item.section_ids, item.placement_override_reason))
+        except HTTPException as error:
+            db.rollback()
+            subject = db.get(Subject, item.subject_id)
+            name = subject.code if subject else "A subject"
+            detail = error.detail if isinstance(error.detail, dict) else {"code": "refused", "message": str(error.detail)}
+            fail(error.status_code, detail.get("code", "refused"),
+                 f"{name}: {detail.get('message', 'Could not be assigned.')} Nothing was saved.",
+                 {str(item.subject_id): detail.get("message", "")})
+    db.commit()
+    return made
 
 
 def update_offering(db, actor, offering_id, data):

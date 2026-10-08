@@ -463,7 +463,7 @@ def test_a_students_standing_matches_the_gradebook_and_is_faculty_only(db, grade
     other_offering = second_offering(graded)
     assert fac.get(f"/api/teach/offerings/{other_offering}/students/{s2.id}/standing").status_code == 404
     # a withdrawn student's record stays readable, with no working grade invented
-    admin.delete(f"/api/sections/{graded['sec_a']['id']}/members/{s1.id}")
+    admin.delete(f"/api/sections/{graded['sec_a']['id']}/members/{s1.id}?reason=Left%20the%20programme")
     gone = fac.get(url).json()
     assert gone["student"]["enrollment_status"] == "withdrawn" and gone["calculation"] is None and gone["calculation_note"]
     assert gone["progress"] is None

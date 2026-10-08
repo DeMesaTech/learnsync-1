@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -9,6 +9,7 @@ from app.security import current_account, require_role
 
 from . import commands, imports, queries
 from .schemas import (
+    BulkOfferingInput,
     DraftSave,
     ExceptionInput,
     MemberInput,
@@ -117,10 +118,25 @@ def add_member(section_id: UUID, data: MemberInput, actor=Depends(admin),
     return Response(status_code=204)
 
 
+@router.get("/sections/{section_id}/roster")
+def section_roster(section_id: UUID, page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100),
+                   search: str = Query("", max_length=100), status: str = Query("active", pattern="^(active|withdrawn|all)$"),
+                   actor=Depends(admin), db: Session = Depends(get_db)):
+    return queries.section_roster_page(db, section_id, page, page_size, search, status)
+
+
+@router.get("/sections/{section_id}/candidates")
+def section_candidates(section_id: UUID, page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100),
+                       search: str = Query("", max_length=100),
+                       account: str = Query("all", pattern="^(all|active|invited)$"),
+                       actor=Depends(admin), db: Session = Depends(get_db)):
+    return queries.section_candidates(db, section_id, page, page_size, search, account)
+
+
 @router.delete("/sections/{section_id}/members/{student_id}", status_code=204)
-def withdraw_member(section_id: UUID, student_id: UUID, actor=Depends(admin),
-                    db: Session = Depends(get_db)):
-    commands.withdraw_member(db, actor, section_id, student_id)
+def withdraw_member(section_id: UUID, student_id: UUID, reason: str = Query(max_length=1000),
+                    actor=Depends(admin), db: Session = Depends(get_db)):
+    commands.withdraw_member(db, actor, section_id, student_id, reason)
     return Response(status_code=204)
 
 
@@ -136,6 +152,13 @@ def create_offering(term_id: UUID, data: OfferingInput, actor=Depends(admin),
                     db: Session = Depends(get_db)):
     offering = commands.create_offering(db, actor, term_id, data)
     return queries.offering_summary(db, [offering])[0]
+
+
+@router.post("/terms/{term_id}/offerings/bulk", status_code=201)
+def create_offerings_bulk(term_id: UUID, data: BulkOfferingInput, actor=Depends(admin),
+                          db: Session = Depends(get_db)):
+    made = commands.create_offerings_bulk(db, actor, term_id, data)
+    return queries.offering_summary(db, made)
 
 
 @router.patch("/offerings/{offering_id}")

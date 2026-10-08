@@ -78,6 +78,18 @@ class OfferingInput(BaseModel):
     placement_override_reason: str | None = Field(default=None, min_length=3, max_length=1000)
 
 
+class BulkOfferingItem(BaseModel):
+    subject_id: uuid.UUID
+    section_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
+    placement_override_reason: str | None = Field(default=None, min_length=3, max_length=1000)
+
+
+class BulkOfferingInput(BaseModel):
+    """One teacher, several subjects, each with its own sections; saved all together or not at all."""
+    faculty_id: uuid.UUID
+    items: list[BulkOfferingItem] = Field(min_length=1, max_length=40)
+
+
 class OfferingUpdate(BaseModel):
     faculty_id: uuid.UUID | None = None
     section_ids: list[uuid.UUID] | None = Field(default=None, max_length=20)

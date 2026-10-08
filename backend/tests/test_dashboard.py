@@ -94,7 +94,7 @@ def test_withdrawn_students_and_closed_terms_get_no_new_work(graded):
 def test_a_withdrawn_student_sees_no_course_content_on_the_home_page(graded):
     make_quiz(graded, title="Quiz")
     lesson(graded, "Lesson", BODY)
-    graded["admin"].delete(f"/api/sections/{graded['sec_a']['id']}/members/{graded['students'][0].id}")
+    graded["admin"].delete(f"/api/sections/{graded['sec_a']['id']}/members/{graded['students'][0].id}?reason=Left%20the%20programme")
     data = home(graded)
     assert data["subjects"] == [] and data["todo"] == [] and data["updates"] == []
 

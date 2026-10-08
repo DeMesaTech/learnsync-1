@@ -409,7 +409,7 @@ def test_withdrawn_student_keeps_own_results_but_cannot_start_new_work(graded):
     attempt = start(st1, graded, quiz["aid"]).json()
     submit(st1, graded, attempt["id"], quiz["correct"])
     s1 = graded["students"][0]
-    graded["admin"].delete(f"/api/sections/{graded['sec_a']['id']}/members/{s1.id}")
+    graded["admin"].delete(f"/api/sections/{graded['sec_a']['id']}/members/{s1.id}?reason=Left%20the%20programme")
     assert start(st1, graded, other["aid"]).status_code == 404
     assert st1.get(la(graded, "/assessments")).status_code == 404
     kept = st1.get(la(graded, "/results"))
