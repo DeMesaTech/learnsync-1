@@ -20,7 +20,8 @@ from app.features.teaching.models import (
     SyllabusRevision,
 )
 
-from .models import Assessment, AssessmentRevision, QuizQuestion
+from .definitions import section_ids_of
+from .models import Assessment, AssessmentRevision, AssessmentSection, QuizQuestion
 
 
 def draft_or_published_policy(db, offering_id):
@@ -167,3 +168,30 @@ def copy_from(db, actor, target, source):
     audit(db, actor, "subject.copied", "offering", target.id, {"from": str(source.id), **result})
     db.commit()
     return result
+
+
+def duplicate(db, actor, offering, assessment):
+    """A new hidden draft with the same settings and questions; dates and records are never copied."""
+    rev = best(db, AssessmentRevision, AssessmentRevision.assessment_id, assessment.id)
+    if not rev:
+        fail(409, "nothing_to_copy", "This assessment has no content to copy.")
+    new = Assessment(offering_id=offering.id, kind=assessment.kind, created_by=actor.id)
+    db.add(new)
+    db.flush()
+    draft = AssessmentRevision(
+        assessment_id=new.id, version=1, created_by=actor.id, title=f"Copy of {rev.title}"[:200],
+        instructions=rev.instructions, category_key=rev.category_key, period=rev.period, max_points=rev.max_points,
+        allow_late=rev.allow_late, max_attempts=rev.max_attempts, score_rule=rev.score_rule,
+        include_in_grade=rev.include_in_grade, anchor_node_id=rev.anchor_node_id, ai_generated=rev.ai_generated,
+        ai_language=rev.ai_language)
+    db.add(draft)
+    db.flush()
+    for q in db.scalars(select(QuizQuestion).where(QuizQuestion.revision_id == rev.id).order_by(QuizQuestion.position)):
+        db.add(QuizQuestion(revision_id=draft.id, key=q.key, position=q.position, type=q.type, prompt=q.prompt,
+                            choices=q.choices, correct=q.correct, explanation=q.explanation, points=q.points,
+                            source=q.source))
+    for section_id in section_ids_of(db, assessment.id):
+        db.add(AssessmentSection(assessment_id=new.id, section_id=section_id))
+    audit(db, actor, "assessment.duplicated", "assessment", new.id, {"from": str(assessment.id)})
+    db.commit()
+    return new

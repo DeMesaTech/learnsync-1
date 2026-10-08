@@ -108,3 +108,7 @@ class PlanInput(BaseModel):
 
 class ScheduleInput(BaseModel):
     meeting_days: int = Field(ge=0, le=127)
+
+
+class ParseInput(BaseModel):
+    text: str = Field(max_length=200000)

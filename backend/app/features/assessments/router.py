@@ -15,6 +15,7 @@ from . import (
     grading,
     learner,
     planning,
+    question_import,
     results,
     scores,
     standing,
@@ -29,6 +30,7 @@ from .schemas import (
     AttendanceInput,
     Correction,
     GradePublishInput,
+    ParseInput,
     PermissionInput,
     PlanInput,
     ReleaseInput,
@@ -55,6 +57,19 @@ L = "/learn/offerings/{offering_id}"
 
 
 # ---------------- faculty: definitions ----------------
+
+@router.post(T + "/assessments/parse-questions")
+def parse_questions(offering_id: UUID, data: ParseInput, actor=Depends(faculty), db: Session = Depends(get_db)):
+    """Preview pasted questions: valid blocks are returned, problem blocks are reported by line. Saves nothing."""
+    own(db, offering_id, actor, write=False)
+    return question_import.parse_questions(data.text)
+
+
+@router.post(T + "/assessments/{assessment_id}/duplicate", status_code=201)
+def duplicate_assessment(offering_id: UUID, assessment_id: UUID, actor=Depends(faculty), db: Session = Depends(get_db)):
+    offering, assessment = assessment_of(db, offering_id, assessment_id, actor)
+    return {"id": planning.duplicate(db, actor, offering, assessment).id}
+
 
 @router.post(T + "/assessments/plan", status_code=201)
 def plan_assessments(offering_id: UUID, data: PlanInput, actor=Depends(faculty), db: Session = Depends(get_db)):
