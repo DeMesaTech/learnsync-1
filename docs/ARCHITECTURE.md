@@ -46,3 +46,10 @@ No new endpoint: `PUT /api/teach/offerings/{id}/attendance` has always been a PA
 - `GET /api/dashboard/faculty/review`: activity submissions waiting for a grade across the teacher's subjects, oldest first.
 - `GET /api/teach/offerings/{id}/exports/attendance?format=xlsx|pdf&section_id=&start=&end=`: attendance file for one section (teacher of the offering only; recorded dates only; audited without names).
 - `POST /api/teach/offerings/{id}/assessments/{aid}/unpublish`: published revision becomes superseded and a draft is kept or created; refused with 409 `has_history` once attempts, uploads, scores, released results or exceptions exist.
+
+## Bulk assignment and the paginated section roster
+- `POST /api/terms/{id}/offerings/bulk` `{faculty_id, items:[{subject_id, section_ids, placement_override_reason?}]}`: one teacher, several subjects, each with its own sections, all or nothing. A refusal names the subject and saves nothing; the same subject twice is `duplicate_subject`. Single `POST .../offerings` and `PATCH /offerings/{id}` are unchanged.
+- `GET /api/sections/{id}/roster?page&page_size&search&status=active|withdrawn|all`: a section's students a page at a time (admin only).
+- `GET /api/sections/{id}/candidates?page&page_size&search&account=all|active|invited`: students who can be added, excluding anyone already active in a section of the same term.
+- `DELETE /api/sections/{id}/members/{student}?reason=` now requires a reason (3 to 1000 characters, 422 `reason_required`); it is stored in the `section.member_withdrawn` audit event.
+- Admin route `/admin/terms/:termId/sections/:sectionId/students` (the old Manage students dialog is gone).
