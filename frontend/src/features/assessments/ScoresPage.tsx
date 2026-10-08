@@ -5,6 +5,7 @@ import {useQuery,type UseQueryResult} from '@tanstack/react-query';
 import {api,post,send,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
 import {Dialog} from '../../components/Dialog';
+import {catOfKind} from '../../components/ClassworkTypes';
 import {useConfirm} from '../../components/confirm';
 import {useOrigin} from '../../components/origin';
 import type {OfferingSummary} from '../academics/types';
@@ -16,9 +17,9 @@ export function ScoresPage(){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const {assessmentId}=useParams();
   const closed=offering.term_status==='closed';
-  const origin=useOrigin(`/faculty/offerings/${offering.id}/classwork`,'Classwork');
   const base=`/teach/offerings/${offering.id}/assessments/${assessmentId}`;
   const a=useQuery({queryKey:['assessment',assessmentId],queryFn:()=>api<Assessment>(base)});
+  const origin=useOrigin(`/faculty/offerings/${offering.id}/classwork${a.data?`?type=${catOfKind(a.data.kind)}`:''}`,'Classwork');
   const rows=useQuery({queryKey:['scores',assessmentId],queryFn:()=>api<ScoreRow[]>(`${base}/scores`)});
   const attempts=useQuery({queryKey:['attempts',assessmentId],queryFn:()=>api<AttemptRow[]>(`${base}/attempts`),enabled:a.data?.kind==='online_quiz'});
   const [message,setMessage]=useState('');

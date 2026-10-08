@@ -9,6 +9,7 @@ const PLACES:[RegExp,string][]=[
   [/^\/admin\/terms\/[^/]+$/,'Term workspace'],
   [/^\/admin\/academics$/,'School years'],
   [/^\/admin\/accounts$/,'User accounts'],
+  [/\/classwork$/,'Classwork'],
   [/\/lessons$/,'Lessons & materials'],
   [/\/work$/,'My work'],
   [/\/assessments$/,'Assessments'],

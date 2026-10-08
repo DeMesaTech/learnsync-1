@@ -9,11 +9,11 @@ import {queryClient} from '../../app/providers';
 import type {OfferingSummary} from '../academics/types';
 import {useUndo} from '../../components/undo';
 import {GenerateDialog} from '../study/Generate';
-import {NewDialog,assessmentStatus,assessmentTitle,usePolicy} from '../assessments/Assessments';
+import {NewDialog,assessmentStatus,assessmentTitle} from '../assessments/Assessments';
 import {detail as workDetail} from '../assessments/Work';
 import {KIND_LABEL,fmt,type Assessment,type Kind,type LearnItem as Work} from '../assessments/types';
 import {KIND,NewItemDialog,itemTitle,stateLabel,useNodes} from './Content';
-import {groupByNode,type Item,type LearnItem,type LearnSyllabus,type Outline,type SyllabusState} from './types';
+import {type Item,type LearnItem,type LearnSyllabus,type Outline,type SyllabusState} from './types';
 
 type Create={type:'item';kind:Item['kind']}|{type:'assessment';kind:Kind}|{type:'ai'}|null;
 interface Row{canUnpublish:boolean;pending:boolean;cat:Cat;key:string;type:'item'|'assessment';id:string;title:string;label:string;anchor:string|null;archived:boolean;status:string;published:boolean;to:string;meta:string}
@@ -32,7 +32,6 @@ export function FacultyClasswork(){
   const assessments=useQuery({queryKey:['assessments',offering.id],queryFn:()=>api<Assessment[]>(`/teach/offerings/${offering.id}/assessments`)});
   const syllabus=useQuery({queryKey:['syllabus',offering.id],queryFn:()=>api<SyllabusState>(`/teach/offerings/${offering.id}/syllabus`)});
   const nodes=useNodes(offering.id);
-  const {policy}=usePolicy(offering.id);
   const offer=useUndo();
   const [create,setCreate]=useState<Create>(null);
   const [search,setSearch]=useState('');const [archived,setArchived]=useState(false);
@@ -115,8 +114,7 @@ export function FacultyClasswork(){
       tree.length===0?<section className="panel"><h2>{search||status!=='all'?'Nothing matches':`No ${label.toLowerCase()} yet`}</h2><p>{search||status!=='all'?'Change the search or the filter.':'Use Create to add one.'}</p></section>:
       <>
       {stranded&&<p className="warn" role="status">Items cannot be reordered because some are attached to a topic that is no longer in the syllabus. <Link to={stranded.to}>Open “{stranded.title}”</Link> and choose a current topic.</p>}
-      {tree.length===1&&tree[0].id==='other'?<ul className="seq compact" aria-label={label}>{tree[0].rows.map(r=><li key={r.key}><span className="grow"><Link to={r.to}>{r.title}</Link><span className="muted">{r.meta}</span></span>
-        <span className={r.published&&!r.archived?'badge done':'badge'}>{r.status}</span>{r.canUnpublish&&!closed&&<button type="button" className="linklike" onClick={()=>unpublish(r)}>Unpublish</button>}</li>)}</ul>:tree.map(n=>branch(n,0))}</>}
+      {tree.map(n=>branch(n,0))}</>}
     {create?.type==='item'&&<NewItemDialog offering={offering} nodes={nodes} kind={create.kind} onClose={()=>setCreate(null)} onCreated={i=>created(`${base}/content/${i.id}/edit`)}/>}
     {create?.type==='assessment'&&<NewDialog offering={offering} kind={create.kind} onClose={()=>setCreate(null)} onCreated={a=>created(`${base}/assessments/${a.id}/edit`)}/>}
     {create?.type==='ai'&&<GenerateDialog offering={offering} onClose={()=>setCreate(null)} onCreated={a=>created(`${base}/assessments/${a.id}/edit`)}/>}
