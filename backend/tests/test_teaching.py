@@ -543,3 +543,62 @@ def test_withdrawn_student_gets_no_course_content(course):
     # the subject is still listed (labelled withdrawn) so the student keeps their history
     subjects = st1.get("/api/me/subjects").json()
     assert [s["enrollment_status"] for s in subjects] == ["withdrawn"]
+
+
+# ---------------- files: inline preview ----------------
+
+def published_file(course, name, content, title="Reading"):
+    item = new_item(course, "file", title, section_ids=[course["sec_a"]["id"]])
+    counter = course["fac"].get(t(course, f"/items/{item['id']}")).json()["draft"]["counter"]
+    up = course["fac"].upload(t(course, f"/items/{item['id']}/draft/file"), name, content, {"expected_counter": counter})
+    assert up.status_code == 200, up.text
+    edit_and_publish(course, item["id"], title=title)
+    return item["id"], up.json()["file"]["id"]
+
+
+def test_a_pdf_can_be_previewed_inline_with_the_safety_headers(course):
+    _, file_id = published_file(course, "reading.pdf", PDF)
+    shown = course["st1"].get(f"/api/files/{file_id}/preview")
+    assert shown.status_code == 200 and shown.content == PDF
+    assert shown.headers["content-type"] == "application/pdf" and shown.headers["content-disposition"].startswith("inline")
+    assert shown.headers["x-content-type-options"] == "nosniff" and shown.headers["cache-control"] == "no-store"
+    assert "default-src 'none'" in shown.headers["content-security-policy"]
+    saved = course["st1"].get(f"/api/files/{file_id}/download")                    # the download is still an attachment, also nosniff
+    assert saved.headers["content-disposition"].startswith("attachment") and saved.headers["x-content-type-options"] == "nosniff"
+
+
+def test_only_pdf_png_and_jpeg_are_previewed_everything_else_stays_a_download(course):
+    png = bytes([0x89, 0x50, 0x4E, 0x47]) + b"\r\n\x1a\n" + b"0" * 16
+    jpg = bytes([0xFF, 0xD8, 0xFF, 0xE0]) + b"0" * 16
+    for name, data, kind in (("pic.png", png, "image/png"), ("pic.jpg", jpg, "image/jpeg")):
+        _, file_id = published_file(course, name, data, title=name)
+        shown = course["st1"].get(f"/api/files/{file_id}/preview")
+        assert shown.status_code == 200 and shown.headers["content-type"] == kind
+    import io
+    import zipfile
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as z:
+        z.writestr("word/document.xml", "<w/>")
+    _, doc = published_file(course, "notes.docx", buffer.getvalue(), title="Notes")
+    assert course["st1"].get(f"/api/files/{doc}/preview").status_code == 404        # not on the allow-list
+    assert course["st1"].get(f"/api/files/{doc}/download").status_code == 200       # but still downloadable
+
+
+def test_a_preview_follows_download_access_and_re_checks_the_bytes(db, course):
+    from app.features.files.models import StoredFile
+    from app.features.files.storage import path_of
+    item_id, file_id = published_file(course, "reading.pdf", PDF)
+    url = f"/api/files/{file_id}/preview"
+    other = Api(make_account(db, "preview-other@example.com", "faculty").email)
+    assert course["st2"].get(url).status_code == 404                                  # other section
+    assert other.get(url).status_code == 404 and course["admin"].get(url).status_code == 404
+    assert TestClient(app).get(url).status_code == 401
+    assert course["fac"].get(url).status_code == 200                                  # the owning teacher
+    # a file whose bytes no longer match its label is never rendered
+    path_of(db.get(StoredFile, file_id)).write_bytes(b"<html><script>alert(1)</script></html>")
+    assert course["st1"].get(url).status_code == 404
+    # archived material disappears for students
+    _, fresh = published_file(course, "again.pdf", PDF, title="Again")
+    assert course["st1"].get(f"/api/files/{fresh}/preview").status_code == 200
+    course["fac"].patch(t(course, f"/items/{item_id}"), {"archived": True})
+    assert course["st1"].get(url).status_code == 404

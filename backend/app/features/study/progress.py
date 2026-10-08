@@ -19,7 +19,7 @@ from app.features.assessments.definitions import revision as assessment_revision
 from app.features.assessments.definitions import section_ids_of as assessment_sections
 from app.features.assessments.models import Assessment
 from app.features.teaching.access import learner_offering, targeted
-from app.features.teaching.items import get_item, ordered_published, student_item
+from app.features.teaching.items import SEQUENCE_KINDS, get_item, ordered_published, student_item
 from app.features.teaching.items import revision as item_revision
 
 from .events import record_event
@@ -32,8 +32,8 @@ TYPES = ("lesson_completed", "quiz_submitted", "activity_submitted")
 def complete_lesson(db, student, offering_id, item_id):
     offering, enrollment = learner_offering(db, offering_id, student, write=True)
     view = student_item(db, offering, enrollment, item_id)      # published, targeted, not archived
-    if view["kind"] != "lesson":
-        fail(422, "not_a_lesson", "Only lessons can be marked complete.")
+    if view["kind"] not in SEQUENCE_KINDS:
+        fail(422, "not_completable", "This cannot be marked complete.")
     item = get_item(db, offering, item_id)
     version = item_revision(db, item.id, "published").version
     db.execute(insert(LessonCompletion).values(
@@ -45,9 +45,9 @@ def complete_lesson(db, student, offering_id, item_id):
 
 
 def applicable_steps(db, offering, enrollment):
-    """Published, targeted, non-archived lessons, online quizzes and activities."""
-    steps = [{"id": item.id, "type": "lesson_completed", "title": rev.title}
-             for item, rev, _ in ordered_published(db, offering, enrollment) if item.kind == "lesson"]
+    """Published, targeted, non-archived lessons, files and links, online quizzes and activities."""
+    steps = [{"id": item.id, "type": "lesson_completed", "title": rev.title, "kind": item.kind}
+             for item, rev, _ in ordered_published(db, offering, enrollment) if item.kind in SEQUENCE_KINDS]
     for a in db.scalars(select(Assessment).where(
             Assessment.offering_id == offering.id, Assessment.archived.is_(False),
             Assessment.kind.in_(("online_quiz", "activity"))).order_by(Assessment.created_at)):

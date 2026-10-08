@@ -65,10 +65,31 @@ def may_download(db, file, actor):
     return False
 
 
+# What may be shown inline in the page. Everything else is a download. The stored type must match this list AND the
+# file's first bytes, so a mislabelled upload can never be rendered as something else.
+PREVIEW_TYPES = {"application/pdf": b"%PDF", "image/png": bytes([0x89, 0x50, 0x4E, 0x47]), "image/jpeg": bytes([0xFF, 0xD8])}
+
+
+@router.get("/files/{file_id}/preview")
+def preview(file_id: UUID, actor=Depends(current_account), db: Session = Depends(get_db)):
+    file = db.get(StoredFile, file_id)
+    magic = PREVIEW_TYPES.get(file.content_type) if file else None
+    if not file or file.purpose != "material" or magic is None or not may_download(db, file, actor)             or not path_of(file).is_file():
+        fail(404, "not_found", "No preview is available for this file.")
+    with path_of(file).open("rb") as fh:
+        if not fh.read(len(magic)).startswith(magic):
+            fail(404, "not_found", "No preview is available for this file.")
+    return FileResponse(path_of(file), media_type=file.content_type, filename=file.original_name,
+                        content_disposition_type="inline",
+                        headers={"X-Content-Type-Options": "nosniff",
+                                 "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; "
+                                                            "frame-ancestors 'self'"})
+
+
 @router.get("/files/{file_id}/download")
 def download(file_id: UUID, actor=Depends(current_account), db: Session = Depends(get_db)):
     file = db.get(StoredFile, file_id)
     if not file or not may_download(db, file, actor) or not path_of(file).is_file():
         fail(404, "not_found", "File not found.")
     return FileResponse(path_of(file), media_type=file.content_type, filename=file.original_name,
-                        content_disposition_type="attachment")
+                        content_disposition_type="attachment", headers={"X-Content-Type-Options": "nosniff"})
