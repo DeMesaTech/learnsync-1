@@ -10,6 +10,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Numeric,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -104,6 +105,8 @@ class Offering(Base):
     term_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("academic_term.id"), index=True)
     faculty_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("account.id"), index=True)
     status: Mapped[str] = mapped_column(String(10), default="active")
+    # class meeting days as a bitmask, Monday = 1 ... Sunday = 64; 0 = not set (the attendance grid has no prepared dates)
+    meeting_days: Mapped[int] = mapped_column(SmallInteger, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 

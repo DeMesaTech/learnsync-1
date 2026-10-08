@@ -101,7 +101,8 @@ def offering_summary(db, offerings):
                     "term_status": t.status, "subject": {"id": s.id, "code": s.code,
                                                          "title": s.title, "units": s.units},
                     "faculty": {"id": o.faculty_id, "display_name": teacher_map[o.faculty_id]},
-                    "sections": links.get(o.id, []), "enrolled": counts.get(o.id, 0)})
+                    "sections": links.get(o.id, []), "enrolled": counts.get(o.id, 0),
+                    "meeting_days": o.meeting_days})
     return out
 
 

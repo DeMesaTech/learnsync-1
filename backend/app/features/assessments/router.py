@@ -14,6 +14,7 @@ from . import (
     definitions,
     grading,
     learner,
+    planning,
     results,
     scores,
     standing,
@@ -29,7 +30,9 @@ from .schemas import (
     Correction,
     GradePublishInput,
     PermissionInput,
+    PlanInput,
     ReleaseInput,
+    ScheduleInput,
     ScoreInput,
 )
 
@@ -52,6 +55,23 @@ L = "/learn/offerings/{offering_id}"
 
 
 # ---------------- faculty: definitions ----------------
+
+@router.post(T + "/assessments/plan", status_code=201)
+def plan_assessments(offering_id: UUID, data: PlanInput, actor=Depends(faculty), db: Session = Depends(get_db)):
+    """Create many hidden draft assessments at once (skeleton-first setup)."""
+    return planning.plan(db, actor, own(db, offering_id, actor), data)
+
+
+@router.put(T + "/schedule")
+def set_schedule(offering_id: UUID, data: ScheduleInput, actor=Depends(faculty), db: Session = Depends(get_db)):
+    return planning.set_schedule(db, actor, own(db, offering_id, actor), data.meeting_days)
+
+
+@router.post(T + "/copy-from/{source_id}", status_code=201)
+def copy_subject(offering_id: UUID, source_id: UUID, actor=Depends(faculty), db: Session = Depends(get_db)):
+    """Copy one of the teacher's own earlier subjects into this EMPTY one, as drafts only."""
+    return planning.copy_from(db, actor, own(db, offering_id, actor), own(db, source_id, actor, write=False))
+
 
 @router.get(T + "/assessments")
 def list_assessments(offering_id: UUID, actor=Depends(faculty), db: Session = Depends(get_db)):

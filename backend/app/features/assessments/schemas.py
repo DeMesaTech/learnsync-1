@@ -92,3 +92,19 @@ class AttendanceInput(BaseModel):
 class GradePublishInput(BaseModel):
     period: Literal["midterm", "finals", "course"]
     student_ids: list[uuid.UUID] | None = Field(default=None, max_length=1000)
+
+
+class PlanItem(BaseModel):
+    kind: Literal["online_quiz", "offline_quiz", "activity", "exam", "manual"]
+    title: str = Field(min_length=1, max_length=200)
+    category_key: str | None = Field(default=None, max_length=40)
+    period: Literal["midterm", "finals"] | None = None
+
+
+class PlanInput(BaseModel):
+    plan_key: str = Field(min_length=8, max_length=64)       # a repeat of the same key returns the first result
+    items: list[PlanItem] = Field(min_length=1, max_length=30)
+
+
+class ScheduleInput(BaseModel):
+    meeting_days: int = Field(ge=0, le=127)
