@@ -41,8 +41,8 @@ try{
     await p.getByRole('link',{name:/Business idea pitch/}).first().click();await p.waitForLoadState('networkidle');
     await p.locator('input[type=file]').setInputFiles({name:'pitch.pdf',mimeType:'application/pdf',buffer:pdf});
     await p.getByRole('button',{name:'Submit',exact:true}).click();await p.waitForTimeout(1200)}
-  await teach.goto('/faculty');await teach.waitForLoadState('networkidle');
-  await teach.locator('section:has(h2:text("Activity submissions needing grading")) a').first().click();await teach.waitForLoadState('networkidle');
+  await teach.goto('/faculty/review');await teach.waitForLoadState('networkidle');
+  await teach.getByRole('link',{name:'Open and grade'}).first().click();await teach.waitForLoadState('networkidle');
   const base=`/teach/offerings/${O}/assessments/${teach.url().match(/assessments\/([\w-]+)\/scores/)[1]}`;
   const rows=(await call(teach,'GET',`${base}/scores`)).data;const sid=n=>rows.find(r=>r.student===`Demo student ${n}`).student_id;
   const active=()=>teach.evaluate(()=>document.activeElement?.id||'');

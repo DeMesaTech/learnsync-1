@@ -95,7 +95,7 @@ try{
   await page.locator('details.more summary',{hasText:'Class days'}).click();
   await page.getByRole('checkbox',{name:'Tue',exact:true}).check();
   await page.getByRole('button',{name:'Save class days'}).click();
-  await page.getByText('Class days saved.').waitFor();
+  await page.getByText('Class days saved.').first().waitFor();
   check('adding a class day keeps every column and takes one off the "no class" list',await page.locator('table.att-grid thead th[scope=col]').count()===8&&await page.locator('table.att-grid thead .att-head',{hasText:'no class'}).count()===2);
   check('the new class days are stored on the subject',(await call(teach,'GET',`/offerings/${O}`)).data.meeting_days===23);
 

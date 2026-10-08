@@ -72,7 +72,7 @@ try{
   check('the final button says Assign',await page.getByRole('button',{name:'Assign',exact:true}).count()===1);
   check('axe finds no violations on the Review step',(await axe(page)).length===0);
   await act(()=>page.getByRole('button',{name:'Assign',exact:true}).click());
-  await page.waitForURL(/\/classwork$/);
+  await page.waitForURL(/\/classwork(\?type=\w+)?$/);
   check(`a planned quiz was finished and assigned in ${inputs} inputs`,inputs<=10,String(inputs));
   const quiz=(await call(page,'GET',`/teach/offerings/${O}/assessments/${quizId}`)).data;
   check('the quiz is published with 3 questions and 4 points',!!quiz.published&&quiz.published.questions.length===3&&Number(quiz.published.max_points)===4);
@@ -116,7 +116,7 @@ try{
   await act2.getByLabel('Maximum points').fill('20');await act2.getByLabel('Due').fill('2026-12-05T17:00');
   await act2.getByLabel('Instructions for students').fill('Submit a one-page PDF.');
   check('axe finds no violations on the activity screen',(await axe(act2)).length===0);
-  await act2.getByRole('button',{name:'Assign',exact:true}).click();await act2.waitForURL(/\/classwork$/);
+  await act2.getByRole('button',{name:'Assign',exact:true}).click();await act2.waitForURL(/\/classwork(\?type=\w+)?$/);
   const activity=(await call(act2,'GET',`/teach/offerings/${O}/assessments/${activityId}`)).data;
   check('the activity is published with its points and due date',!!activity.published&&Number(activity.published.max_points)===20&&!!activity.published.deadline);
 }catch(e){console.log('SCRIPT ERROR:',e.message);results.push(false)}

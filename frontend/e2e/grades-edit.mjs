@@ -55,7 +55,7 @@ try{
   const exams=['44','38.5','50'],papers=['18','15','20'];let e=0,pq=0;   // the paper quiz is out of 20, the exam out of 50
   for(let i=0;i<n;i++){const label=await inputs.nth(i).getAttribute('aria-label');await inputs.nth(i).fill(label.startsWith('Paper quiz')?papers[pq++]:exams[e++])}
   await page.getByRole('button',{name:'Save 6 changed scores'}).click();
-  await page.getByText('Saved 6 scores.').waitFor();
+  await page.getByText('Saved 6 scores.').first().waitFor();
   const book=await grades();
   const saved=book.rows.flatMap(r=>Object.values(r.cells)).map(c=>Number(c.score)).sort((a,b)=>a-b);
   check('all six scores were saved by one Save',JSON.stringify(saved)===JSON.stringify([15,18,20,38.5,44,50]),JSON.stringify(saved));
@@ -102,7 +102,7 @@ try{
   check('the scores page offers "Return N graded results"',await returnButton.count()===1,await returnButton.innerText().catch(()=>''));
   const before=(await call(student,'GET',`/learn/offerings/${O}/results`)).data.results.length;
   await returnButton.click();
-  await page.getByText(/Returned \d+ result/).waitFor();
+  await page.getByText(/Returned \d+ result/).first().waitFor();
   check('the button then says all graded results are returned',await page.getByRole('button',{name:'All graded results returned'}).isDisabled());
   check('the student now sees the returned result',(await call(student,'GET',`/learn/offerings/${O}/results`)).data.results.length===before+1);
 }catch(e){console.log('SCRIPT ERROR:',e.message);results.push(false)}

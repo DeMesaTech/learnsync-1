@@ -132,7 +132,7 @@ try{
   await shot(teach,'flow-2-quiz-editor');
   await teach.getByRole('button',{name:'Next',exact:true}).click();
   await teach.getByRole('button',{name:'Assign',exact:true}).click();
-  await teach.waitForURL(/\/classwork$/);
+  await teach.waitForURL(/\/classwork\?type=quiz$/);
   await teach.getByText('Published v1').first().waitFor();
   check('the quiz is published',(await text(teach)).includes('Venture basics quiz'));
 
@@ -160,7 +160,7 @@ try{
   await stud.waitForTimeout(1500);
   await shot(stud,'flow-3-student-quiz');
   await stud.getByRole('button',{name:'Submit answers'}).click();
-  await stud.getByText('Quiz submitted').waitFor();
+  await stud.getByRole('heading',{name:'Quiz submitted'}).waitFor();
   check('the quiz was scored without revealing the answers',(await text(stud)).includes('1.00 / 1.00')&&(await text(stud)).includes('correct answers are not shown'));
   await stud.goto(`/student/offerings/${O}/progress`);
   await stud.getByText('2 of 2 steps done').waitFor();

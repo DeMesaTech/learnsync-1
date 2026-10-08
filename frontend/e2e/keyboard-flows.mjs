@@ -62,7 +62,7 @@ try{
   await tabTo(sp,d=>d.type==='radio'&&/^True/.test(d.name),'the True choice');await press(sp,'Space');
   await tabTo(sp,d=>d.tag==='input'&&d.type==='text'||d.tag==='textarea','the short answer box');await sp.keyboard.type('partnership');await sp.waitForTimeout(1500);
   await tabTo(sp,named(/Submit answers/,'button'),'Submit answers');await press(sp,'Enter');
-  await sp.getByText('Quiz submitted').waitFor();
+  await sp.getByRole('heading',{name:'Quiz submitted'}).waitFor();
   check('a student answers all three question types and submits a quiz with the keyboard alone',(await sp.locator('main').innerText()).includes('3.00 / 3.00'));
   await sp.context().close();
 
