@@ -59,9 +59,10 @@ export function SchoolYears(){
 }
 
 interface TermDraft{name:string;sequence:number;start_date:string;end_date:string;copy_from_term_id:string;copy_offerings:boolean}
+const semesterName=(n:number)=>['1st','2nd','3rd','4th','5th','6th'][n-1]??`${n}th`;
 const blankTerms:TermDraft[]=[
-  {name:'First Semester',sequence:1,start_date:'',end_date:'',copy_from_term_id:'',copy_offerings:false},
-  {name:'Second Semester',sequence:2,start_date:'',end_date:'',copy_from_term_id:'',copy_offerings:false},
+  {name:`${semesterName(1)} semester`,sequence:1,start_date:'',end_date:'',copy_from_term_id:'',copy_offerings:false},
+  {name:`${semesterName(2)} semester`,sequence:2,start_date:'',end_date:'',copy_from_term_id:'',copy_offerings:false},
 ];
 
 const day=(ms:number)=>new Date(ms).toISOString().slice(0,10);

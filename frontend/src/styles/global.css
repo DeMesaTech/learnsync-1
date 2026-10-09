@@ -174,8 +174,16 @@ p {
   font-weight: 700
 }
 
+.nav-subgroup {
+  display: grid;
+  gap: 4px
+}
+
+.nav-subgroup .nav-child {
+  font-size: .94rem
+}
+
 .sidebar-note {
-  margin-top: auto;
   color: var(--muted);
   font-size: .8rem
 }
@@ -419,6 +427,33 @@ h3 {
 .inline input {
   width: auto;
   min-height: auto
+}
+
+.checkbox-cell {
+  width: 1%;
+  white-space: nowrap;
+  vertical-align: middle
+}
+
+.checkbox-cell input {
+  display: block;
+  margin: 0 auto
+}
+
+.icon-button {
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  line-height: 1
+}
+
+.account-actions {
+  justify-content: flex-start
 }
 
 fieldset {

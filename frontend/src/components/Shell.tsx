@@ -7,19 +7,23 @@ import {studentHomeQuery} from '../features/dashboard/Dashboards';
 import {useUnread} from './seen';
 import {StudyBuddy} from '../features/study/StudyBuddy';
 import {useConfirm} from './confirm';
+import type {SchoolYear} from '../features/academics/types';
 
-type NavItem={to:string;label:string;icon:string;end?:boolean;dot?:boolean};
+type NavItem={to:string;label:string;icon:string;end?:boolean;dot?:boolean;children?:NavItem[]};
 const ROLE_LABEL={admin:'Academic administrator',faculty:'Teaching faculty',student:'Student'} as const;
 
 /** Grouped navigation. Icons are decoration only (aria-hidden); every entry has a visible text label. */
-function navigation(role:'admin'|'faculty'|'student'):{label:string;items:NavItem[]}[]{
+function navigation(role:'admin'|'faculty'|'student', schoolYears?:SchoolYear[]):{label:string;items:NavItem[]}[]{
   const home='/'+role;
   const account={label:'Account & help',items:[{to:'/account',label:'Account & theme',icon:'○'}]};
-  if(role==='admin')return [
-    {label:'Your workspace',items:[{to:home,label:'Dashboard',icon:'⌂',end:true},{to:`${home}/accounts`,label:'User accounts',icon:'♙'}]},
-    {label:'Academic management',items:[{to:`${home}/academics`,label:'School years',icon:'☰'},{to:`${home}/subjects`,label:'Prospectus',icon:'▤'}]},
-    {label:'Oversight',items:[{to:`${home}/issues`,label:'Reports',icon:'?'},{to:`${home}/audit`,label:'Audit history',icon:'◷'}]},
-    account];
+  if(role==='admin'){
+    const terms=(schoolYears??[]).flatMap(year=>year.terms.map(term=>({to:`${home}/terms/${term.id}`,label:`${year.label} · ${term.name}`,icon:'↳'})));
+    return [
+      {label:'Your workspace',items:[{to:home,label:'Dashboard',icon:'⌂',end:true},{to:`${home}/accounts`,label:'User accounts',icon:'♙'}]},
+      {label:'Academic management',items:[{to:`${home}/academics`,label:'School years',icon:'☰',children:terms.length?terms:undefined},{to:`${home}/subjects`,label:'Prospectus',icon:'▤'}]},
+      {label:'Oversight',items:[{to:`${home}/issues`,label:'Reports',icon:'?'},{to:`${home}/audit`,label:'Audit history',icon:'◷'}]},
+      account];
+  }
   const student=role==='student';
   const review=role==='faculty'?[{to:`${home}/review`,label:'To review',icon:'✎'}]:[];
   return [
@@ -37,6 +41,7 @@ function UpdatesDot({userId}:{userId:string}){
 export function Shell(){
   const ask=useConfirm();
   const {session,loading,error}=useAuth();const {theme,setTheme}=useTheme();
+  const schoolYears=useQuery({queryKey:['school-years'],queryFn:()=>api<SchoolYear[]>('/school-years')});
   const [open,setOpen]=useState(false);const [failure,setFailure]=useState('');
   const menuButton=useRef<HTMLButtonElement>(null);
   // the phone menu is a disclosure: Escape closes it and gives focus back to the button that opened it
@@ -75,9 +80,20 @@ export function Shell(){
     </header>
     <aside className={'sidebar '+(open?'open':'')}>
       <nav aria-label="Main" onClick={()=>setOpen(false)}>
-        {navigation(user.role).map(group=><div className="nav-group" key={group.label}>
+        {navigation(user.role, schoolYears.data).map(group=><div className="nav-group" key={group.label}>
           <p className="nav-label">{group.label}</p>
-          {group.items.map(i=><NavLink key={i.to} to={i.to} end={i.end}><span className="nav-icon" aria-hidden="true">{i.icon}</span>{i.label}{i.dot&&<UpdatesDot userId={user.id}/>}</NavLink>)}
+          {group.items.map(i=>i.children?
+            <div className="nav-subgroup" key={i.to}>
+              <NavLink to={i.to} end={i.end} className={({isActive})=>isActive?'active':undefined}>
+                <span className="nav-icon" aria-hidden="true">{i.icon}</span>{i.label}
+              </NavLink>
+              {i.children.map(child=><NavLink key={child.to} to={child.to} className={({isActive})=>isActive?'active nav-child':'nav-child'}>
+                <span className="nav-icon" aria-hidden="true">{child.icon}</span>{child.label}
+              </NavLink>)}
+            </div> :
+            <NavLink key={i.to} to={i.to} end={i.end} className={({isActive})=>isActive?'active':''}>
+              <span className="nav-icon" aria-hidden="true">{i.icon}</span>{i.label}{i.dot&&<UpdatesDot userId={user.id}/>}
+            </NavLink>) }
         </div>)}
       </nav>
       <p className="sidebar-note">Governor Mariano E. Villafuerte Community College<br/>BS Entrepreneurship</p>

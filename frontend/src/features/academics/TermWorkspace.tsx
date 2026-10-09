@@ -16,6 +16,7 @@ export function TermWorkspace(){
   const offerings=useQuery({queryKey:['offerings',termId],queryFn:()=>api<OfferingSummary[]>(`/terms/${termId}/offerings`)});
   const [dialog,setDialog]=useState<'section'|'offering'|null>(null);
   const [editing,setEditing]=useState<OfferingSummary|null>(null);
+  const [tab,setTab]=useState<'sections'|'offerings'>('sections');
   const year=years.data?.find(y=>y.terms.some(t=>t.id===termId));
   const term=year?.terms.find(t=>t.id===termId);
   const closed=term?.status==='closed';
@@ -31,28 +32,34 @@ export function TermWorkspace(){
       <Link className={offerings.data?.length&&offerings.data.every(o=>o.enrolled===0)?'button primary':'button'} to={`/admin/terms/${termId}/import-students`}>Import students</Link>
     </div>
     {closed&&<p className="warn" role="status">This term is closed. Reopen it from School years to make changes.</p>}
+    <nav className="tabs" aria-label="Term workspace tabs">
+      <button type="button" className={tab==='sections'?'active':''} aria-pressed={tab==='sections'} onClick={()=>setTab('sections')}>Sections</button>
+      <button type="button" className={tab==='offerings'?'active':''} aria-pressed={tab==='offerings'} onClick={()=>setTab('offerings')}>Offerings</button>
+    </nav>
 
-    <section className="panel">
-      <div className="page-heading"><h2>Sections</h2><button className={sections.data?.length===0?'primary':''} disabled={closed} onClick={()=>setDialog('section')}>Add section</button></div>
-      {sections.isPending?<p>Loading…</p>:sections.error?<p role="alert">{sections.error.message}</p>:
-        sections.data.length===0?<p className="muted">No sections yet. Add one, or copy structure when creating the school year.</p>:
-        <div className="table-wrap"><table><caption className="sr-only">Sections of this term</caption>
-          <thead><tr><th scope="col">Section</th><th scope="col">Year level</th><th scope="col">Students</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
-          <tbody>{sections.data.map(s=><tr key={s.id}><th scope="row">{s.name}</th><td>{yearLabel(s.year_level)}</td><td>{s.member_count}</td>
-            <td><Link className="button" state={here} to={`/admin/terms/${termId}/sections/${s.id}/students`}>{closed?'View students':'Manage students'}</Link></td></tr>)}</tbody></table></div>}
-    </section>
-
-    <section className="panel">
-      <div className="page-heading"><h2>Offerings</h2><button className={sections.data?.length&&offerings.data?.length===0?'primary':''} disabled={closed||!sections.data} onClick={()=>setDialog('offering')}>Assign subjects</button></div>
-      {offerings.isPending?<p>Loading…</p>:offerings.error?<p role="alert">{offerings.error.message}</p>:
-        offerings.data.length===0?<p className="muted">No subjects are assigned yet.</p>:
-        <div className="table-wrap" tabIndex={0} role="region" aria-label="Offerings"><table><thead><tr><th>Subject</th><th>Teacher</th><th>Sections</th><th>Enrolled</th><th><span className="sr-only">Actions</span></th></tr></thead>
-          <tbody>{offerings.data.map(o=><tr key={o.id}>
-            <td><strong>{o.subject.code}</strong> {o.subject.title}</td><td>{o.faculty.display_name}</td>
-            <td>{o.sections.map(s=>s.name).join(', ')||'—'}</td><td>{o.enrolled}</td>
-            <td className="actions"><Link className="button" state={here} to={`/admin/offerings/${o.id}`}>Roster</Link>
-              <button disabled={closed} onClick={()=>setEditing(o)}>Edit</button></td></tr>)}</tbody></table></div>}
-    </section>
+    {tab==='sections'?
+      <section className="panel">
+        <div className="page-heading"><h2>Sections</h2><button className={sections.data?.length===0?'primary':''} disabled={closed} onClick={()=>setDialog('section')}>Add section</button></div>
+        {sections.isPending?<p>Loading…</p>:sections.error?<p role="alert">{sections.error.message}</p>:
+          sections.data.length===0?<p className="muted">No sections yet. Add one, or copy structure when creating the school year.</p>:
+          <div className="table-wrap"><table><caption className="sr-only">Sections of this term</caption>
+            <thead><tr><th scope="col">Section</th><th scope="col">Year level</th><th scope="col">Students</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
+            <tbody>{sections.data.map(s=><tr key={s.id}><th scope="row">{s.name}</th><td>{yearLabel(s.year_level)}</td><td>{s.member_count}</td>
+              <td><Link className="button" state={here} to={`/admin/terms/${termId}/sections/${s.id}/students`}>{closed?'View students':'Manage students'}</Link></td></tr>)}</tbody></table></div>}
+      </section>
+      :
+      <section className="panel">
+        <div className="page-heading"><h2>Offerings</h2><button className={sections.data?.length&&offerings.data?.length===0?'primary':''} disabled={closed||!sections.data} onClick={()=>setDialog('offering')}>Assign subjects</button></div>
+        {offerings.isPending?<p>Loading…</p>:offerings.error?<p role="alert">{offerings.error.message}</p>:
+          offerings.data.length===0?<p className="muted">No subjects are assigned yet.</p>:
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Offerings"><table><thead><tr><th>Subject</th><th>Teacher</th><th>Sections</th><th>Enrolled</th><th><span className="sr-only">Actions</span></th></tr></thead>
+            <tbody>{offerings.data.map(o=><tr key={o.id}>
+              <td><strong>{o.subject.code}</strong> {o.subject.title}</td><td>{o.faculty.display_name}</td>
+              <td>{o.sections.map(s=>s.name).join(', ')||'—'}</td><td>{o.enrolled}</td>
+              <td className="actions"><Link className="button" state={here} to={`/admin/offerings/${o.id}`}>Roster</Link>
+                <button disabled={closed} onClick={()=>setEditing(o)}>Edit</button></td></tr>)}</tbody></table></div>}
+      </section>
+    }
 
     {dialog==='section'&&<SectionDialog termId={term.id} onClose={()=>setDialog(null)} onDone={()=>{setDialog(null);refresh()}}/>}
     {dialog==='offering'&&<BulkAssignDialog termId={term.id} termSequence={term.sequence} sections={sections.data??[]} existing={offerings.data??[]}
