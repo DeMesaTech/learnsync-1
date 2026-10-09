@@ -43,6 +43,15 @@ class AcceptToken(BaseModel):
 class AccountStatus(BaseModel):
     status: Literal["active", "inactive"]
 
+class BulkSendLinks(BaseModel):
+    account_ids: list[UUID] = Field(min_length=1, max_length=25)
+
+    @model_validator(mode="after")
+    def unique_account_ids(self):
+        if len(set(self.account_ids)) != len(self.account_ids):
+            raise ValueError("Account IDs must be unique")
+        return self
+
 class Handover(BaseModel):
     incoming_owner: str = Field(min_length=1, max_length=150)
     reason: str = Field(min_length=1, max_length=1000)

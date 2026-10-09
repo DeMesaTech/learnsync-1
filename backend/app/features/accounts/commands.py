@@ -3,11 +3,12 @@ import smtplib
 from datetime import timedelta
 from email.message import EmailMessage
 
+from fastapi import HTTPException
 from sqlalchemy import select, update
 
 from app.config import settings
 from app.errors import fail
-from app.security import digest, passwords
+from app.security import digest, passwords, rate_limit
 
 from .models import Account, AccountToken, AuditEvent, AuthSession, now
 
@@ -122,3 +123,35 @@ def set_status(db, actor, account, status):
                    AccountToken.consumed_at.is_(None)).values(consumed_at=now()))
     audit(db, actor, "account.status_changed", "account", account.id, {"status": status})
     db.commit()
+
+
+def send_links(db, actor, account_ids):
+    accounts = db.scalars(select(Account).where(Account.id.in_(account_ids))).all()
+    by_id = {account.id: account for account in accounts}
+    if len(by_id) != len(account_ids):
+        fail(404, "account_not_found", "One or more selected accounts were not found.")
+    if any(by_id[account_id].status == "inactive" for account_id in account_ids):
+        fail(409, "account_inactive", "Inactive accounts cannot receive account links.")
+
+    results = []
+    for account_id in account_ids:
+        account = by_id[account_id]
+        purpose = "invite" if account.status == "invited" else "reset"
+        try:
+            rate_limit(("admin_send", str(account.id)), 2)
+            token = issue_token(db, account, purpose, actor)
+            send_link(account, token, purpose)
+            audit(db, actor, "account.link_sent", "account", account.id, {"purpose": purpose})
+            db.commit()
+            results.append({"id": account.id, "email": account.email, "status": "sent",
+                            "message": "Link sent."})
+        except HTTPException as exc:
+            db.rollback()
+            detail = exc.detail
+            message = detail.get("message", "Email could not be sent.") if isinstance(detail, dict) else str(detail)
+            results.append({"id": account_id, "email": account.email, "status": "failed",
+                            "message": message})
+
+    return {"sent": sum(result["status"] == "sent" for result in results),
+            "failed": sum(result["status"] == "failed" for result in results),
+            "results": results}

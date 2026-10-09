@@ -1,91 +1,295 @@
-import {useState,type FormEvent} from 'react';
-import {Link,useNavigate,useOutletContext} from 'react-router-dom';
-import {useQuery} from '@tanstack/react-query';
-import {api,post,send,upload,errorText} from '../../app/api';
-import {queryClient,useAuth} from '../../app/providers';
-import type {OfferingSummary} from '../academics/types';
-import {DraftNotices,SaveIndicator,draftKey,useAutosave,useFlushOnLeave} from './autosave';
-import {OutlineView} from './OutlineView';
-import {ChaptersStep,GradingStep} from './SyllabusSections';
-import {emptyChapter,type GradingPolicy,type Outline,type SyllabusDraftContent,type SyllabusRev,type SyllabusState} from './types';
+import { useState, type FormEvent } from 'react';
+import { Link, useNavigate, useOutletContext } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { api, post, send, upload, errorText } from '../../app/api';
+import { queryClient, useAuth } from '../../app/providers';
+import type { OfferingSummary } from '../academics/types';
+import {
+  DraftNotices,
+  SaveIndicator,
+  draftKey,
+  useAutosave,
+  useFlushOnLeave,
+} from './autosave';
+import { OutlineView } from './OutlineView';
+import { ChaptersStep, GradingStep } from './SyllabusSections';
+import {
+  emptyChapter,
+  type GradingPolicy,
+  type Outline,
+  type SyllabusDraftContent,
+  type SyllabusRev,
+  type SyllabusState,
+} from './types';
 
-const STEPS=[['outline','Outline'],['grading','Grading'],['plan','Assessments'],['schedule','Schedule'],['review','Review']] as const;
-type Step=typeof STEPS[number][0];
-const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const STEPS = [
+  ['outline', 'Outline'],
+  ['grading', 'Grading'],
+  ['plan', 'Assessments'],
+  ['schedule', 'Schedule'],
+  ['review', 'Review'],
+] as const;
+type Step = (typeof STEPS)[number][0];
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 /** The usual setup, offered as a SUGGESTION: it only takes effect once the teacher ticks the confirmation. */
-const USUAL_POLICY:GradingPolicy={categories:[{key:'attendance',label:'Attendance',weight:10},{key:'quiz',label:'Quizzes',weight:25},{key:'activity',label:'Activities',weight:20},{key:'exam',label:'Examinations',weight:45}],
-  periods:[{key:'midterm',label:'Midterm',share:50},{key:'finals',label:'Finals',share:50}],transmutation:'raw',passing:75,late_attendance_fraction:0.5};
-const STARTER_CHAPTERS=['Chapter 1','Chapter 2','Chapter 3','Chapter 4'];
+const USUAL_POLICY: GradingPolicy = {
+  categories: [
+    { key: 'attendance', label: 'Attendance', weight: 10 },
+    { key: 'quiz', label: 'Quizzes', weight: 25 },
+    { key: 'activity', label: 'Activities', weight: 20 },
+    { key: 'exam', label: 'Examinations', weight: 45 },
+  ],
+  periods: [
+    { key: 'midterm', label: 'Midterm', share: 50 },
+    { key: 'finals', label: 'Finals', share: 50 },
+  ],
+  transmutation: 'raw',
+  passing: 75,
+  late_attendance_fraction: 0.5,
+};
+const STARTER_CHAPTERS = ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4'];
 
-const KINDS=[['online_quiz','Quizzes','Quiz','quiz'],['activity','Activities','Activity','activity'],['exam','Examinations','Examination','exam']] as const;
-type Counts=Record<string,{midterm:number;finals:number}>;
-const PERIODS=[['midterm','Midterm'],['finals','Finals']] as const;
-const MAX_PLANNED=30;
+const KINDS = [
+  ['online_quiz', 'Quizzes', 'Quiz', 'quiz'],
+  ['activity', 'Activities', 'Activity', 'activity'],
+  ['exam', 'Examinations', 'Examination', 'exam'],
+] as const;
+type Counts = Record<string, { midterm: number; finals: number }>;
+const PERIODS = [
+  ['midterm', 'Midterm'],
+  ['finals', 'Finals'],
+] as const;
+const MAX_PLANNED = 30;
 
-interface PlanItem{kind:string;title:string;category_key:string|null;period:'midterm'|'finals'}
-export function buildPlan(counts:Counts,policy:GradingPolicy|null):PlanItem[]{
-  const categories=new Set(policy?.categories.map(c=>c.key));
-  const out:PlanItem[]=[];
-  for(const [kind,,label,key] of KINDS){
-    let n=0;
-    for(const [period,name] of PERIODS){
-      const count=counts[kind]?.[period]??0;
-      for(let i=0;i<count;i++){
+interface PlanItem {
+  kind: string;
+  title: string;
+  category_key: string | null;
+  period: 'midterm' | 'finals';
+}
+
+export function buildPlan(counts: Counts, policy: GradingPolicy | null): PlanItem[] {
+  const categories = new Set(policy?.categories.map((c) => c.key));
+  const out: PlanItem[] = [];
+  for (const [kind, , label, key] of KINDS) {
+    let n = 0;
+    for (const [period, name] of PERIODS) {
+      const count = counts[kind]?.[period] ?? 0;
+      for (let i = 0; i < count; i++) {
         n++;
-        const title=kind==='exam'?(count===1?`${name==='Finals'?'Final':name} examination`:`${name} examination ${i+1}`):`${label} ${n}`;
-        out.push({kind,title,category_key:categories.has(key)?key:null,period});
+        const title =
+          kind === 'exam'
+            ? count === 1
+              ? `${name === 'Finals' ? 'Final' : name} examination`
+              : `${name} examination ${i + 1}`
+            : `${label} ${n}`;
+        out.push({ kind, title, category_key: categories.has(key) ? key : null, period });
       }
     }
   }
   return out;
 }
 
-export function SubjectSetup(){
-  const {offering}=useOutletContext<{offering:OfferingSummary}>();
-  const url=`/teach/offerings/${offering.id}/syllabus`;
-  const query=useQuery({queryKey:['syllabus',offering.id],queryFn:()=>api<SyllabusState>(url)});
-  const [message,setMessage]=useState('');
-  const [warnings,setWarnings]=useState<string[]>([]);
-  const [finished,setFinished]=useState<number|null>(null);   // lives here: once published the draft is gone and this component re-renders
-  const refresh=()=>Promise.all(['syllabus','assessments','items','offering','my-offerings'].map(k=>queryClient.invalidateQueries({queryKey:[k]})));
-  if(offering.term_status==='closed')return <section className="panel"><h2>This term is closed</h2><p>A closed term cannot be set up. Ask an administrator to reopen it.</p></section>;
-  if(query.isPending)return <p>Loading…</p>;
-  if(query.error)return <p role="alert">{query.error.message}</p>;
-  const {published,draft}=query.data;
-  if(finished!==null)return <Done offering={offering} planned={finished}/>;
-  if(draft)return <Flow key={draft.id} offering={offering} draft={draft} published={published} warnings={warnings} onChanged={refresh} onFinished={setFinished}/>;
-  return <Start offering={offering} published={published} message={message} setMessage={setMessage} setWarnings={setWarnings} onChanged={refresh}/>;
+export function SubjectSetup() {
+  const { offering } = useOutletContext<{ offering: OfferingSummary }>();
+  const url = `/teach/offerings/${offering.id}/syllabus`;
+  const query = useQuery({
+    queryKey: ['syllabus', offering.id],
+    queryFn: () => api<SyllabusState>(url),
+  });
+  const [message, setMessage] = useState('');
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [finished, setFinished] = useState<number | null>(null); // lives here: once published the draft is gone and this component re-renders
+  const refresh = () =>
+    Promise.all(
+      ['syllabus', 'assessments', 'items', 'offering', 'my-offerings'].map((k) =>
+        queryClient.invalidateQueries({ queryKey: [k] }),
+      ),
+    );
+  if (offering.term_status === 'closed') {
+    return (
+      <section className="panel">
+        <h2>This term is closed</h2>
+        <p>A closed term cannot be set up. Ask an administrator to reopen it.</p>
+      </section>
+    );
+  }
+  if (query.isPending) return <p>Loading…</p>;
+  if (query.error) return <p role="alert">{query.error.message}</p>;
+  const { published, draft } = query.data;
+  if (finished !== null) return <Done offering={offering} planned={finished} />;
+  if (draft) {
+    return (
+      <Flow
+        key={draft.id}
+        offering={offering}
+        draft={draft}
+        published={published}
+        warnings={warnings}
+        onChanged={refresh}
+        onFinished={setFinished}
+      />
+    );
+  }
+  return (
+    <Start
+      offering={offering}
+      published={published}
+      message={message}
+      setMessage={setMessage}
+      setWarnings={setWarnings}
+      onChanged={refresh}
+    />
+  );
 }
 
-function Start({offering,published,message,setMessage,setWarnings,onChanged}:{offering:OfferingSummary;published:SyllabusRev|null;message:string;setMessage:(m:string)=>void;setWarnings:(w:string[])=>void;onChanged:()=>Promise<unknown>}){
-  const url=`/teach/offerings/${offering.id}/syllabus`;
-  const mine=useQuery({queryKey:['my-offerings'],queryFn:()=>api<OfferingSummary[]>('/me/offerings')});
-  const earlier=(mine.data??[]).filter(o=>o.id!==offering.id);
-  const [source,setSource]=useState('');
-  const [busy,setBusy]=useState(false);
-  async function run(work:()=>Promise<unknown>){setBusy(true);setMessage('');try{await work();await onChanged()}catch(e){setMessage(errorText(e))}finally{setBusy(false)}}
-  const blank=()=>run(()=>post(`${url}/draft`,{}));
-  const copy=()=>run(async()=>{const r=await post<{items:number;assessments:number;skipped_files:number}>(`/teach/offerings/${offering.id}/copy-from/${source}`,{});
-    if(r.skipped_files)setWarnings([`${r.skipped_files} file${r.skipped_files===1?' was':'s were'} not copied because the original could not be found.`])});
-  const importFile=(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();const form=new FormData(e.currentTarget);
-    void run(async()=>{const r=await upload<{warnings:string[]}>(`${url}/import`,form);setWarnings(r.warnings)})};
-  return <>
-    <div className="page-heading"><div><p className="eyebrow">Set up this subject</p><h2>{offering.subject.code} · {offering.subject.title}</h2>
-      <p className="muted">A few minutes now gives you the whole structure: outline, grading, planned quizzes, activities and exams, and class days. Nothing is visible to students until you publish. Details can be filled in later, one item at a time.</p></div></div>
-    {message&&<p role="alert">{message}</p>}
-    {published&&<section className="panel"><h3>This subject already has a published syllabus</h3><p className="muted">You can still use this guide to change the outline and grading, plan more assessments or set the class days. Students keep seeing the published version until you publish again.</p>
-      <button className="primary" disabled={busy} onClick={blank}>Continue with the guide</button></section>}
-    {!published&&<div className="cards">
-      <section className="panel"><h3>Copy a previous subject</h3><p className="muted">Brings over its outline, grading, lessons, files, links and assessments as drafts. Never students, dates, scores or attempts.</p>
-        {mine.isPending?<p>Loading…</p>:earlier.length===0?<p className="muted">You have no other subject to copy from.</p>:<>
-          <label>Subject<select value={source} onChange={e=>setSource(e.target.value)}><option value="">Choose one…</option>{earlier.map(o=><option key={o.id} value={o.id}>{o.subject.code} · {o.subject.title} · {o.term}</option>)}</select></label>
-          <button className="primary" disabled={!source||busy} onClick={copy}>Copy into this subject</button></>}</section>
-      <section className="panel"><h3>Import a syllabus file</h3><p className="muted">A DOCX or PDF. The outline is read from it and you check the result.</p>
-        <form onSubmit={importFile}><label>Syllabus file<input name="file" type="file" required accept=".docx,.pdf"/></label><button disabled={busy}>Import</button></form></section>
-      <section className="panel"><h3>Start from scratch</h3><p className="muted">A blank outline with the course name already filled in. A starter outline is offered in the next step.</p>
-        <button className="primary" disabled={busy} onClick={blank}>Start</button></section></div>}
-  </>;
+function Start({
+  offering,
+  published,
+  message,
+  setMessage,
+  setWarnings,
+  onChanged,
+}: {
+  offering: OfferingSummary;
+  published: SyllabusRev | null;
+  message: string;
+  setMessage: (m: string) => void;
+  setWarnings: (w: string[]) => void;
+  onChanged: () => Promise<unknown>;
+}) {
+  const url = `/teach/offerings/${offering.id}/syllabus`;
+  const mine = useQuery({
+    queryKey: ['my-offerings'],
+    queryFn: () => api<OfferingSummary[]>('/me/offerings'),
+  });
+  const earlier = (mine.data ?? []).filter((o) => o.id !== offering.id);
+  const [source, setSource] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function run(work: () => Promise<unknown>) {
+    setBusy(true);
+    setMessage('');
+    try {
+      await work();
+      await onChanged();
+    } catch (e) {
+      setMessage(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const blank = () => run(() => post(`${url}/draft`, {}));
+  const copy = () =>
+    run(async () => {
+      const r = await post<{ items: number; assessments: number; skipped_files: number }>(
+        `/teach/offerings/${offering.id}/copy-from/${source}`,
+        {},
+      );
+      if (r.skipped_files) {
+        setWarnings([
+          `${r.skipped_files} file${r.skipped_files === 1 ? ' was' : 's were'} not copied because the original could not be found.`,
+        ]);
+      }
+    });
+  const importFile = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    void run(async () => {
+      const r = await upload<{ warnings: string[] }>(`${url}/import`, form);
+      setWarnings(r.warnings);
+    });
+  };
+
+  return (
+    <>
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">Set up this subject</p>
+          <h2>
+            {offering.subject.code} · {offering.subject.title}
+          </h2>
+          <p className="muted">
+            A few minutes now gives you the whole structure: outline, grading, planned
+            quizzes, activities and exams, and class days. Nothing is visible to students
+            until you publish. Details can be filled in later, one item at a time.
+          </p>
+        </div>
+      </div>
+      {message && <p role="alert">{message}</p>}
+      {published && (
+        <section className="panel">
+          <h3>This subject already has a published syllabus</h3>
+          <p className="muted">
+            You can still use this guide to change the outline and grading, plan more
+            assessments or set the class days. Students keep seeing the published version
+            until you publish again.
+          </p>
+          <button className="primary" disabled={busy} onClick={blank}>
+            Continue with the guide
+          </button>
+        </section>
+      )}
+      {!published && (
+        <div className="cards">
+          <section className="panel">
+            <h3>Copy a previous subject</h3>
+            <p className="muted">
+              Brings over its outline, grading, lessons, files, links and assessments as
+              drafts. Never students, dates, scores or attempts.
+            </p>
+            {mine.isPending ? (
+              <p>Loading…</p>
+            ) : earlier.length === 0 ? (
+              <p className="muted">You have no other subject to copy from.</p>
+            ) : (
+              <>
+                <label>
+                  Subject
+                  <select value={source} onChange={(e) => setSource(e.target.value)}>
+                    <option value="">Choose one…</option>
+                    {earlier.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.subject.code} · {o.subject.title} · {o.term}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button className="primary" disabled={!source || busy} onClick={copy}>
+                  Copy into this subject
+                </button>
+              </>
+            )}
+          </section>
+          <section className="panel">
+            <h3>Import a syllabus file</h3>
+            <p className="muted">
+              A DOCX or PDF. The outline is read from it and you check the result.
+            </p>
+            <form onSubmit={importFile}>
+              <label>
+                Syllabus file
+                <input name="file" type="file" required accept=".docx,.pdf" />
+              </label>
+              <button disabled={busy}>Import</button>
+            </form>
+          </section>
+          <section className="panel">
+            <h3>Start from scratch</h3>
+            <p className="muted">
+              A blank outline with the course name already filled in. A starter outline is
+              offered in the next step.
+            </p>
+            <button className="primary" disabled={busy} onClick={blank}>
+              Start
+            </button>
+          </section>
+        </div>
+      )}
+    </>
+  );
 }
 
 function Done({offering,planned}:{offering:OfferingSummary;planned:number}){

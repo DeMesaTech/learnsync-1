@@ -101,6 +101,67 @@ def test_accounts_can_be_filtered_by_status_and_counted(client, db, actors, head
     assert client.get("/api/accounts/count").status_code == 401
 
 
+def test_bulk_send_links_reports_successes_and_email_failures(client, db, actors, headers, monkeypatch):
+    from fastapi import HTTPException
+
+    invited = Account(email="waiting@example.com", display_name="Waiting", role="faculty",
+                      status="invited")
+    db.add(invited)
+    db.commit()
+    sent = []
+
+    def send_link(account, token, purpose):
+        if account.id == invited.id:
+            raise HTTPException(status_code=503, detail={
+                "code": "email_unavailable", "message": "Email could not be sent. Please try again."
+            })
+        sent.append((account.email, purpose))
+
+    monkeypatch.setattr("app.features.accounts.commands.send_link", send_link)
+    auth = sign_in(client, headers)
+    response = client.post("/api/accounts/send-links", headers=auth, json={
+        "account_ids": [str(invited.id), str(actors[2].id)]
+    })
+
+    assert response.status_code == 200, response.text
+    assert response.json()["sent"] == 1
+    assert response.json()["failed"] == 1
+    assert [result["status"] for result in response.json()["results"]] == ["failed", "sent"]
+    assert response.json()["results"][0]["message"] == "Email could not be sent. Please try again."
+    assert sent == [("student@example.com", "reset")]
+    events = db.scalars(select(AuditEvent).where(AuditEvent.action == "account.link_sent")).all()
+    assert [event.entity_id for event in events] == [str(actors[2].id)]
+
+
+def test_bulk_send_links_validates_before_sending_and_requires_admin(client, db, actors, headers, sent):
+    auth = sign_in(client, headers)
+    invited = Account(email="waiting@example.com", display_name="Waiting", role="faculty",
+                      status="invited")
+    inactive = Account(email="inactive@example.com", display_name="Inactive", role="faculty",
+                       status="inactive")
+    db.add_all([invited, inactive])
+    db.commit()
+
+    response = client.post("/api/accounts/send-links", headers=auth, json={
+        "account_ids": [str(actors[2].id), str(inactive.id)]
+    })
+    assert response.status_code == 409
+    assert sent == []
+
+    response = client.post("/api/accounts/send-links", headers=auth, json={
+        "account_ids": [str(invited.id), str(invited.id)]
+    })
+    assert response.status_code == 422
+    assert sent == []
+
+    client.post("/api/auth/logout", headers=auth)
+    faculty_auth = sign_in(client, headers, "faculty")
+    response = client.post("/api/accounts/send-links", headers=faculty_auth, json={
+        "account_ids": [str(invited.id)]
+    })
+    assert response.status_code == 403
+
+
 def test_emailed_links_have_a_clear_subject(monkeypatch):
     import smtplib
     from types import SimpleNamespace

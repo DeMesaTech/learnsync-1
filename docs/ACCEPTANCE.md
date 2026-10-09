@@ -2,6 +2,14 @@
 
 Implementation started 2026-10-06. No milestone is yet accepted.
 
+### 2026-10-09 (Admin account table and bulk links)
+- Replaced account cards with a responsive table, row selection, page-level select-all, and sending invitation/reset links to selected accounts.
+- Kept role-based authorization and the existing create/read/update controls; accounts are deactivated rather than deleted to preserve history.
+- Bulk endpoint validates all selected IDs and account states before sending, applies the existing per-account send limit, and reports partial mail failures explicitly.
+- Passed: frontend ESLint and production build; backend Ruff, Python compile check, and valid bulk-request schema smoke check.
+- Browser: table rendered; selecting one account enabled bulk sending, clearing selection reset the selection; at 375px the table scrolls inside its wrapper without widening the page.
+- Blocked: `pytest tests\test_accounts.py` could not set up because the isolated Postgres test database at `127.0.0.1:15432` timed out. The already-running API process returned 404 for the new endpoint because it had not been restarted, so no bulk email was sent and the API flow still needs verification after restart.
+
 | Milestone | Status | Evidence |
 |---|---|---|
 | 0 Skeleton | Passed (2026-10-06) | See evidence below |

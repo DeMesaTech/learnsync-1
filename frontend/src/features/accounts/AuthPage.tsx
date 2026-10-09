@@ -1,16 +1,133 @@
-import {useState,type FormEvent} from 'react';
-import {Link,Navigate,useLocation,useNavigate} from 'react-router-dom';
-import {useAuth,queryClient} from '../../app/providers';
-import {post,setCsrf,type SessionInfo} from '../../app/api';
-export function AuthPage(){
- const location=useLocation();const navigate=useNavigate();const {session,loading,error:connectionError}=useAuth();
- const kind=location.pathname;const [email,setEmail]=useState('');const [password,setPassword]=useState('');const [error,setError]=useState('');const [message,setMessage]=useState('');const notice=(location.state as {notice?:string}|null)?.notice;const [busy,setBusy]=useState(false);
- const [token]=useState(()=>{const value=new URLSearchParams(location.hash.slice(1)).get('token')||'';if(value)history.replaceState(null,'',location.pathname);return value});
- const isLogin=kind==='/login';const isReset=kind==='/forgot-password';const title=isLogin?'Welcome back':isReset?'Reset your password':kind==='/accept-invitation'?'Set up your account':'Choose a new password';
- if(isLogin&&session?.user)return <Navigate to={'/'+session.user.role} replace/>;
- async function submit(e:FormEvent){e.preventDefault();setError('');setMessage('');setBusy(true);try{
-  if(isLogin){const result=await post<SessionInfo>('/auth/login',{email,password});setCsrf(result.csrf);queryClient.setQueryData(['session'],result);navigate('/'+result.user!.role,{replace:true})}
-  else{const result=await post<{message:string}>(isReset?'/auth/reset-request':kind==='/accept-invitation'?'/auth/accept-invitation':'/auth/reset-password',isReset?{email}:{token,password});if(isReset){setMessage(result.message);setPassword('')}else{await queryClient.invalidateQueries({queryKey:['session']});navigate('/login',{replace:true,state:{notice:result.message}})}}
- }catch(e){setError(e instanceof Error?e.message:'Try again.')}finally{setBusy(false)}}
- return <main className="auth"><section className="auth-brand"><Link to="/login" className="brand">LearnSync</Link><h1>A clearer path through your learning.</h1><p>Your subjects, lessons and progress, together in one place.</p></section><section className="panel auth-card"><p className="eyebrow">BS Entrepreneurship</p><h2>{title}</h2><p className="muted">Use your school account to continue.</p>{connectionError&&<p role="alert">Cannot reach the server. Start the API and database, then refresh.</p>}<form onSubmit={submit}>{(isLogin||isReset)&&<label>Email<input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} required/></label>}{!isReset&&<label>Password{!isLogin&&<span className="muted">At least 12 characters.</span>}<input type="password" minLength={isLogin?1:12} maxLength={128} autoComplete={isLogin?'current-password':'new-password'} value={password} onChange={e=>setPassword(e.target.value)} required/></label>}{error&&<p role="alert" className="error">{error}</p>}{(message||notice)&&<p role="status">{message||notice}</p>}<button className="primary" disabled={busy||loading||!!connectionError||(!isLogin&&!isReset&&!token)}>{busy?'Please wait…':isLogin?'Sign in':isReset?'Send reset link':'Save password'}</button></form>{!isLogin&&!isReset&&!token&&<p role="alert">Open the link from your invitation or password-reset email.</p>}<div className="auth-links">{isLogin?<Link to="/forgot-password">Forgot password?</Link>:<Link to="/login">Back to sign in</Link>}</div></section></main>
+import { useState, type FormEvent } from 'react';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth, queryClient } from '../../app/providers';
+import { post, setCsrf, type SessionInfo } from '../../app/api';
+
+export function AuthPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { session, loading, error: connectionError } = useAuth();
+  const kind = location.pathname;
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const notice = (location.state as { notice?: string } | null)?.notice;
+  const [busy, setBusy] = useState(false);
+  const [token] = useState(() => {
+    const value = new URLSearchParams(location.hash.slice(1)).get('token') || '';
+    if (value) history.replaceState(null, '', location.pathname);
+    return value;
+  });
+  const isLogin = kind === '/login';
+  const isReset = kind === '/forgot-password';
+  const title = isLogin
+    ? 'Welcome back'
+    : isReset
+      ? 'Reset your password'
+      : kind === '/accept-invitation'
+        ? 'Set up your account'
+        : 'Choose a new password';
+
+  if (isLogin && session?.user) return <Navigate to={'/' + session.user.role} replace />;
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setError('');
+    setMessage('');
+    setBusy(true);
+    try {
+      if (isLogin) {
+        const result = await post<SessionInfo>('/auth/login', { email, password });
+        setCsrf(result.csrf);
+        queryClient.setQueryData(['session'], result);
+        navigate('/' + result.user!.role, { replace: true });
+      } else {
+        const result = await post<{ message: string }>(
+          isReset ? '/auth/reset-request' : kind === '/accept-invitation' ? '/auth/accept-invitation' : '/auth/reset-password',
+          isReset ? { email } : { token, password },
+        );
+        if (isReset) {
+          setMessage(result.message);
+          setPassword('');
+        } else {
+          await queryClient.invalidateQueries({ queryKey: ['session'] });
+          navigate('/login', { replace: true, state: { notice: result.message } });
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+  <main className={isLogin ? 'auth auth-login' : 'auth'}>
+      <section className="auth-brand">
+        <Link to="/login" className="brand">
+          LearnSync
+        </Link>
+        <h1>A clearer path through your learning.</h1>
+        <p>Your subjects, lessons and progress, together in one place.</p>
+      </section>
+      <section className="panel auth-card">
+        <p className="eyebrow">BS Entrepreneurship</p>
+        <h2>{title}</h2>
+        <p className="muted">Use your school account to continue.</p>
+        {connectionError && (
+          <p role="alert">
+            Cannot reach the server. Start the API and database, then refresh.
+          </p>
+        )}
+        <form onSubmit={submit}>
+          {(isLogin || isReset) && (
+            <label>
+              Email
+              <input
+                type="email"
+                autoComplete="username"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </label>
+          )}
+          {!isReset && (
+            <label>
+              Password
+              {!isLogin && <span className="muted">At least 12 characters.</span>}
+              <input
+                type="password"
+                minLength={isLogin ? 1 : 12}
+                maxLength={128}
+                autoComplete={isLogin ? 'current-password' : 'new-password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </label>
+          )}
+          {error && (
+            <p role="alert" className="error">
+              {error}
+            </p>
+          )}
+          {(message || notice) && <p role="status">{message || notice}</p>}
+          <button
+            className="primary"
+            disabled={busy || loading || !!connectionError || (!isLogin && !isReset && !token)}
+          >
+            {busy ? 'Please wait…' : isLogin ? 'Sign in' : isReset ? 'Send reset link' : 'Save password'}
+          </button>
+        </form>
+        {!isLogin && !isReset && !token && (
+          <p role="alert">Open the link from your invitation or password-reset email.</p>
+        )}
+        <div className="auth-links">
+          {isLogin ? <Link to="/forgot-password">Forgot password?</Link> : <Link to="/login">Back to sign in</Link>}
+        </div>
+      </section>
+    </main>
+  );
 }

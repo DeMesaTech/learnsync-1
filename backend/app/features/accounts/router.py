@@ -22,6 +22,7 @@ from .schemas import (
     AcceptToken,
     AccountStatus,
     AccountView,
+    BulkSendLinks,
     EmailRequest,
     Handover,
     Invite,
@@ -132,6 +133,10 @@ def resend(account_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)
     commands.audit(db, actor, "account.link_sent", "account", account.id, {"purpose": purpose})
     db.commit()
     return {"message": "Link sent."}
+
+@router.post("/accounts/send-links")
+def send_account_links(data: BulkSendLinks, actor=Depends(admin), db: Session = Depends(get_db)):
+    return commands.send_links(db, actor, data.account_ids)
 
 @router.post("/accounts/{account_id}/handover")
 def handover(account_id: UUID, data: Handover, actor=Depends(admin), db: Session = Depends(get_db)):
