@@ -45,7 +45,7 @@ export function OfferingLayout({role}:{role:'faculty'|'student'}){
   const syllabus=useQuery({queryKey:['syllabus',offeringId],queryFn:()=>api<SyllabusState>(`/teach/offerings/${offeringId}/syllabus`),enabled:role==='faculty'});
   const needsSetup=role==='faculty'&&!setup&&query.data?.term_status==='open'&&!!syllabus.data&&!syllabus.data.published;
   return <>
-    <p className="back"><Link to={`/${role}/subjects`}>← My subjects</Link></p>
+    <p className="back"><Link to={`/${role}/subjects`}>← My Classes</Link></p>
     {query.isPending?<p>Loading…</p>:query.error?<section className="panel"><h1>Subject unavailable</h1><p role="alert">{query.error.message}</p></section>:<>
       <div className="page-heading"><div>
         <p className="eyebrow">{query.data.term}{query.data.term_status==='closed'?' · closed (read-only)':''}</p>

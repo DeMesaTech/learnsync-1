@@ -52,7 +52,7 @@ export function StudentHome(){
       <div className="dash-grid">
         <div className="dash-main">
           {d.next_step?<Hero eyebrow={d.next_step.type==='lesson'?'Your next step':'Your next task'} title={d.next_step.title} detail={d.next_step.subject} action={d.next_step.type==='lesson'?'Continue learning':'Open work'} to={d.next_step.link} icon="▤"/>
-            :<Hero eyebrow="Your next step" title="You’re up to date" detail={d.subjects.length?'Nothing is waiting for you right now. New lessons and work appear here when your teacher publishes them. You can review your subjects or ask study help about what you have learned.':'You are not enrolled in a current subject yet.'} action={d.subjects.length?(only?'Ask Study buddy':'See my subjects'):undefined} to={only?`/student/study-buddy?subject=${only.offering_id}`:'/student/subjects'} icon="✓"/>}
+            :<Hero eyebrow="Your next step" title="You’re up to date" detail={d.subjects.length?'Nothing is waiting for you right now. New lessons and work appear here when your teacher publishes them. You can review your subjects or ask study help about what you have learned.':'You are not enrolled in a current subject yet.'} action={d.subjects.length?(only?'Ask Study buddy':'See My Classes'):undefined} to={only?`/student/study-buddy?subject=${only.offering_id}`:'/student/subjects'} icon="✓"/>}
           <section className="panel"><h2>Learning activity this week</h2>
             <p className="muted">Lessons, files and links you marked complete and quizzes or activities you submitted. Opening or reading something does not count.</p>
             <ol className="week" aria-label="Activity by day this week">{d.week.days.map(day=>
@@ -62,7 +62,7 @@ export function StudentHome(){
             <Stats items={[[d.week.lessons_today,'Lessons completed today'],[d.week.work_today,'Quizzes and activities submitted today']]}/>
             {only&&<Link state={here} className="button" to={`/student/offerings/${only.offering_id}/progress`}>View my progress</Link>}
           </section>
-          <section aria-labelledby="subjects-h"><div className="section-head"><h2 id="subjects-h">My subjects</h2><Link state={here} to="/student/subjects">All subjects, including past terms</Link></div>
+          <section aria-labelledby="subjects-h"><div className="section-head"><h2 id="subjects-h">My Classes</h2><Link state={here} to="/student/subjects">All subjects, including past terms</Link></div>
             {d.subjects.length===0?<p className="panel muted">No current subjects.</p>:<div className="cards">{d.subjects.map(s=><SubjectCard key={s.offering_id} code={s.code} title={s.title} meta={s.to_do?plural(s.to_do,'item')+' to do':'Nothing to do'}
               progress={s.percent} detail={s.total?`${s.done} of ${s.total} steps done`:'No lessons or work yet'} to={`/student/offerings/${s.offering_id}/classwork`} action="Open" links={[['Progress',`/student/offerings/${s.offering_id}/progress`],['Study buddy',`/student/study-buddy?subject=${s.offering_id}`]]}/>)}</div>}</section>
         </div>
@@ -110,7 +110,7 @@ export function FacultyHome(){
           {d.task?<Hero eyebrow="Your next teaching task" title={d.task.headline} detail={d.task.detail} action={d.task.action} to={d.task.link} icon={d.task.icon}/>
             :<Hero eyebrow="Your next teaching task" title="Nothing is waiting for you" detail="No activity submissions to grade, no grades to review and no drafts in progress." icon="✓"/>}
           <Stats items={[[d.totals.subjects,'Assigned subjects in open terms'],[d.totals.students,'Subject enrollments'],[d.totals.to_grade,'Activity submissions to grade',d.queue[0]?.link],[d.totals.needs_review,'Students with grades to review',d.review_link??undefined]]}/>
-          <section aria-labelledby="my-subjects-h"><div className="section-head"><h2 id="my-subjects-h">My subjects</h2><Link state={here} to="/faculty/subjects">{d.closed_subjects?`All subjects, including ${plural(d.closed_subjects,'past one')}`:'All subjects'}</Link></div>
+          <section aria-labelledby="my-subjects-h"><div className="section-head"><h2 id="my-subjects-h">My Classes</h2><Link state={here} to="/faculty/subjects">{d.closed_subjects?`All subjects, including ${plural(d.closed_subjects,'past one')}`:'All subjects'}</Link></div>
             {d.subjects.length===0?<p className="panel muted">No subjects are assigned to you in an open term.</p>:<div className="cards">{d.subjects.map(s=>{
               const o=`/faculty/offerings/${s.offering_id}`;const drafts=s.drafts_content+s.drafts_assessments;
               return <SubjectCard key={s.offering_id} code={s.code} title={s.title} meta="Assigned" detail={`${s.sections.join(', ')||'No sections'} · ${plural(s.students,'student')}${s.to_grade?` · ${s.to_grade} to grade`:''}${s.needs_review?` · ${s.needs_review} to review`:''}${drafts?` · ${plural(drafts,'draft')}`:''}`}
@@ -181,7 +181,7 @@ export function StudentTodo(){
       const open=d.todo.filter(w=>w.state!=='not_open'),later=d.todo.filter(w=>w.state==='not_open');
       const due=(w:Work)=>w.deadline?(w.late_allowed?`late submission allowed, was due ${dateTime(w.deadline)}`:`due ${dateTime(w.deadline)}`):'no deadline';
       return <>
-        {d.todo.length+d.awaiting_feedback.length+d.another_attempt.length===0&&<section className="panel"><h2>You’re up to date</h2><p className="muted">Nothing needs your action. New work appears here when your teacher publishes it.</p><Link state={here} className="button" to="/student/subjects">See my subjects</Link></section>}
+        {d.todo.length+d.awaiting_feedback.length+d.another_attempt.length===0&&<section className="panel"><h2>You’re up to date</h2><p className="muted">Nothing needs your action. New work appears here when your teacher publishes it.</p><Link state={here} className="button" to="/student/subjects">See My Classes</Link></section>}
         {open.length>0&&group('Available now','Open for you, earliest deadline first.',open,due)}
         {d.another_attempt.length>0&&group('Another attempt available','You have submitted these once and can try again.',d.another_attempt,w=>`${plural(w.attempts_left??0,'attempt')} left${w.late_allowed&&w.deadline?` · late submission allowed, was due ${dateTime(w.deadline)}`:''}`)}
         {later.length>0&&group('Not open yet','These open later.',later,w=>w.available_from?`opens ${dateTime(w.available_from)}`:due(w))}

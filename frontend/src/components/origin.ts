@@ -5,7 +5,7 @@ export interface Origin{from:string;label:string}
 
 const PLACES:[RegExp,string][]=[
   [/^\/(student|faculty|admin)$/,'Dashboard'],
-  [/^\/(student|faculty)\/subjects$/,'My subjects'],
+  [/^\/(student|faculty)\/subjects$/,'My Classes'],
   [/^\/admin\/terms\/[^/]+$/,'Term workspace'],
   [/^\/admin\/academics$/,'School years'],
   [/^\/admin\/accounts$/,'User accounts'],

@@ -22,7 +22,7 @@ export function OfferingRoster({embedded=false}:{embedded?:boolean}){
   const [dialog,setDialog]=useState(false);
   const [message,setMessage]=useState('');
   const refresh=()=>queryClient.invalidateQueries({queryKey:['roster',offeringId]});
-  const parent=useOrigin(isAdmin?'/admin/academics':'/faculty/subjects',isAdmin?'School years':'My subjects');
+  const parent=useOrigin(isAdmin?'/admin/academics':'/faculty/subjects',isAdmin?'School years':'My Classes');
   const back=parent.to;
 
   async function clear(r:RosterRow){
@@ -78,7 +78,7 @@ function ExceptionDialog({offeringId,onClose,onDone}:{offeringId:string;onClose:
 export function FacultySubjects(){
   const query=useQuery({queryKey:['my-offerings'],queryFn:()=>api<OfferingSummary[]>('/me/offerings')});
   return <>
-    <h1>My subjects</h1><p className="muted">Subjects assigned to you, with their sections and enrolled students.</p>
+    <h1>My Classes</h1><p className="muted">Subjects assigned to you, with their sections and enrolled students.</p>
     {query.isPending?<p>Loading…</p>:query.error?<p role="alert">{query.error.message}</p>:
       query.data.length===0?<section className="panel"><h2>Nothing assigned yet</h2><p>When an administrator assigns you a subject, it appears here.</p></section>:
       <div className="cards">{query.data.map(o=><SubjectCard key={o.id} code={o.subject.code} title={o.subject.title} meta={o.term_status==='closed'?`${o.term} · closed`:o.term}
@@ -90,7 +90,7 @@ export function FacultySubjects(){
 export function StudentSubjects(){
   const query=useQuery({queryKey:['my-subjects'],queryFn:()=>api<MySubject[]>('/me/subjects')});
   return <>
-    <h1>My subjects</h1><p className="muted">Subjects you are enrolled in, including past terms.</p>
+    <h1>My Classes</h1><p className="muted">Subjects you are enrolled in, including past terms.</p>
     {query.isPending?<p>Loading…</p>:query.error?<p role="alert">{query.error.message}</p>:
       query.data.length===0?<section className="panel"><h2>No subjects yet</h2><p>Your subjects appear here once you are enrolled in a section.</p></section>:
       <div className="cards">{query.data.map(s=>{const o=`/student/offerings/${s.offering_id}`;const active=s.enrollment_status==='enrolled';

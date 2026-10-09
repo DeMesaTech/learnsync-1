@@ -58,7 +58,7 @@ Browser (real running stack, desktop + 375px mobile emulation):
   an error exists; corrected file imported 3 invited students and placed them in the section); term workspace showed the
   section (3 students) and the offering (ENT 101, Demo faculty 1, 3 enrolled).
 - Faculty1 sees exactly the assigned subject and a read-only roster; faculty2 gets 404 on that offering and roster and an
-  empty "My subjects"; an unrelated student gets 403 on the roster and an empty "My subjects"; student gets 403 on admin APIs.
+  empty "My Classes"; an unrelated student gets 403 on the roster and an empty "My Classes"; student gets 403 on admin APIs.
 - Mobile 375px: found and fixed page-wide horizontal overflow (absolutely positioned `.sr-only` header cell escaping the
   table wrapper); admin pages now have scrollWidth == viewport width.
 
@@ -73,7 +73,7 @@ Independent review flagged four risks; all checked:
 - HARDENED: Edit-offering teacher select is now controlled. Browser check: select shows the current teacher; saving
   without changes leaves the teacher unchanged.
 - Student with data: added Demo student 1 to BSE 1-A in the Manage-students dialog; signing in as that student shows
-  ENT 101 in My subjects. Other students/faculty see nothing (earlier entry).
+  ENT 101 in My Classes. Other students/faculty see nothing (earlier entry).
 
 Browser click-through completed on the real stack: new school year dialog; close term (confirm prompt) -> workspace read-only
 (Add section / Assign / Edit disabled, banner shown, student list still viewable); reopen with reason; add section; manage
@@ -356,7 +356,7 @@ Two defects of my own tooling found while doing that, both disclosed here:
 Final verification on the final code: 203 backend tests pass; `ruff`, `npm run lint`, the typed build and the production build are clean; the accessibility sweeps (152 signed-in states, 52 states of dialogs, signed-out screens and a quiz attempt) report 0 violations and 0 layout problems; keyboard checks 8/8 and 17/17; the fresh-installation rehearsal passes 27/27 and proves the live data unchanged. Pilot acceptance still waits on Milestone 5's real Groq checks.
 
 #### Design gap found by the user after Milestone 6 (not previously recorded)
-The plan (section 5) names the prototype's Variant A as the layout baseline, with Google Classroom and Brilliant as inspiration. I applied its palette, tokens, theming and general restraint, but I did NOT build its layout: the prototype has a dark navy sidebar, a student dashboard (daily progress strip, "pick up where you left off", course updates, next milestone, study-assistant card) and a to-do page. The built home pages (`/admin`, `/faculty`, `/student`) are bare placeholders with one button, "My subjects" is a plain card list, and there is no cross-subject to-do or progress dashboard. I never compared the finished screens with the prototype before reporting the milestones, so earlier "design system" statements overstated the match. Open work: role dashboards, a student to-do, the "next step" prompt, and styling the subject cards like the prototype.
+The plan (section 5) names the prototype's Variant A as the layout baseline, with Google Classroom and Brilliant as inspiration. I applied its palette, tokens, theming and general restraint, but I did NOT build its layout: the prototype has a dark navy sidebar, a student dashboard (daily progress strip, "pick up where you left off", course updates, next milestone, study-assistant card) and a to-do page. The built home pages (`/admin`, `/faculty`, `/student`) are bare placeholders with one button, "My Classes" is a plain card list, and there is no cross-subject to-do or progress dashboard. I never compared the finished screens with the prototype before reporting the milestones, so earlier "design system" statements overstated the match. Open work: role dashboards, a student to-do, the "next step" prompt, and styling the subject cards like the prototype.
 
 #### Design-completion gate (Milestone 6), run after the user's question and Codex's ruling (channel #11)
 Codex ruled that following Variant A is a REQUIRED completion of the agreed design, with a gate: compare the three dashboards and representative pages with the prototype in light, dark, system, desktop and phone; exercise links, back/cancel and empty/loading/error states; accessibility and keyboard checks on changed screens; verify counts against real authorised records; no demo-only claims in screenshots. This is what was built and checked.
@@ -367,7 +367,7 @@ Built:
   - Student: greeting, "Learning activity this week" (Monday to Sunday from VALID events only, no streak or study-time language), counters for today, a "Your next step" card (the first incomplete applicable published lesson, otherwise the nearest to-do), subject cards with progress bars, To do, "Awaiting feedback", "Another attempt available", Course updates (published announcements, newly published materials, the student's own released results and published grades from the last 30 days) and a Study help card.
   - Faculty: "Your next teaching task" (submissions to grade, else grades needing review, else drafts), a counts strip, subject cards with workflow links, upcoming deadlines, per-subject progress summary (class average, quiet students; labelled "not a grade").
   - Admin: academic-management shortcuts, "needs your attention" (open reports, then invitations not accepted, then unconfirmed imports), counts, open terms, recent account changes (sign-ins excluded), reports shortcut.
-- Subject cards in the prototype's style on both "My subjects" pages (code, term badge, progress bar, quick links, Open).
+- Subject cards in the prototype's style on both "My Classes" pages (code, term badge, progress bar, quick links, Open).
 - Rules enforced server-side and tested (11 tests): per-offering authorisation (section targeting, enrolment, published only), nothing from withdrawn enrolments or closed terms, a submitted quiz with attempts left is "Another attempt available" rather than unfinished, submitted work with no released result is "Awaiting feedback", opening a lesson changes nothing, drafts/unreleased scores/other sections/other students never appear, the faculty dashboard counts only the teacher's own offerings and never includes study conversations, the admin dashboard contains no grade/score/submission/draft/conversation data.
 - Defects found while checking and fixed: the header theme selector did not save to the account, so a saved preference silently undid it on the next load (found by reading the code against Codex's review target; now covered by a check); greeting used the last word of the name ("Good evening, 1."); admin activity was dominated by sign-ins; phone header wrapping and week-tile overflow; the dashboard grid overflowed the page on phones (its columns grew to fit a table); undersized links on the new cards.
 

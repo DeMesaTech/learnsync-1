@@ -8,6 +8,6 @@ await p.goto(url);await p.waitForTimeout(800);
 for(const role of ['Faculty','Admin']){await p.getByRole('button',{name:role,exact:true}).first().click();await p.waitForTimeout(600);await shot(p,'proto-'+role.toLowerCase(),false)}
 await p.getByRole('button',{name:'Student',exact:true}).first().click();
 const sel=p.locator('select').first();console.log(await sel.locator('option').allTextContents());
-await sel.selectOption({label:'My subjects'}).catch(()=>{});await p.waitForTimeout(500);await shot(p,'proto-subjects',false);
+await sel.selectOption({label:'My Classes'}).catch(()=>{});await p.waitForTimeout(500);await shot(p,'proto-subjects',false);
 const m=await newPage(browser,{width:375,height:812});await m.goto(url);await m.waitForTimeout(800);await shot(m,'proto-mobile',false);
 await browser.close();

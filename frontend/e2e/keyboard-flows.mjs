@@ -121,7 +121,7 @@ try{
   await mp.goto('/student');await mp.getByRole('heading',{name:/keep learning/}).waitFor();
   await tabTo(mp,named(/Toggle navigation/,'button'),'the menu button');check('the menu button announces it is collapsed',(await describe(mp)).expanded==='false');
   await press(mp,'Enter');check('Enter opens the menu and reports it expanded',(await describe(mp)).expanded==='true');
-  await tabTo(mp,d=>d.tag==='a'&&/My subjects/.test(d.name),'My subjects');await press(mp,'Enter');await mp.waitForURL(/\/student\/subjects$/);
+  await tabTo(mp,d=>d.tag==='a'&&/My Classes/.test(d.name),'My Classes');await press(mp,'Enter');await mp.waitForURL(/\/student\/subjects$/);
   check('a menu link navigates and the menu closes again',(await mp.locator('.sidebar.open').count())===0);
   await tabTo(mp,named(/Toggle navigation/,'button'),'the menu button',{back:true});await press(mp,'Enter');await press(mp,'Escape');
   check('Escape closes an open menu',(await mp.locator('.sidebar.open').count())===0);
