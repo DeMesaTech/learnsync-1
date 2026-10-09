@@ -270,6 +270,9 @@ def node_order(outline):
     return {node: index for index, node in enumerate(flat)}
 
 
+# Lessons, files and links are one sequence: each can be marked done, counts as a step, and can be "Up next".
+SEQUENCE_KINDS = ("lesson", "file", "reference")
+
 NO_GROUP = 10 ** 6   # unattached items, or a topic the published syllabus no longer has: "Other materials"
 
 
@@ -298,13 +301,13 @@ def completed_lessons(db, student_id):
 def student_items(db, offering, enrollment, student_id=None):
     done = completed_lessons(db, student_id)
     rows = ordered_published(db, offering, enrollment)
-    first_open = next((i.id for i, _, _ in rows if i.kind == "lesson" and i.id not in done), None)
+    first_open = next((i.id for i, _, _ in rows if i.kind in SEQUENCE_KINDS and i.id not in done), None)
     out = []
     for item, published, group in rows:
         out.append({"id": item.id, "kind": item.kind, "title": published.title,
                     "anchor_node_id": published.anchor_node_id if group != NO_GROUP else None,
                     "published_at": published.published_at, "file": file_view(db, published.file_id),
-                    "completed": item.id in done if item.kind == "lesson" else None,
+                    "completed": item.id in done if item.kind in SEQUENCE_KINDS else None,
                     "up_next": item.id == first_open})
     return out
 
@@ -346,16 +349,16 @@ def student_item(db, offering, enrollment, item_id, student_id=None):
 def lesson_position(db, offering, enrollment, item, student_id):
     """Completion, the next published lesson in the sequence (None after the last one), and whether every
     published lesson is done, so the last lesson never claims the course is finished when earlier ones are not."""
-    lessons = [i for i, _, _ in ordered_published(db, offering, enrollment) if i.kind == "lesson"]
+    lessons = [i for i, _, _ in ordered_published(db, offering, enrollment) if i.kind in SEQUENCE_KINDS]
     ids = [i.id for i in lessons]
-    if item.kind != "lesson" or item.id not in ids:
+    if item.kind not in SEQUENCE_KINDS or item.id not in ids:
         return {"completed": None, "next_lesson": None}
     here = ids.index(item.id)
     done = completed_lessons(db, student_id)
     pending = [i for i in lessons if i.id not in done]
 
     def named(lesson):
-        return {"id": lesson.id, "title": revision(db, lesson.id, "published").title}
+        return {"id": lesson.id, "title": revision(db, lesson.id, "published").title, "kind": lesson.kind}
 
     following = lessons[here + 1] if here + 1 < len(lessons) else None
     return {"completed": item.id in done, "lesson_number": here + 1, "lesson_total": len(ids),

@@ -9,7 +9,9 @@ export interface AllConversationsPage{items:AllConversation[];has_more:boolean;n
 export interface Conversation{id:string;title:string;has_earlier:boolean;next_cursor:string|null;messages:StudyMessage[]}
 export interface Snapshot{id:string;status:'extracted'|'approved';method:'fetched'|'manual';source_url:string;text:string;approved_at:string|null}
 export interface SnapshotState{snapshot:Snapshot|null;revision_state:string|null}
-export interface ProgressStep{id:string;type:'lesson_completed'|'quiz_submitted'|'activity_submitted';title:string;done:boolean}
+export interface ProgressStep{id:string;type:'lesson_completed'|'quiz_submitted'|'activity_submitted';title:string;done:boolean;kind?:'lesson'|'file'|'reference'}
 export interface Progress{total:number;done:number;percent:number|null;steps:ProgressStep[];outside_count:number;note:string;days:{date:string;count:number}[];weeks:{week_start:string;count:number}[];last_activity_at:string|null;events_total:number}
 export interface ClassProgress{students:{student_id:string;student:string;student_number:string|null;total:number;done:number;percent:number|null;last_activity_at:string|null;recent_events:number;inactive:boolean}[];average_percent:number|null;inactive_count:number}
 export const STEP_LABEL:Record<ProgressStep['type'],string>={lesson_completed:'Lesson',quiz_submitted:'Quiz',activity_submitted:'Activity'};
+/** Lessons, files and links share one step type; name what the step actually is. */
+export const stepLabel=(s:{type:ProgressStep['type'];kind?:string})=>s.type==='lesson_completed'&&s.kind==='file'?'File':s.type==='lesson_completed'&&s.kind==='reference'?'Link':STEP_LABEL[s.type];

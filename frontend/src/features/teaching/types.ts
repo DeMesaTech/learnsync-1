@@ -14,7 +14,7 @@ export interface Item{id:string;kind:'lesson'|'file'|'reference';archived:boolea
 export interface ItemDraftContent{title:string;body_html:string;reference_url:string;reference_note:string;anchor_node_id:string|null}
 export interface Announcement{id:string;title:string;body:string;state:'draft'|'published'|'archived';section_ids:string[];created_at:string;published_at:string|null}
 export interface Coverage{section_id:string;node_id:string;covered_on:string}
-export interface LearnItem{id:string;kind:'lesson'|'file'|'reference';title:string;anchor_node_id:string|null;published_at:string;file:FileRef|null;body_html?:string;reference_url?:string|null;reference_note?:string;completed?:boolean|null;up_next?:boolean;next_lesson?:{id:string;title:string}|null;all_completed?:boolean;first_incomplete?:{id:string;title:string}|null;lesson_number?:number;lesson_total?:number}
+export interface LearnItem{id:string;kind:'lesson'|'file'|'reference';title:string;anchor_node_id:string|null;published_at:string;file:FileRef|null;body_html?:string;reference_url?:string|null;reference_note?:string;completed?:boolean|null;up_next?:boolean;next_lesson?:{id:string;title:string;kind?:'lesson'|'file'|'reference'}|null;all_completed?:boolean;first_incomplete?:{id:string;title:string;kind?:'lesson'|'file'|'reference'}|null;lesson_number?:number;lesson_total?:number}
 export interface LearnSyllabus{published:{version:number;published_at:string;outline:Outline;grading_policy:GradingPolicy|null}|null;covered:{node_id:string;covered_on:string}[]}
 export const newId=()=>crypto.randomUUID();
 export const emptyChapter=():Chapter=>({id:newId(),kind:'chapter',title:'',weeks:'',ilo:'',activities:'',assessment:'',topics:[],subsections:[]});

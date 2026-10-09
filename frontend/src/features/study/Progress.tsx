@@ -3,7 +3,7 @@ import {useHere} from '../../components/origin';
 import {useQuery} from '@tanstack/react-query';
 import {api} from '../../app/api';
 import type {OfferingSummary} from '../academics/types';
-import {STEP_LABEL,type ClassProgress,type Progress} from './types';
+import {stepLabel,type ClassProgress,type Progress} from './types';
 
 const day=(iso:string)=>new Date(iso+'T00:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'});
 const ago=(iso:string|null)=>iso?new Date(iso).toLocaleDateString():'No activity yet';
@@ -31,7 +31,7 @@ export function StudentProgress(){
     <div className="grid-2">
       <section className="panel"><h3>Last 14 days</h3><Bars label="Activity per day" data={p.days.map(d=>({key:d.date,label:day(d.date),count:d.count}))}/></section>
       <section className="panel"><h3>Last 8 weeks</h3><Bars label="Activity per week" data={p.weeks.map(w=>({key:w.week_start,label:`Wk ${day(w.week_start)}`,count:w.count}))}/><p className="muted">Weeks start on Monday (Philippine time).</p></section></div>
-    {p.steps.length>0&&<section className="panel"><h3>Steps</h3><ul className="plain">{p.steps.map(s=><li key={s.type+s.id} className="member-row"><span>{s.done?'✓':'○'} {s.title} <span className="badge">{STEP_LABEL[s.type]}</span></span><span className={s.done?'badge covered':'muted'}>{s.done?'Done':'To do'}</span></li>)}</ul></section>}
+    {p.steps.length>0&&<section className="panel"><h3>Steps</h3><ul className="plain">{p.steps.map(s=><li key={s.type+s.id} className="member-row"><span>{s.done?'✓':'○'} {s.title} <span className="badge">{stepLabel(s)}</span></span><span className={s.done?'badge covered':'muted'}>{s.done?'Done':'To do'}</span></li>)}</ul></section>}
   </>;
 }
 

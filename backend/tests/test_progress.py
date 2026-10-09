@@ -99,11 +99,10 @@ def test_lessons_only_and_only_what_the_student_can_see(db, graded):
     assert complete(graded, str(uuid.uuid4())).status_code == 404
     assert complete(graded, elsewhere, "st2").status_code == 200
     assert events(db) == 1
-    # a published reference/file is not a completable step
+    # once published, a link is a step like a lesson (see the files-and-links tests below)
     from test_study import edit_and_publish
     edit_and_publish(graded, file_item, title="Link", reference_url="https://example.org/x")
-    refused = complete(graded, file_item)
-    assert refused.status_code == 422 and refused.json()["error"]["code"] == "not_a_lesson"
+    assert complete(graded, file_item).status_code == 200
 
 
 def test_denominator_follows_what_applies_and_the_change_is_explained(db, graded):
@@ -192,3 +191,65 @@ def test_a_submit_the_deadline_rejected_earns_no_progress(db, graded):
     assert late.status_code == 200 and late.json()["answers_ignored"] is True      # kept as attempt history
     assert db.get(QuizAttempt, uuid.UUID(attempt["id"])).state == "submitted"
     assert events(db, s1) == 0 and mine(graded)["done"] == 0
+
+
+# ---------------- files and links are steps too ----------------
+
+def publish_link(c, title="Reading link"):
+    from test_study import edit_and_publish
+    from test_teaching import new_item
+    item = new_item(c, "reference", title)["id"]
+    done = edit_and_publish(c, item, title=title, reference_url="https://example.org/read", reference_note="Skim section 2")
+    assert done.status_code == 200
+    return item
+
+
+def publish_file(c, title="Reading file"):
+    from test_study import file_item
+    return file_item(c, "reading.pdf", b"%PDF-1.4 test", title=title)
+
+
+def test_a_link_and_a_file_can_be_marked_done_once_and_count_as_steps(db, graded):
+    item = lesson(graded, "Forms", BODY)
+    link, doc = publish_link(graded), publish_file(graded)
+    before = mine(graded)
+    assert before["total"] == 3 and before["done"] == 0
+    assert {str(s["id"]) for s in before["steps"]} == {str(item), str(link), str(doc)}
+    for _ in range(3):
+        assert complete(graded, link).status_code == 200                          # retries never inflate
+    assert complete(graded, doc).status_code == 200
+    after = mine(graded)
+    assert (after["total"], after["done"], after["percent"]) == (3, 2, 67)
+    assert events(db, graded["students"][0]) == 2
+    listing = {str(i["id"]): i for i in graded["st1"].get(learn(graded, "/items")).json()}
+    assert listing[str(link)]["completed"] is True and listing[str(doc)]["completed"] is True
+    assert listing[str(item)]["completed"] is False
+    assert [i for i, v in listing.items() if v["up_next"]] == [str(item)]            # the one thing still open
+
+
+def test_up_next_and_next_lesson_run_through_files_and_links(graded):
+    first = lesson(graded, "First", BODY)
+    link = publish_link(graded)
+    doc = publish_file(graded)
+    st1 = graded["st1"]
+    up = [str(i["id"]) for i in st1.get(learn(graded, "/items")).json() if i["up_next"]]
+    assert up == [str(first)]
+    assert complete(graded, first).status_code == 200
+    page = st1.get(learn(graded, f"/items/{first}")).json()
+    assert str(page["next_lesson"]["id"]) == str(link) and page["lesson_total"] == 3 and page["all_completed"] is False
+    assert [str(i["id"]) for i in st1.get(learn(graded, "/items")).json() if i["up_next"]] == [str(link)]
+    assert complete(graded, link).status_code == 200 and complete(graded, doc).status_code == 200
+    last = st1.get(learn(graded, f"/items/{doc}")).json()
+    assert last["completed"] is True and last["next_lesson"] is None and last["all_completed"] is True
+    assert not [i for i in st1.get(learn(graded, "/items")).json() if i["up_next"]]
+
+
+def test_completing_a_file_or_link_follows_the_same_access_rules_as_a_lesson(db, graded):
+    link = publish_link(graded)
+    from test_teaching import new_item
+    draft_only = new_item(graded, "reference", "Draft link")["id"]
+    assert complete(graded, draft_only).status_code == 404
+    assert graded["fac"].post(learn(graded, f"/lessons/{link}/complete")).status_code == 403
+    s1 = graded["students"][0]
+    graded["admin"].delete(f"/api/sections/{graded['sec_a']['id']}/members/{s1.id}?reason=Left%20the%20programme")
+    assert complete(graded, link).status_code == 404                              # withdrawn: nothing new

@@ -3442,56 +3442,8 @@ details.topic[open]>summary::before {
 }
 
 /* bulk assignment: a subject with its own sections underneath */
-.bulk-subjects .pick-list {
-  max-height: min(420px, 50dvh)
-}
-
-.pick-list li.on {
-  background: var(--surface-alt)
-}
-
-.bulk-sections {
-  padding: 0 0 10px 34px
-}
-
-.bulk-sections .chips {
-  gap: 4px 16px
-}
-
-.bulk-sections label.inline {
-  margin: 0;
-  min-height: 36px
-}
-
-table input[type=checkbox] {
-  width: 22px;
-  height: 22px;
-  min-height: 0;
-  padding: 0;
-  margin: 0
-}
-
-.accounts-table {
-  min-width: 900px
-}
-
-.accounts-table th:first-child,
-.accounts-table td:first-child {
-  width: 44px
-}
-
-.accounts-table th:nth-child(2) {
-  min-width: 260px
-}
-
-.accounts-table td:last-child {
-  min-width: 350px
-}
-
-.accounts-table input[type=checkbox] {
-  min-width: 0
-}
-
-.account-actions {
-  margin: 0
-}
+.bulk-subjects .pick-list{max-height:min(420px,50dvh)}
+.pick-list li.on{background:var(--surface-alt)}
+.bulk-sections{padding:0 0 10px 34px}
+.bulk-sections .chips{gap:4px 16px}.bulk-sections label.inline{margin:0;min-height:36px}
+table input[type=checkbox]{width:22px;height:22px;min-height:0;padding:0;margin:0}

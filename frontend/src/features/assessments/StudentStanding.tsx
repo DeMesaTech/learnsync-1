@@ -1,3 +1,4 @@
+import {stepLabel} from '../study/types';
 import {useEffect,useRef,useState} from 'react';
 import {Link,useOutletContext,useParams} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
@@ -17,11 +18,10 @@ interface Standing{
   assessments:{id:string;title:string;kind:Kind;period:string|null;category:string|null;max_points:number;counts_toward_grade:boolean;deadline:string|null;submission:string;scored:boolean;working_score:number|null;feedback:string;released:boolean;released_score:number|null;unreleased_change:boolean;attempts:AttemptRef[]}[];
   historical:{id:string;title:string;kind:Kind;archived:boolean;working_score:number|null;released_score:number|null}[];
   attendance:{days:{date:string;period:string;status:string|null}[];counts:Record<string,Record<string,number>>};
-  progress:{total:number;done:number;percent:number|null;steps:{id:string;type:string;title:string;done:boolean}[];outside_count:number;note:string;days:{date:string;count:number}[];last_activity_at:string|null}|null;
+  progress:{total:number;done:number;percent:number|null;steps:{id:string;type:'lesson_completed'|'quiz_submitted'|'activity_submitted';title:string;done:boolean;kind?:string}[];outside_count:number;note:string;days:{date:string;count:number}[];last_activity_at:string|null}|null;
 }
 const SUBMISSION:Record<string,string>={not_attempted:'Not attempted',in_progress:'In progress',submitted:'Submitted',submitted_late:'Submitted late',not_submitted:'Not submitted',teacher_entered:'Entered by teacher'};
 const MARK:Record<string,string>={present:'Present',late:'Late',absent:'Absent',excused:'Excused'};
-const STEP:Record<string,string>={lesson_completed:'Lesson',quiz_submitted:'Quiz',activity_submitted:'Activity'};
 const day=(iso:string)=>new Date(iso+'T00:00:00').toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'});
 const stamp=(iso:string|null)=>iso?new Date(iso).toLocaleString():'No recorded activity yet';
 
@@ -114,7 +114,7 @@ export function StudentStanding(){
       <p><strong>{d.progress.percent===null?'—':`${d.progress.percent}%`}</strong> · {d.progress.done} of {d.progress.total} steps done · last recorded activity: {stamp(d.progress.last_activity_at)}</p>
       <p className="muted">Lessons count when the student marks them complete; quizzes and activities count when they submit. Opening a lesson or using study help is not progress, and chats are never shown here.</p>
       {d.progress.note&&<p className="muted">{d.progress.note}</p>}
-      <details className="fold inner"><summary>Steps ({d.progress.steps.length})</summary><ul className="seq">{d.progress.steps.map(s=><li key={s.type+s.id}><span className="grow">{s.title}<span className="muted">{STEP[s.type]}</span></span><span className={s.done?'badge done':'badge'}>{s.done?'✓ Done':'Not done'}</span></li>)}</ul></details></details>}
+      <details className="fold inner"><summary>Steps ({d.progress.steps.length})</summary><ul className="seq">{d.progress.steps.map(s=><li key={s.type+s.id}><span className="grow">{s.title}<span className="muted">{stepLabel(s)}</span></span><span className={s.done?'badge done':'badge'}>{s.done?'✓ Done':'Not done'}</span></li>)}</ul></details></details>}
     {reviewing&&(()=>{const a=d.assessments.find(x=>x.id===reviewing)!;return <Dialog title={`${a.title}: ${d.student.name}'s answers`} onClose={()=>setReviewing(null)}>
       <AttemptReview base={`/teach/offerings/${offering.id}/assessments/${a.id}`} attempts={a.attempts} studentName={d.student.name}/>
       <div className="actions"><Link className="button" state={here} to={`${base}/assessments/${a.id}/scores`}>Open Attempts &amp; scores to correct a score</Link><button type="button" className="primary" onClick={()=>setReviewing(null)}>Close</button></div></Dialog>})()}

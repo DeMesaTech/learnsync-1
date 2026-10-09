@@ -54,7 +54,7 @@ export function StudentHome(){
           {d.next_step?<Hero eyebrow={d.next_step.type==='lesson'?'Your next step':'Your next task'} title={d.next_step.title} detail={d.next_step.subject} action={d.next_step.type==='lesson'?'Continue learning':'Open work'} to={d.next_step.link} icon="▤"/>
             :<Hero eyebrow="Your next step" title="You’re up to date" detail={d.subjects.length?'Nothing is waiting for you right now. New lessons and work appear here when your teacher publishes them. You can review your subjects or ask study help about what you have learned.':'You are not enrolled in a current subject yet.'} action={d.subjects.length?(only?'Ask Study buddy':'See my subjects'):undefined} to={only?`/student/study-buddy?subject=${only.offering_id}`:'/student/subjects'} icon="✓"/>}
           <section className="panel"><h2>Learning activity this week</h2>
-            <p className="muted">Lessons you marked complete and quizzes or activities you submitted. Opening or reading something does not count.</p>
+            <p className="muted">Lessons, files and links you marked complete and quizzes or activities you submitted. Opening or reading something does not count.</p>
             <ol className="week" aria-label="Activity by day this week">{d.week.days.map(day=>
               <li key={day.date} className={`${day.count>0?'done':''} ${day.today?'today':''} ${day.future?'future':''}`}>
                 <span>{day.today?'Today':day.label}</span><b aria-hidden="true">{day.count>0?'✓':day.today?'○':''}</b>
