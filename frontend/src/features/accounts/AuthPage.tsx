@@ -70,63 +70,62 @@ export function AuthPage() {
         </Link>
         <h1>A clearer path through your learning.</h1>
         <p>Your subjects, lessons and progress, together in one place.</p>
-      </section>
-      <section className="panel auth-card">
-        <p className="eyebrow">BS Entrepreneurship</p>
-        <h2>{title}</h2>
-        <p className="muted">Use your school account to continue.</p>
-        {connectionError && (
-          <p role="alert">
-            Cannot reach the server. Start the API and database, then refresh.
-          </p>
-        )}
-        <form onSubmit={submit}>
-          {(isLogin || isReset) && (
-            <label>
-              Email
-              <input
-                type="email"
-                autoComplete="username"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </label>
-          )}
-          {!isReset && (
-            <label>
-              Password
-              {!isLogin && <span className="muted">At least 12 characters.</span>}
-              <input
-                type="password"
-                minLength={isLogin ? 1 : 12}
-                maxLength={128}
-                autoComplete={isLogin ? 'current-password' : 'new-password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </label>
-          )}
-          {error && (
-            <p role="alert" className="error">
-              {error}
+        <section className="panel auth-card">
+          <h2>{title}</h2>
+          <p className="muted">Use your school account to continue.</p>
+          {connectionError && (
+            <p role="alert">
+              Cannot reach the server. Start the API and database, then refresh.
             </p>
           )}
-          {(message || notice) && <p role="status">{message || notice}</p>}
-          <button
-            className="primary"
-            disabled={busy || loading || !!connectionError || (!isLogin && !isReset && !token)}
-          >
-            {busy ? 'Please wait…' : isLogin ? 'Sign in' : isReset ? 'Send reset link' : 'Save password'}
-          </button>
-        </form>
-        {!isLogin && !isReset && !token && (
-          <p role="alert">Open the link from your invitation or password-reset email.</p>
-        )}
-        <div className="auth-links">
-          {isLogin ? <Link to="/forgot-password">Forgot password?</Link> : <Link to="/login">Back to sign in</Link>}
-        </div>
+          <form onSubmit={submit}>
+            {(isLogin || isReset) && (
+              <label>
+                Email
+                <input
+                  type="email"
+                  autoComplete="username"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </label>
+            )}
+            {!isReset && (
+              <label>
+                Password
+                {!isLogin && <span className="muted">At least 12 characters.</span>}
+                <input
+                  type="password"
+                  minLength={isLogin ? 1 : 12}
+                  maxLength={128}
+                  autoComplete={isLogin ? 'current-password' : 'new-password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </label>
+            )}
+            {error && (
+              <p role="alert" className="error">
+                {error}
+              </p>
+            )}
+            {(message || notice) && <p role="status">{message || notice}</p>}
+            <button
+              className="primary"
+              disabled={busy || loading || !!connectionError || (!isLogin && !isReset && !token)}
+            >
+              {busy ? 'Please wait…' : isLogin ? 'Sign in' : isReset ? 'Send reset link' : 'Save password'}
+            </button>
+          </form>
+          {!isLogin && !isReset && !token && (
+            <p role="alert">Open the link from your invitation or password-reset email.</p>
+          )}
+          <div className="auth-links">
+            {isLogin ? <Link to="/forgot-password">Forgot password?</Link> : <Link to="/login">Back to sign in</Link>}
+          </div>
+        </section>
       </section>
     </main>
   );
