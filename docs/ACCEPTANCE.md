@@ -2,6 +2,10 @@
 
 Implementation started 2026-10-06. No milestone is yet accepted.
 
+### 2026-10-10 (Browser tab logo)
+- Added the college seal as the frontend PNG favicon.
+- Passed: frontend production build (`npm run build`).
+
 ### 2026-10-09 (Admin account table and bulk links)
 - Replaced account cards with a responsive table, row selection, page-level select-all, and sending invitation/reset links to selected accounts.
 - Kept role-based authorization and the existing create/read/update controls; accounts are deactivated rather than deleted to preserve history.
