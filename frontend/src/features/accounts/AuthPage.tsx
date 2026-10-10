@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, queryClient } from '../../app/providers';
 import { post, setCsrf, type SessionInfo } from '../../app/api';
+import logoUrl from '../../img/gmvcc.png';
 
 export function AuthPage() {
   const location = useLocation();
@@ -65,10 +66,15 @@ export function AuthPage() {
   return (
   <main className={isLogin ? 'auth auth-login' : 'auth'}>
       <section className="auth-brand">
-        <img src="/img/gmvcc.png" alt="LearnSync logo" width={64} height={64} />
-        <Link to="/login" className="brand">
-          LearnSync
-        </Link>
+        <div className="auth-brand-header">
+          <img className="auth-logo" src={logoUrl} alt="LearnSync logo" width={72} height={72} />
+          <div className="auth-brand-copy">
+            <Link to="/login" className="brand">
+              LearnSync
+            </Link>
+            <p>Governor Mariano Villafuerte Community College</p>
+          </div>
+        </div>
         <h1>A clearer path through your learning.</h1>
         <p>Your subjects, lessons and progress, together in one place.</p>
         <section className="panel auth-card">
