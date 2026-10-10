@@ -132,6 +132,17 @@ def offering_summary(db, offerings):
             .join(Section, Section.id == OfferingSection.section_id)
             .where(OfferingSection.offering_id.in_(ids)).order_by(Section.name)):
         links.setdefault(oid, []).append({"id": sid, "name": name})
+    section_counts = {
+        (oid, sid): count for oid, sid, count in db.execute(
+            select(Enrollment.offering_id, Enrollment.section_id, func.count())
+            .where(Enrollment.offering_id.in_(ids), Enrollment.status == "enrolled",
+                   Enrollment.section_id.is_not(None))
+            .group_by(Enrollment.offering_id, Enrollment.section_id)
+        ).all()
+    }
+    for oid, sections in links.items():
+        for section in sections:
+            section["enrolled"] = section_counts.get((oid, section["id"]), 0)
     counts = dict(db.execute(select(Enrollment.offering_id, func.count())
                              .where(Enrollment.offering_id.in_(ids),
                                     Enrollment.status == "enrolled")

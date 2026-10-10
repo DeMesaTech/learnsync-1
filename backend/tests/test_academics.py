@@ -57,6 +57,23 @@ def test_assigned_faculty_and_enrolled_students_see_offering(db, world):
                        {"action": "exclude", "reason": "nope"}).status_code == 403
 
 
+def test_term_offering_summary_counts_enrollments_per_section(world):
+    admin, oid = world["admin"], world["offering"]["id"]
+    sec_a, sec_b = world["sections"]
+    assert admin.patch(f"/api/offerings/{oid}",
+                       {"section_ids": [sec_a["id"], sec_b["id"]]}).status_code == 200
+    s1, s2 = world["students"]
+    assert add_member(world, sec_a, s1).status_code == 204
+    assert add_member(world, sec_b, s2).status_code == 204
+
+    response = admin.get(f"/api/terms/{world['term']['id']}/offerings")
+    assert response.status_code == 200, response.text
+    offering = response.json()[0]
+    assert {section["name"]: section["enrolled"] for section in offering["sections"]} \
+        == {"1A": 1, "1B": 1}
+    assert offering["enrolled"] == 2
+
+
 def test_placement_mismatch_is_rejected(world):
     admin = world["admin"]
     wrong = admin.post(f"/api/terms/{world['term']['id']}/sections",

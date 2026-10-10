@@ -21,6 +21,13 @@ export function TermWorkspace(){
   const term=year?.terms.find(t=>t.id===termId);
   const closed=term?.status==='closed';
   const refresh=()=>{queryClient.invalidateQueries({queryKey:['sections',termId]});queryClient.invalidateQueries({queryKey:['offerings',termId]})};
+  const teacherGroups=offerings.data?.reduce<{id:string;name:string;rows:{offering:OfferingSummary;section:{id:string;name:string;enrolled:number}}[]}[]>((groups,offering)=>{
+    let group=groups.find(item=>item.id===offering.faculty.id);
+    if(!group){group={id:offering.faculty.id,name:offering.faculty.display_name,rows:[]};groups.push(group)}
+    const sections=offering.sections.length?offering.sections:[{id:`${offering.id}-unassigned`,name:'—',enrolled:0}];
+    sections.forEach(section=>group.rows.push({offering,section}));
+    return groups;
+  },[]).sort((a,b)=>a.name.localeCompare(b.name));
 
   if(years.isPending)return <p>Loading…</p>;
   if(!term)return <section className="panel"><h1>Term not found</h1><Link to="/admin/academics">Back to school years</Link></section>;
@@ -52,12 +59,19 @@ export function TermWorkspace(){
         <div className="page-heading"><h2>Offerings</h2><button className={sections.data?.length&&offerings.data?.length===0?'primary':''} disabled={closed||!sections.data} onClick={()=>setDialog('offering')}>Assign subjects</button></div>
         {offerings.isPending?<p>Loading…</p>:offerings.error?<p role="alert">{offerings.error.message}</p>:
           offerings.data.length===0?<p className="muted">No subjects are assigned yet.</p>:
-          <div className="table-wrap" tabIndex={0} role="region" aria-label="Offerings"><table><thead><tr><th>Subject</th><th>Teacher</th><th>Sections</th><th>Enrolled</th><th><span className="sr-only">Actions</span></th></tr></thead>
-            <tbody>{offerings.data.map(o=><tr key={o.id}>
-              <td><strong>{o.subject.code}</strong> {o.subject.title}</td><td>{o.faculty.display_name}</td>
-              <td>{o.sections.map(s=>s.name).join(', ')||'—'}</td><td>{o.enrolled}</td>
-              <td className="actions"><Link className="button" state={here} to={`/admin/offerings/${o.id}`}>Roster</Link>
-                <button disabled={closed} onClick={()=>setEditing(o)}>Edit</button></td></tr>)}</tbody></table></div>}
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Offerings by teacher"><table className="offerings-table">
+            <caption className="sr-only">Teachers, assigned subjects and sections, enrollment counts, and actions</caption>
+            <thead><tr><th scope="col">Teacher</th><th scope="col">Subject</th><th scope="col">Section</th><th scope="col">Number of enrolled</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
+            {teacherGroups?.map(group=><tbody key={group.id}>{group.rows.map(({offering,section},index)=>{
+              const offeringStart=index===0||group.rows[index-1].offering.id!==offering.id;
+              return <tr key={`${offering.id}:${section.id}`}>
+              {index===0&&<th scope="rowgroup" rowSpan={group.rows.length}>{group.name}</th>}
+              {offeringStart&&<th scope="row" rowSpan={offering.sections.length||1}><strong>{offering.subject.code}</strong> {offering.subject.title}</th>}
+              <td>{section.name}</td><td>{section.enrolled}</td>
+              <td><div className="actions"><Link className="button" state={here} to={`/admin/offerings/${offering.id}`}>Roster</Link>
+                <button disabled={closed} onClick={()=>setEditing(offering)}>Edit</button></div></td></tr>;
+            })}</tbody>)}
+          </table></div>}
       </section>
     }
 

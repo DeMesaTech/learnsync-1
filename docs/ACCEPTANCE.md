@@ -10,6 +10,13 @@ Implementation started 2026-10-06. No milestone is yet accepted.
 - Browser: table rendered; selecting one account enabled bulk sending, clearing selection reset the selection; at 375px the table scrolls inside its wrapper without widening the page.
 - Blocked: `pytest tests\test_accounts.py` could not set up because the isolated Postgres test database at `127.0.0.1:15432` timed out. The already-running API process returned 404 for the new endpoint because it had not been restarted, so no bulk email was sent and the API flow still needs verification after restart.
 
+### 2026-10-10 (Admin term offerings by teacher and section)
+- Updated the Offerings table to group rows by teacher and show one row per assigned subject/section, with a per-row roster and edit action.
+- Added per-section enrolled counts to the shared offering summary, counting active enrollments rather than section membership. The overall offering count remains available for other views.
+- Merged each subject cell across its section rows and reduced table padding/action spacing to make the rows more compact.
+- Passed: frontend production build (`npm run build`) and backend Ruff checks for the changed query and test.
+- Blocked: the focused regression test could not initialize because the isolated Postgres test database at `127.0.0.1:15432` timed out. Re-run it when the test database is available.
+
 | Milestone | Status | Evidence |
 |---|---|---|
 | 0 Skeleton | Passed (2026-10-06) | See evidence below |
