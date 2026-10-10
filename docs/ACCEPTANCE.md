@@ -17,6 +17,12 @@ Implementation started 2026-10-06. No milestone is yet accepted.
 - Passed: frontend production build (`npm run build`) and backend Ruff checks for the changed query and test.
 - Blocked: the focused regression test could not initialize because the isolated Postgres test database at `127.0.0.1:15432` timed out. Re-run it when the test database is available.
 
+### 2026-10-10 (Responsive login layout)
+- Replaced the fixed-width login padding and undersized card layout with a centered, single-column mobile layout and a capped-width two-column layout on wider screens.
+- On wider screens, aligned the branding panel to touch the login form and match its height; verified the form's position and dimensions are unchanged.
+- Browser: checked 320px, 375px, 640px, 759px, 760px, 1024px, and 1440px viewports; the page has no horizontal overflow and the login content remains inside the viewport.
+- Passed: frontend production build (`npm run build`) and ESLint (`npm run lint`). Build reported the existing large JavaScript bundle advisory.
+
 | Milestone | Status | Evidence |
 |---|---|---|
 | 0 Skeleton | Passed (2026-10-06) | See evidence below |

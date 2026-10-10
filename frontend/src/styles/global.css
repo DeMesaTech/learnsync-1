@@ -236,22 +236,27 @@ p {
 
 .auth-login {
   min-height: 100vh;
+  min-height: 100svh;
   max-width: none;
   margin: 0;
-  padding: 64px 230px;
+  padding: 32px 18px;
   background-image: linear-gradient(rgba(5, 19, 26, 0.28), rgba(5, 19, 26, 0.28)), url('../img/nb.jpg');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   display: grid;
-  place-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  justify-items: center;
+  gap: 16px;
 }
 
 .auth-brand {
-  padding: 16px 0;
-  width:100%;
-  height: 65%;
+  padding: 24px;
+  width: min(100%, 440px);
+  height: auto;
   background: rgba(255, 255, 255, 0.8);
+  border-radius: var(--radius);
 }
 
 .auth-brand h1 {
@@ -264,7 +269,8 @@ p {
 
 .auth-card {
   align-self: center;
-  width: 80%;
+  width: min(100%, 440px);
+  margin-bottom: 0;
 }
 
 .auth-card form .primary {
@@ -332,10 +338,35 @@ dialog::backdrop {
     align-items: center
   }
 
+  .auth-login {
+    grid-template-columns: minmax(0, 1fr)
+  }
+
   .account-row {
     flex-direction: row;
     justify-content: space-between;
     align-items: center
+  }
+}
+
+@media(min-width:760px) {
+  .auth-login {
+    grid-template-columns: repeat(2, minmax(0, 440px));
+    justify-content: center;
+    gap: clamp(24px, 5vw, 64px);
+    padding: clamp(32px, 6vw, 96px) clamp(24px, 6vw, 72px)
+  }
+
+  .auth-brand,
+  .auth-card {
+    width: 100%
+  }
+
+  .auth-brand {
+    position: relative;
+    left: clamp(24px, 5vw, 64px);
+    align-self: stretch;
+    height: 100%
   }
 }
 
