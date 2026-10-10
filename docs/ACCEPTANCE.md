@@ -2,6 +2,10 @@
 
 Implementation started 2026-10-06. No milestone is yet accepted.
 
+### 2026-10-10 (Login background blur)
+- Added a subtle blur to the login background image on its own layer, keeping the login card and logo sharp.
+- Passed: frontend production build (`npm run build`); browser check at `/login` confirmed the background is blurred and form content remains crisp.
+
 ### 2026-10-10 (Browser tab logo)
 - Added the college seal as the frontend PNG favicon.
 - Passed: frontend production build (`npm run build`).
