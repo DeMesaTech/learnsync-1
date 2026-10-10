@@ -2,6 +2,11 @@
 
 Implementation started 2026-10-06. No milestone is yet accepted.
 
+### 2026-10-10 (Admin account action icons)
+- Replaced the question-mark placeholders in the account actions column with inline mail, activate/deactivate, and ownership-transfer icons; accessible button names remain in place.
+- Passed: frontend ESLint (`npm run lint`) and production build (`npm run build`).
+- Blocked: no live admin-account browser check was run in this pass.
+
 ### 2026-10-10 (Login background blur)
 - Added a subtle blur to the login background image on its own layer, keeping the login card and logo sharp.
 - Passed: frontend production build (`npm run build`); browser check at `/login` confirmed the background is blurred and form content remains crisp.

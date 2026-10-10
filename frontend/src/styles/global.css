@@ -496,6 +496,12 @@ h3 {
   line-height: 1
 }
 
+.icon-button svg {
+  display: block;
+  width: 20px;
+  height: 20px
+}
+
 .account-actions {
   justify-content: flex-start
 }

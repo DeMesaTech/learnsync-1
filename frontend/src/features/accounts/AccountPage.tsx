@@ -6,6 +6,31 @@ import {useAuth,useTheme,queryClient} from '../../app/providers';
 import {Dialog} from '../../components/Dialog';
 import {useConfirm} from '../../components/confirm';
 
+function AccountActionIcon({name}:{name:'mail'|'activate'|'deactivate'|'transfer'}){
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      {name==='mail' ? (
+        <>
+          <rect x="3" y="5" width="18" height="14" rx="2"/>
+          <path d="m3 7 9 6 9-6"/>
+        </>
+      ) : name==='activate' ? (
+        <>
+          <circle cx="12" cy="12" r="9"/>
+          <path d="m8 12 2.5 2.5L16 9"/>
+        </>
+      ) : name==='deactivate' ? (
+        <>
+          <circle cx="12" cy="12" r="9"/>
+          <path d="M8 12h8"/>
+        </>
+      ) : (
+        <path d="M7 7h13l-3-3m3 3-3 3M17 17H4l3 3m-3-3 3-3"/>
+      )}
+    </svg>
+  );
+}
+
 export function AccountSettings(){
   const {session}=useAuth();
   const {theme,setTheme}=useTheme();
@@ -215,7 +240,6 @@ export function Accounts(){
                   const canToggle = a.status !== 'invited';
                   const sendTitle = a.status === 'invited' ? 'Resend invitation' : 'Send reset link';
                   const statusTitle = a.status === 'active' ? 'Deactivate account' : 'Activate account';
-                  const statusGlyph = a.status === 'active' ? '?' : '?';
 
                   return (
                     <tr key={a.id}>
@@ -237,16 +261,16 @@ export function Accounts(){
                       <td>
                         <div className="actions account-actions">
                           <button type="button" className="icon-button" title={sendTitle} aria-label={sendTitle} disabled={mutation.isPending || a.status==='inactive'} onClick={()=>mutation.mutate({path:'/accounts/'+a.id+'/send-link',body:{}})}>
-                            {a.status==='invited' ? '?' : '?'}
+                            <AccountActionIcon name="mail"/>
                           </button>
                           {canToggle && (
                             <button type="button" className="icon-button" title={statusTitle} aria-label={statusTitle} disabled={mutation.isPending} onClick={()=>mutation.mutate({path:'/accounts/'+a.id+'/status',method:'PATCH',body:{status:a.status==='active'?'inactive':'active'}})}>
-                              {statusGlyph}
+                              <AccountActionIcon name={a.status==='active'?'deactivate':'activate'}/>
                             </button>
                           )}
                           {a.role==='admin' && a.status==='active' && (
                             <button type="button" className="icon-button" title="Transfer admin ownership" aria-label="Transfer admin ownership" onClick={()=>setHandover(a)}>
-                              ?
+                              <AccountActionIcon name="transfer"/>
                             </button>
                           )}
                         </div>
