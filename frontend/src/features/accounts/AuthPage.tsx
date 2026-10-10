@@ -65,6 +65,7 @@ export function AuthPage() {
   return (
   <main className={isLogin ? 'auth auth-login' : 'auth'}>
       <section className="auth-brand">
+        <img src="/img/gmvcc.png" alt="LearnSync logo" width={64} height={64} />
         <Link to="/login" className="brand">
           LearnSync
         </Link>
