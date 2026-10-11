@@ -34,12 +34,12 @@ export function QuestionList({questions,onChange,locked}:{questions:Question[];o
       <label>Question<textarea value={q.prompt} maxLength={5000} onChange={e=>set(i,{...q,prompt:e.target.value})}/></label>
       {q.type==='multiple_choice'&&<fieldset><legend>Choices (select the correct one)</legend>
         {q.choices.map((c,j)=><div className="topic-row" key={c.id}>
-          <input type="radio" aria-label={`Choice ${j+1} is correct`} name={`correct-${q.key}`} checked={q.correct===c.id} disabled={locked} onChange={()=>set(i,{...q,correct:c.id})}/>
+          <input className="quiz-choice-radio" type="radio" aria-label={`Choice ${j+1} is correct`} name={`correct-${q.key}`} checked={q.correct===c.id} disabled={locked} onChange={()=>set(i,{...q,correct:c.id})}/>
           <input aria-label={`Choice ${j+1} text`} value={c.text} maxLength={500} onChange={e=>set(i,{...q,choices:q.choices.map((x,k)=>k===j?{...x,text:e.target.value}:x)})}/>
           {!locked&&q.choices.length>2&&<button type="button" aria-label={`Remove choice ${j+1}`} onClick={()=>set(i,{...q,choices:q.choices.filter((_,k)=>k!==j),correct:q.correct===c.id?q.choices.find((_,k)=>k!==j)!.id:q.correct})}>✕</button>}</div>)}
         {!locked&&q.choices.length<6&&<button type="button" onClick={()=>set(i,{...q,choices:[...q.choices,{id:newId(),text:''}]})}>Add choice</button>}</fieldset>}
       {q.type==='true_false'&&<fieldset><legend>Correct answer</legend>
-        {[true,false].map(v=><label className="inline" key={String(v)}><input type="radio" name={`tf-${q.key}`} checked={q.correct===v} disabled={locked} onChange={()=>set(i,{...q,correct:v})}/> {v?'True':'False'}</label>)}</fieldset>}
+        {[true,false].map(v=><label className="inline" key={String(v)}><input className="quiz-choice-radio" type="radio" name={`tf-${q.key}`} checked={q.correct===v} disabled={locked} onChange={()=>set(i,{...q,correct:v})}/> {v?'True':'False'}</label>)}</fieldset>}
       {q.type==='short_answer'&&<fieldset><legend>Accepted answers</legend>
         <p className="muted">Matching ignores capital letters and extra spaces. It is not fuzzy: list every wording you accept. You can correct individual answers later.</p>
         {(Array.isArray(q.correct)?q.correct:[]).map((ans,j,all)=><div className="topic-row" key={j}>

@@ -9,23 +9,24 @@ import type {Assessment} from '../assessments/types';
 import type {Item,LearnItem} from './types';
 
 const day=(iso:string)=>new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+const uploadedAt=(iso:string)=>new Date(iso).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
 const KIND:Record<string,string>={lesson:'Lesson',file:'File',reference:'Link',online_quiz:'Quiz',offline_quiz:'Paper quiz',activity:'Activity',exam:'Examination',manual:'Teacher-scored item'};
 
-/** Teachers: announcements to the sections, then what was published lately. */
+/** Teachers: announcements to the sections, then every published classwork item, newest first. */
 export function FacultyStream(){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const items=useQuery({queryKey:['items',offering.id],queryFn:()=>api<Item[]>(`/teach/offerings/${offering.id}/items`)});
   const assessments=useQuery({queryKey:['assessments',offering.id],queryFn:()=>api<Assessment[]>(`/teach/offerings/${offering.id}/assessments`)});
   const base=`/faculty/offerings/${offering.id}`;
-  const recent=[
+  const classwork=[
     ...(items.data??[]).filter(i=>i.published&&!i.archived).map(i=>({key:'i'+i.id,title:itemTitle(i),kind:KIND[i.kind],at:i.published!.published_at!,to:`${base}/content/${i.id}/edit`})),
     ...(assessments.data??[]).filter(a=>a.published&&!a.archived).map(a=>({key:'a'+a.id,title:assessmentTitle(a),kind:KIND[a.kind],at:a.published!.published_at!,to:`${base}/assessments/${a.id}/scores`})),
-  ].filter(r=>r.at).sort((a,b)=>a.at<b.at?1:-1).slice(0,6);
+  ].filter(r=>r.at).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)||a.key.localeCompare(b.key));
   return <>
     <FacultyAnnouncements/>
-    <section className="panel" aria-labelledby="recent-h"><h3 id="recent-h">Recently published</h3>
-      {recent.length===0?<p className="muted">Nothing published yet. Lessons, files, links and assessments you publish appear here.</p>
-        :<ul className="rows">{recent.map(r=><li key={r.key}><Link to={r.to}>{r.title}</Link><span className="muted">{r.kind} · {day(r.at)}</span></li>)}</ul>}</section>
+    <section className="panel" aria-labelledby="classwork-stream-heading"><h3 id="classwork-stream-heading">Published classwork</h3>
+      {classwork.length===0?<p className="muted">Nothing published yet. Lessons, files, links and assessments you publish appear here.</p>
+        :<ul className="rows">{classwork.map(r=><li key={r.key}><Link to={r.to}>{r.title}</Link><span className="muted">{r.kind} · <time dateTime={r.at}>{uploadedAt(r.at)}</time></span></li>)}</ul>}</section>
   </>;
 }
 

@@ -2,6 +2,18 @@
 
 Implementation started 2026-10-06. No milestone is yet accepted.
 
+### 2026-10-12 (Quiz radio sizing)
+- Scoped compact 18px radio controls to multiple-choice/true-false answer selection in the quiz editor and student quiz attempt, leaving unrelated radio controls unchanged.
+- Added fresh-install flow assertions that measure the quiz-creation and quiz-taker radio widths.
+- Passed: frontend production build/type-check, ESLint, editor diagnostics, `node --check frontend\\e2e\\flow.mjs`, and `git diff --check`.
+- Not run: the fresh-install E2E flow requires a disposable database and was not executed. Production build completed with the existing large-JavaScript-chunk warning.
+
+### 2026-10-12 (Faculty Stream classwork list)
+- Removed the six-item cap from the faculty Stream and show every published, non-archived lesson, file, link and assessment, newest upload/publication timestamp first. The displayed timestamp includes date and time.
+- Added disposable-workspace E2E coverage that publishes more than six lessons and checks the Stream row count against all published work and verifies newest-first timestamps.
+- Passed: frontend production build/type-check, ESLint, editor diagnostics, `node --check frontend\\e2e\\workspace.mjs`, and `git diff --check`.
+- Blocked: the workspace E2E flow was not run because a disposable database was not confirmed. Production build completed with the existing large-JavaScript-chunk warning.
+
 ### 2026-10-11 (Login tip and college links)
 - Added the reference Tip panel and Facebook/Website links to the login branding section only. The links use the referenced college destinations, open in a new tab with `noopener noreferrer`, and use existing theme tokens rather than changing the established colors.
 - Passed: frontend production build/type-check, ESLint, editor diagnostics, and `git diff --check`.

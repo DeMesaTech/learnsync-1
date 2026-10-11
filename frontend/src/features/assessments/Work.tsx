@@ -189,8 +189,8 @@ function Taking({offering,attempt,url,back}:{offering:OfferingSummary;attempt:At
       {attempt.questions.map((q,i)=><fieldset className="panel" key={q.key}>
         <legend>Question {i+1} · {q.points} point{q.points===1?'':'s'}</legend>
         <p className="pre">{q.prompt}</p>
-        {q.type==='multiple_choice'&&q.choices.map(c=><label className="inline" key={c.id}><input type="radio" name={q.key} checked={answers[q.key]===c.id} onChange={()=>change(q.key,c.id)}/> {c.text}</label>)}
-        {q.type==='true_false'&&[true,false].map(v=><label className="inline" key={String(v)}><input type="radio" name={q.key} checked={answers[q.key]===v} onChange={()=>change(q.key,v)}/> {v?'True':'False'}</label>)}
+        {q.type==='multiple_choice'&&q.choices.map(c=><label className="inline" key={c.id}><input className="quiz-answer-radio" type="radio" name={q.key} checked={answers[q.key]===c.id} onChange={()=>change(q.key,c.id)}/> {c.text}</label>)}
+        {q.type==='true_false'&&[true,false].map(v=><label className="inline" key={String(v)}><input className="quiz-answer-radio" type="radio" name={q.key} checked={answers[q.key]===v} onChange={()=>change(q.key,v)}/> {v?'True':'False'}</label>)}
         {q.type==='short_answer'&&<label>Your answer<input value={typeof answers[q.key]==='string'?String(answers[q.key]):''} maxLength={1000} onChange={e=>change(q.key,e.target.value)}/></label>}
       </fieldset>)}
       <div className="actions"><button className="primary" disabled={submitting}>{submitting?'Submitting…':'Submit answers'}</button></div></form>

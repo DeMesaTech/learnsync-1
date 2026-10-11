@@ -27,6 +27,7 @@ try{
     await call(teach,'POST',`${T}/items/${it.id}/draft/publish`,{expected_counter:sv.counter});return it.id}
   const n=Date.now()%100000,A=`Reorder first ${n}`,B=`Reorder second ${n}`;
   const first=await lesson(A);await lesson(B);
+  for(let i=0;i<5;i++)await lesson(`Stream all ${n}-${i}`);
   const fb=`/faculty/offerings/${O}`,sb=`/student/offerings/${O}`;
 
   // ---- teacher: old addresses
@@ -37,6 +38,15 @@ try{
     const label=await activeTab(teach).catch(()=>'(none)');
     check(`teacher ${from.replace(fb,'.')||'.'} lands on ${to.replace(fb,'.')||'.'} under the ${tab} tab`,where(teach)===to&&label===tab,`${where(teach).replace(fb,'.')} / ${label}`)}
   check('a teacher has four subject tabs',await teach.locator('nav[aria-label="Subject sections"] a').count()===4);
+  const publishedItems=(await call(teach,'GET',`${T}/items`)).data.filter(i=>i.published&&!i.archived);
+  const publishedAssessments=(await call(teach,'GET',`${T}/assessments`)).data.filter(a=>a.published&&!a.archived);
+  const publishedCount=publishedItems.length+publishedAssessments.length;
+  await teach.goto(`${fb}/stream`);
+  const streamRows=teach.locator('section[aria-labelledby="classwork-stream-heading"] li');
+  await streamRows.nth(publishedCount-1).waitFor();
+  check('teacher Stream shows every published classwork item',await streamRows.count()===publishedCount,`${await streamRows.count()} of ${publishedCount}`);
+  const uploadTimes=await streamRows.locator('time').evaluateAll(nodes=>nodes.map(node=>Date.parse(node.dateTime)));
+  check('teacher Stream orders all classwork by upload date, newest first',uploadTimes.every((time,index)=>index===0||uploadTimes[index-1]>=time),uploadTimes.join(', '));
 
   // ---- teacher: pills, status filter, reorder
   await teach.goto(`${fb}/classwork?type=lesson`);await teach.getByRole('heading',{name:'Not under a topic'}).waitFor();

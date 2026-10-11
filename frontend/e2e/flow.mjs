@@ -142,6 +142,8 @@ try{
   await teach.getByLabel('Choice 2 text').fill('A logo');
   await teach.getByLabel('Choice 3 text').fill('A loan');
   await teach.getByLabel('Choice 4 text').fill('A website');
+  const authorRadioSize=await teach.locator('.quiz-choice-radio').first().evaluate(el=>el.getBoundingClientRect().width);
+  check('quiz creation answer radio has a compact size',authorRadioSize===18,`${authorRadioSize}px`);
   await teach.getByLabel('Choice 1 is correct').check();
   await teach.waitForTimeout(2500);
   await shot(teach,'flow-2-quiz-editor');
@@ -171,6 +173,8 @@ try{
   await stud.goto(`/student/offerings/${O}/work`);
   await stud.locator('ul.seq a').first().click();
   await stud.getByRole('button',{name:/Start/}).click();
+  const takerRadioSize=await stud.locator('.quiz-answer-radio').first().evaluate(el=>el.getBoundingClientRect().width);
+  check('quiz taker answer radio has a compact size',takerRadioSize===18,`${takerRadioSize}px`);
   await stud.getByLabel('A real customer problem').check();
   await stud.waitForTimeout(1500);
   await shot(stud,'flow-3-student-quiz');
