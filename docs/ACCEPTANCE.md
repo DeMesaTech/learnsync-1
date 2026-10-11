@@ -2,6 +2,12 @@
 
 Implementation started 2026-10-06. No milestone is yet accepted.
 
+### 2026-10-12 (Student progress chart labels)
+- Added a visible caption to both activity charts explaining that bars count completed lessons, submitted quizzes and uploaded activities.
+- Added a fresh-install E2E assertion that both charts show the explanation.
+- Passed: frontend production build/type-check, ESLint and `node --check frontend\\e2e\\flow.mjs`; `git diff --check` passed before the acceptance entry was added.
+- Not run: E2E requires a disposable database and was not executed. Production build completed with the existing large-JavaScript-chunk warning.
+
 ### 2026-10-12 (English-only Study Buddy and header logo)
 - Study Buddy now instructs the model to answer in English regardless of student input, source language or prior chat language. Fixed greetings, declines, unavailable-source messages and one-tap helper failures are English-only; Filipino greetings remain recognized and receive English replies. Exact evidence quotes remain verbatim in their source language for citation verification. Teacher AI quiz drafting language choices are unchanged.
 - Replaced the app header's letter mark with the existing GMVCC logo asset.

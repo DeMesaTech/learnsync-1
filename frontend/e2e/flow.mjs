@@ -184,6 +184,8 @@ try{
   await stud.goto(`/student/offerings/${O}/progress`);
   await stud.getByText('2 of 2 steps done').waitFor();
   check('progress counts only the lesson and the quiz she completed',(await text(stud)).includes('100%'));
+  check('progress charts explain what activity each bar counts',
+    (await stud.getByText('Bars count lessons you marked complete, quizzes you submitted, and activities you uploaded.').count())===2);
   await shot(stud,'flow-4-student-progress');
 
   // ---------- 6. the teacher publishes grades and exports them ----------

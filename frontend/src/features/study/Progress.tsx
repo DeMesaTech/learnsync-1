@@ -30,8 +30,8 @@ export function StudentProgress(){
       {p.note&&<p className="warn" role="status">{p.note} The percentage only covers what applies to you now.</p>}
     </section>
     <div className="grid-2">
-      <section className="panel"><h3>Last 14 days</h3><Bars label="Activity per day" data={p.days.map(d=>({key:d.date,label:day(d.date),count:d.count}))}/></section>
-      <section className="panel"><h3>Last 8 weeks</h3><Bars label="Activity per week" data={p.weeks.map(w=>({key:w.week_start,label:`Wk ${day(w.week_start)}`,count:w.count}))}/><p className="muted">Weeks start on Monday (Philippine time).</p></section></div>
+      <section className="panel"><h3>Last 14 days</h3><p className="muted">Bars count lessons you marked complete, quizzes you submitted, and activities you uploaded.</p><Bars label="Activity per day" data={p.days.map(d=>({key:d.date,label:day(d.date),count:d.count}))}/></section>
+      <section className="panel"><h3>Last 8 weeks</h3><p className="muted">Bars count lessons you marked complete, quizzes you submitted, and activities you uploaded.</p><Bars label="Activity per week" data={p.weeks.map(w=>({key:w.week_start,label:`Wk ${day(w.week_start)}`,count:w.count}))}/><p className="muted">Weeks start on Monday (Philippine time).</p></section></div>
     {p.steps.length>0&&<section className="panel"><h3>Steps</h3><ul className="plain">{p.steps.map(s=><li key={s.type+s.id} className="member-row"><span>{s.done?'✓':'○'} {s.title} <span className="badge">{stepLabel(s)}</span></span><span className={s.done?'badge covered':'muted'}>{s.done?'Done':'To do'}</span></li>)}</ul></section>}
   </>;
 }
