@@ -8,12 +8,13 @@ import {useUnread} from './seen';
 import {StudyBuddy} from '../features/study/StudyBuddy';
 import {useConfirm} from './confirm';
 import type {MySubject,OfferingSummary,SchoolYear} from '../features/academics/types';
+import logoUrl from '../img/gmvcc.png';
 
 type NavItem={to:string;label:string;icon:string;end?:boolean;dot?:boolean;children?:NavItem[]};
 type ClassLink={to:string;label:string;icon:string};
 const ROLE_LABEL={admin:'Academic administrator',faculty:'Teaching faculty',student:'Student'} as const;
 
-/** Grouped navigation. Icons are decoration only (aria-hidden); every entry has a visible text label. */
+/** Grouped navigation. Icons and the school logo are decoration; every entry has a visible text label. */
 function navigation(role:'admin'|'faculty'|'student', schoolYears?:SchoolYear[], classes:ClassLink[]=[]):{label:string;items:NavItem[]}[]{
   const home='/'+role;
   const account={label:'Account & help',items:[{to:'/account',label:'Account & theme',icon:'○'}]};
@@ -83,7 +84,7 @@ export function Shell(){
     <a href="#main" className="skip">Skip to content</a>
     <header className="header">
       <button ref={menuButton} className="menu" aria-label="Toggle navigation" aria-expanded={open} onClick={()=>setOpen(!open)}>☰</button>
-      <Link to={home} className="brand"><span className="mark" aria-hidden="true">L</span>LearnSync</Link>
+      <Link to={home} className="brand"><img className="mark" src={logoUrl} alt="" aria-hidden="true"/>LearnSync</Link>
       <span className="school">GMVCC · BS Entrepreneurship</span>
       <div className="identity">
         <div className="who"><strong>{user.display_name}</strong><span>{ROLE_LABEL[user.role]}</span></div>

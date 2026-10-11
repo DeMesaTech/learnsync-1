@@ -4,7 +4,13 @@ import re
 from test_study import ai, ask, conversation, lesson  # noqa: F401
 
 from app.features.study import provider
-from app.features.study.prompts import ASSESSMENT_DECLINE, NOT_COVERED, UNSUPPORTED, verify_reply
+from app.features.study.prompts import (
+    ASSESSMENT_DECLINE,
+    NOT_COVERED,
+    UNSUPPORTED,
+    build_messages,
+    verify_reply,
+)
 
 
 class Row:
@@ -14,6 +20,14 @@ class Row:
 
 SOURCES = [Row("Cost-plus pricing is a pricing strategy by which the selling price is determined by adding a markup."),
            Row("A venture starts when someone finds a real customer problem and builds a solution for it.")]
+
+
+def test_study_prompt_requires_english_even_with_non_english_history():
+    messages = build_messages("ENT 101", SOURCES, [{"role": "assistant", "content": "Kumusta po."}], "Kumusta?")
+    system = messages[0]["content"]
+    assert "Always write your answer in English" in system
+    assert "Never write in Filipino or Taglish" in system
+    assert "Evidence quotes must remain copied exactly from their sources" in system
 
 
 def test_only_quotes_that_really_appear_in_the_cited_source_count():

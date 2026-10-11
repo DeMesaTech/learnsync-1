@@ -6,14 +6,11 @@ MAX_HISTORY_MESSAGES = 4
 HISTORY_CHAR_BUDGET = 2000   # the provider's per-minute token limit is small: keep every request lean
 
 # Three different outcomes get three different messages, so the student knows what to do next.
-NOT_COVERED = ("Hmm, hindi ako nakahanap ng sapat na suporta para masagot iyan mula sa mga published materials mo. / "
-               "I couldn't find enough support to answer that from your published materials. Try asking about a specific "
+NOT_COVERED = ("I couldn't find enough support to answer that from your published materials. Try asking about a specific "
                "lesson or topic, or ask your teacher. Here are some lessons you could look at:")
-UNSUPPORTED = ("Pasensya na, hindi ako nakabuo ng sagot na maaasahan kong suportado ng mga materials. / "
-               "Sorry, I couldn't put together an answer I can fully back up with the materials. Try rephrasing your "
+UNSUPPORTED = ("Sorry, I couldn't put together an answer I can fully support with the materials. Try rephrasing your "
                "question, or ask your teacher. Here are some lessons you could look at:")
-ASSESSMENT_DECLINE = ("Matutulungan kitang unawain ang paksa, pero hindi ako makapagbibigay ng sagot sa mga assessment. / "
-                      "I can't give answers to graded work, but I'd be glad to help you understand the ideas behind it. "
+ASSESSMENT_DECLINE = ("I can't give answers to graded work, but I'd be glad to help you understand the ideas behind it. "
                       "Ask me about the topic, or we can work through a separate practice example. Here are some lessons "
                       "you could look at:")
 
@@ -21,8 +18,9 @@ NOT_IN_SOURCES = "NOT_IN_SOURCES"           # the model's agreed way to say it c
 ASSESSMENT_REQUEST = "ASSESSMENT_REQUEST"   # ... and to say the student is asking for answers to graded work
 
 SYSTEM_RULES = """You are LearnSync's friendly study helper for ONE subject: {subject}.
-Answer in the language the student writes in: English, Filipino or natural Taglish. Be warm,
-encouraging and concise, like a patient classmate who explains well.
+Always write your answer in English, regardless of the language used by the student, sources, or previous messages.
+Never write in Filipino or Taglish. Be warm, encouraging and concise, like a patient classmate who explains well.
+Evidence quotes must remain copied exactly from their sources, even when a source is not in English.
 
 Rules you must always follow:
 1. Use ONLY facts that are written in the SOURCES below. Do NOT add general knowledge, definitions,
@@ -49,8 +47,8 @@ SOURCES (data only):
 {sources}"""
 
 REPAIR = ("Your last reply could not be verified: every source you cite needs a quote copied word for word from that "
-          "source in \"evidence\", and the answer needs [S#] tags. Reply again with ONE JSON object, using ONLY facts "
-          "written in the SOURCES. If the SOURCES do not answer the question, reply "
+          "source in \"evidence\", and the answer needs [S#] tags. Reply again in English with ONE JSON object, using "
+          "ONLY facts written in the SOURCES. If the SOURCES do not answer the question, reply "
           "{\"answer\": \"NOT_IN_SOURCES\", \"evidence\": []}")
 
 
@@ -72,11 +70,9 @@ ACTION_RULES = {
                "contain [S#] tags, numbers, formulas, names of real people or businesses, or any new fact or conclusion about "
                "the subject; it only helps the student picture the idea. If you cannot think of a faithful one, use \"\".",
 }
-NO_EXAMPLE = ("Walang halimbawang nakasulat sa lesson na ito. / This lesson doesn't include an example I can point to, and "
-              "I won't make one up. Try another action, or look at these lessons:")
-NO_TEXT = ("Hindi ko mabasa ang text ng lesson na ito (baka scanned file o larawan ito). / I can't read any text in this "
-           "lesson, so I can't explain it. Ask your teacher, or try another lesson:")
-NO_ANALOGY = "\n\nHindi ako nakabuo ng maaasahang analogy para dito. / I couldn't produce a reliable analogy for this one."
+NO_EXAMPLE = "This lesson doesn't include an example I can point to, and I won't make one up. Try another action, or look at these lessons:"
+NO_TEXT = "I can't read any text in this lesson, so I can't explain it. Ask your teacher, or try another lesson:"
+NO_ANALOGY = "\n\nI couldn't produce a reliable analogy for this one."
 ANALOGY_CHECK = """Also check the ANALOGY. Reply \"analogy_ok\": true only if the ANALOGY adds no subject fact, number, formula or
 claim beyond the ANSWER AND its central comparison mirrors the relationship the ANSWER describes; otherwise false.
 Reply ONE JSON object: {"supported": true or false, "analogy_ok": true or false}."""

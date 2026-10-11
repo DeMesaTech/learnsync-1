@@ -1115,15 +1115,13 @@ a.touch {
 }
 
 .mark {
-  display: inline-grid;
-  place-items: center;
+  display: block;
   width: 32px;
   height: 32px;
-  border-radius: 9px;
-  background: var(--action);
-  color: var(--action-text);
-  font-weight: 800;
-  font-size: 1rem
+  flex: 0 0 32px;
+  object-fit: contain;
+  border-radius: 50%;
+  background: var(--surface)
 }
 
 .school {

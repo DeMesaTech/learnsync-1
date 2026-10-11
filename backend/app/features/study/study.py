@@ -320,9 +320,9 @@ def send(db, student, offering_id, conversation_id, text, client_message_id, sel
     subject_name = f"{subject.code} {subject.title}"
     talk = None if action else smalltalk(question)
     if talk:                                         # a greeting is answered warmly with no provider call and no claims
-        kind, lang = talk
+        kind = talk
         return message_view(user), message_view(finish(
-            db, conversation, user, talk_reply(kind, lang, subject_name),
+            db, conversation, user, talk_reply(kind, subject_name),
             suggestions=suggest(db, offering, enrollment, student.id, question, mode="starter")
             if kind != "thanks" else []))
     rows = retrieve_lesson(db, offering, selected_item_id) if action else retrieve(db, offering, enrollment, question, selected_item_id)
@@ -367,4 +367,3 @@ def finish(db, conversation, user, content, suggestions=(), sources=(), model=No
             raise
         return reply
     return assistant
-

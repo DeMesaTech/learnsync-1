@@ -2,6 +2,13 @@
 
 Implementation started 2026-10-06. No milestone is yet accepted.
 
+### 2026-10-12 (English-only Study Buddy and header logo)
+- Study Buddy now instructs the model to answer in English regardless of student input, source language or prior chat language. Fixed greetings, declines, unavailable-source messages and one-tap helper failures are English-only; Filipino greetings remain recognized and receive English replies. Exact evidence quotes remain verbatim in their source language for citation verification. Teacher AI quiz drafting language choices are unchanged.
+- Replaced the app header's letter mark with the existing GMVCC logo asset.
+- Added regression coverage for English replies to English and Filipino pleasantries and for the English-only prompt with non-English conversation history.
+- Passed: frontend production build/type-check, ESLint, editor diagnostics, backend Ruff, direct runtime checks for English greetings/fallbacks/prompt behavior, and `git diff --check`.
+- Blocked: focused pytest cases could not initialize because the test Postgres database at `127.0.0.1:15432` timed out during setup. Production AI language compliance was not re-tested against Groq. The production build completed with the existing large-JavaScript-chunk warning.
+
 ### 2026-10-12 (Quiz radio sizing)
 - Scoped compact 18px radio controls to multiple-choice/true-false answer selection in the quiz editor and student quiz attempt, leaving unrelated radio controls unchanged.
 - Added fresh-install flow assertions that measure the quiz-creation and quiz-taker radio widths.

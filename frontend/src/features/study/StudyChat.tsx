@@ -79,7 +79,7 @@ export function StudyChat({offeringId,canAsk,closedNote='',active,onActive,onSta
         <header className="convo-head"><h3>{active?title:'New conversation'}</h3>
           {active&&<button type="button" className="danger" disabled={busy} onClick={()=>setConfirmDelete(true)}><span aria-hidden="true">🗑</span> Delete conversation</button>}</header>
         <div className="chat" role="log" aria-live="polite" ref={log}>
-          {!active&&!waiting&&<div className="empty"><p><strong>What would you like to understand?</strong></p><p className="muted">English, Filipino and Taglish are all fine. Type a question, or let me help with a lesson:</p>{helper}</div>}
+          {!active&&!waiting&&<div className="empty"><p><strong>What would you like to understand?</strong></p><p className="muted">Ask about a lesson. Study buddy replies in English using your teacher’s published materials:</p>{helper}</div>}
           {conversation.error&&<p role="alert">{conversation.error.message}</p>}
           {conversation.hasNextPage&&<button disabled={conversation.isFetchingNextPage} onClick={()=>conversation.fetchNextPage()}>{conversation.isFetchingNextPage?'Loading…':'Load earlier messages'}</button>}
           {messages.map(m=><div key={m.id} className={`msg ${m.role}`}><p className="eyebrow">{m.role==='user'?'You':'Study helper'}</p><p className="pre">{m.content}</p>

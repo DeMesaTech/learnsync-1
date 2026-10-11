@@ -20,6 +20,7 @@ from test_teaching import edit_and_publish, new_item
 from app.config import settings
 from app.features.study import provider
 from app.features.study.chunker import chunk_section, chunk_sections
+from app.features.study.friendly import smalltalk, talk_reply
 from app.features.study.models import ContentChunk
 from app.features.study.prompts import NOT_COVERED, UNSUPPORTED
 from app.security import _limits
@@ -29,7 +30,7 @@ class FakeAI:
     """Stands in for Groq: records every request and returns a scripted answer."""
 
     def __init__(self):
-        self.calls, self.answer, self.error = [], "Sige, eto ang paliwanag [S1].", None
+        self.calls, self.answer, self.error = [], "Here is the explanation [S1].", None
         self.support, self.support_calls, self.support_error = '{"supported": true}', [], None
 
     def __call__(self, messages, *, model, json_mode=False, max_tokens=800, temperature=0.3):
@@ -58,6 +59,12 @@ class FakeAI:
 
     def system(self, n=-1):
         return self.calls[n]["messages"][0]["content"]
+
+
+def test_friendly_replies_are_english_even_for_filipino_pleasantries():
+    assert talk_reply(smalltalk("Kumusta po"), "ENT 101").startswith("Hi there!")
+    assert talk_reply(smalltalk("Salamat po"), "ENT 101").startswith("You're welcome!")
+    assert "I'm a study helper" in talk_reply(smalltalk("Sino ka?"), "ENT 101")
 
 
 @pytest.fixture
@@ -603,15 +610,15 @@ def test_greetings_get_a_warm_reply_with_lesson_suggestions_and_no_provider_call
     lesson(course, "Market research", "<p>Market research collects information about customers.</p>")
     st1 = course["st1"]
     cid = conversation(st1, course)
-    for text, lang_word in [("Hi!", "study buddy"), ("Kumusta po", "study buddy"), ("Good morning", "study buddy"),
-                            ("What can you do?", "study helper"), ("Sino ka?", "study helper")]:
+    for text, expected in [("Hi!", "Hi there!"), ("Kumusta po", "Hi there!"), ("Good morning", "Hi there!"),
+                           ("What can you do?", "I'm a study helper"), ("Sino ka?", "I'm a study helper")]:
         _limits.clear()
         reply = ask(st1, course, cid, text).json()["assistant"]
-        assert lang_word in reply["content"] and reply["sources"] == []
+        assert expected in reply["content"] and reply["sources"] == []
         titles = [s["title"] for s in reply["suggestions"]]
         assert titles[:2] == ["Fixed and variable costs", "Market research"]            # the next lessons in the student's sequence
         assert all(s["kind"] == "sequence" and s["link"].startswith("/student/offerings/") for s in reply["suggestions"])
-    assert "Walang anuman" in ask(st1, course, cid, "Salamat po!").json()["assistant"]["content"]
+    assert "You're welcome!" in ask(st1, course, cid, "Salamat po!").json()["assistant"]["content"]
     assert ask(st1, course, cid, "thanks").json()["assistant"]["suggestions"] == []
     assert ai.calls == [] and ai.support_calls == []                                    # no tokens spent on pleasantries
     # a greeting that carries a real request is not small talk: it goes through the normal handling
