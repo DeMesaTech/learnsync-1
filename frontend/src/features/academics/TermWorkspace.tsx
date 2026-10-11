@@ -14,12 +14,15 @@ export function TermWorkspace(){
   const years=useQuery({queryKey:['school-years'],queryFn:()=>api<SchoolYear[]>('/school-years')});
   const sections=useQuery({queryKey:['sections',termId],queryFn:()=>api<Section[]>(`/terms/${termId}/sections`)});
   const offerings=useQuery({queryKey:['offerings',termId],queryFn:()=>api<OfferingSummary[]>(`/terms/${termId}/offerings`)});
+  const subjects=useQuery({queryKey:['subjects',false],queryFn:()=>api<Subject[]>('/subjects')});
   const [dialog,setDialog]=useState<'section'|'offering'|null>(null);
   const [editing,setEditing]=useState<OfferingSummary|null>(null);
   const [tab,setTab]=useState<'sections'|'offerings'>('sections');
   const year=years.data?.find(y=>y.terms.some(t=>t.id===termId));
   const term=year?.terms.find(t=>t.id===termId);
   const closed=term?.status==='closed';
+  const highestProgramYear=Math.max(0,...(subjects.data??[]).map(subject=>subject.year_level??0));
+  const programYears=Array.from({length:highestProgramYear},(_,index)=>index+1);
   const refresh=()=>{queryClient.invalidateQueries({queryKey:['sections',termId]});queryClient.invalidateQueries({queryKey:['offerings',termId]})};
   const teacherGroups=offerings.data?.reduce<{id:string;name:string;rows:{offering:OfferingSummary;section:{id:string;name:string;enrolled:number}}[]}[]>((groups,offering)=>{
     let group=groups.find(item=>item.id===offering.faculty.id);
@@ -47,8 +50,11 @@ export function TermWorkspace(){
       <section className="panel">
         <div className="page-heading"><h2>Sections</h2><div className="actions">
           <Link className="button" to={`/admin/terms/${termId}/import-students`}>Import students</Link>
-          <button className={sections.data?.length===0?'primary':''} disabled={closed} onClick={()=>setDialog('section')}>Add section</button>
+          <button className={sections.data?.length===0?'primary':''} disabled={closed||subjects.isPending||subjects.isError||programYears.length===0} onClick={()=>setDialog('section')}>Add section</button>
         </div></div>
+        {subjects.isError&&<p role="alert">Could not load the prospectus year levels: {subjects.error.message}</p>}
+        {!subjects.isError&&subjects.isSuccess&&programYears.length===0&&<p className="muted">No year levels are assigned in the prospectus yet. <Link to="/admin/subjects">Add or place subjects in the prospectus</Link> before creating sections.</p>}
+        {!subjects.isError&&programYears.length>0&&<p className="muted">Program duration: {highestProgramYear} year{highestProgramYear===1?'':'s'}, based on the active prospectus subjects.</p>}
         {sections.isPending?<p>Loading…</p>:sections.error?<p role="alert">{sections.error.message}</p>:
           sections.data.length===0?<p className="muted">No sections yet. Add one, or copy structure when creating the school year.</p>:
           <div className="table-wrap"><table><caption className="sr-only">Sections of this term</caption>
@@ -80,7 +86,7 @@ export function TermWorkspace(){
       </section>
     }
 
-    {dialog==='section'&&<SectionDialog termId={term.id} onClose={()=>setDialog(null)} onDone={()=>{setDialog(null);refresh()}}/>}
+    {dialog==='section'&&<SectionDialog termId={term.id} yearLevels={programYears} onClose={()=>setDialog(null)} onDone={()=>{setDialog(null);refresh()}}/>}
     {dialog==='offering'&&<BulkAssignDialog termId={term.id} termSequence={term.sequence} sections={sections.data??[]} existing={offerings.data??[]}
       onClose={()=>setDialog(null)} onDone={()=>{setDialog(null);refresh()}}/>}
     {editing&&<OfferingDialog sections={sections.data??[]} offering={editing}
@@ -88,7 +94,7 @@ export function TermWorkspace(){
   </>;
 }
 
-function SectionDialog({termId,onClose,onDone}:{termId:string;onClose:()=>void;onDone:()=>void}){
+function SectionDialog({termId,yearLevels,onClose,onDone}:{termId:string;yearLevels:number[];onClose:()=>void;onDone:()=>void}){
   const [error,setError]=useState('');
   async function submit(e:FormEvent<HTMLFormElement>){
     e.preventDefault();const f=new FormData(e.currentTarget);
@@ -97,7 +103,8 @@ function SectionDialog({termId,onClose,onDone}:{termId:string;onClose:()=>void;o
   }
   return <Dialog title="Add section" onClose={onClose}><form onSubmit={submit}>
     <label>Section name<input name="name" required maxLength={60} placeholder="BSE 1-A"/></label>
-    <label>Year level<select name="year_level" defaultValue="1">{[1,2,3,4,5,6].map(n=><option key={n} value={n}>{yearLabel(n)}</option>)}</select></label>
+    <label>Year level<select name="year_level" defaultValue={String(yearLevels[0])}>{yearLevels.map(n=><option key={n} value={n}>{yearLabel(n)}</option>)}</select></label>
+    <p className="muted">The available years follow the program length detected from prospectus subject placements.</p>
     {error&&<p role="alert">{error}</p>}
     <div className="actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary">Add section</button></div>
   </form></Dialog>;
