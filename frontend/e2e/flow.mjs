@@ -82,7 +82,20 @@ try{
   const year=(await call(admin,'POST','/school-years',{label:'2026-2027',start_date:'2026-06-01',end_date:'2027-04-30',terms:[{name:'First Semester',sequence:1,start_date:'2026-06-01',end_date:'2026-12-31'}]})).data;
   const term=year.terms[0];
   const subject=(await call(admin,'POST','/subjects',{code:'ENT 101',title:'Introduction to Entrepreneurship',units:'3',year_level:1,semester:1})).data;
-  const section=(await call(admin,'POST',`/terms/${term.id}/sections`,{name:'1A',year_level:1})).data;
+  for(const [code,title,yearLevel] of [['ENT 201','Marketing',2],['ENT 301','Finance',3],['ENT 401','Strategy',4]]){
+    const result=await call(admin,'POST','/subjects',{code,title,units:'3',year_level:yearLevel,semester:1});
+    check(`prospectus subject ${code} is placed in year ${yearLevel}`,result.status===201,String(result.status));
+  }
+  await admin.goto(`/admin/terms/${term.id}`);
+  await admin.getByRole('button',{name:'Add section'}).click();
+  const sectionDialog=admin.getByRole('dialog');
+  const yearOptions=await sectionDialog.getByLabel('Year level').locator('option').allTextContents();
+  check('section year options follow the four-year prospectus',JSON.stringify(yearOptions)===JSON.stringify(['1st year','2nd year','3rd year','4th year']),yearOptions.join(', '));
+  await sectionDialog.getByLabel('Section name').fill('1A');
+  await sectionDialog.getByLabel('Year level').selectOption('1');
+  await sectionDialog.getByRole('button',{name:'Add section'}).click();
+  await sectionDialog.waitFor({state:'detached'});
+  const section=(await call(admin,'GET',`/terms/${term.id}/sections`)).data[0];
   const offering=await call(admin,'POST',`/terms/${term.id}/offerings`,{subject_id:subject.id,faculty_id:teacher.id,section_ids:[section.id]});
   check('the term, subject, section and offering exist',offering.status===201,String(offering.status));
   const O=offering.data.id;
