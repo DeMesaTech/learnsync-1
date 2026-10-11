@@ -7,27 +7,28 @@ import {studentHomeQuery} from '../features/dashboard/Dashboards';
 import {useUnread} from './seen';
 import {StudyBuddy} from '../features/study/StudyBuddy';
 import {useConfirm} from './confirm';
-import type {SchoolYear} from '../features/academics/types';
+import type {MySubject,OfferingSummary,SchoolYear} from '../features/academics/types';
 
 type NavItem={to:string;label:string;icon:string;end?:boolean;dot?:boolean;children?:NavItem[]};
+type ClassLink={to:string;label:string;icon:string};
 const ROLE_LABEL={admin:'Academic administrator',faculty:'Teaching faculty',student:'Student'} as const;
 
 /** Grouped navigation. Icons are decoration only (aria-hidden); every entry has a visible text label. */
-function navigation(role:'admin'|'faculty'|'student', schoolYears?:SchoolYear[]):{label:string;items:NavItem[]}[]{
+function navigation(role:'admin'|'faculty'|'student', schoolYears?:SchoolYear[], classes:ClassLink[]=[]):{label:string;items:NavItem[]}[]{
   const home='/'+role;
   const account={label:'Account & help',items:[{to:'/account',label:'Account & theme',icon:'○'}]};
   if(role==='admin'){
     const terms=(schoolYears??[]).flatMap(year=>year.terms.map(term=>({to:`${home}/terms/${term.id}`,label:`${year.label} · ${term.name}`,icon:'↳'})));
     return [
       {label:'Your workspace',items:[{to:home,label:'Dashboard',icon:'⌂',end:true},{to:`${home}/accounts`,label:'User accounts',icon:'♙'}]},
-      {label:'Academic management',items:[{to:`${home}/academics`,label:'School years',icon:'☰',children:terms.length?terms:undefined},{to:`${home}/subjects`,label:'Prospectus',icon:'▤'},{to:`${home}/teachers`,label:'Teachers',icon:'♙'}]},
+      {label:'Academic management',items:[{to:`${home}/academics`,label:'School years',icon:'☰',children:terms.length?terms:undefined},{to:`${home}/subjects`,label:'Prospectus',icon:'▤'}]},
       {label:'Oversight',items:[{to:`${home}/issues`,label:'Reports',icon:'?'},{to:`${home}/audit`,label:'Audit history',icon:'◷'}]},
       account];
   }
   const student=role==='student';
   const review=role==='faculty'?[{to:`${home}/review`,label:'To review',icon:'✎'}]:[];
   return [
-    {label:'Your workspace',items:[{to:home,label:'Dashboard',icon:'⌂',end:true,dot:student},...(student?[{to:`${home}/todo`,label:'To do',icon:'☑'},{to:`${home}/study-buddy`,label:'Study buddy',icon:'✦'}]:review),{to:`${home}/subjects`,label:'My Classes',icon:'▤'}]},
+    {label:'Your workspace',items:[{to:home,label:'Dashboard',icon:'⌂',end:true,dot:student},...(student?[{to:`${home}/todo`,label:'To do',icon:'☑'},{to:`${home}/study-buddy`,label:'Study buddy',icon:'✦'}]:review),{to:`${home}/subjects`,label:'My Classes',icon:'▤',children:classes.length?classes:undefined}]},
     {label:'Account & help',items:[{to:`${home}/issues`,label:'Report a problem',icon:'?'},...account.items]}];
 }
 const initials=(name:string)=>name.split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]!.toUpperCase()).join('')||'?';
@@ -42,6 +43,19 @@ export function Shell(){
   const ask=useConfirm();
   const {session,loading,error}=useAuth();const {theme,setTheme}=useTheme();
   const schoolYears=useQuery({queryKey:['school-years'],queryFn:()=>api<SchoolYear[]>('/school-years')});
+  const classes=useQuery({queryKey:['sidebar-classes',session?.user?.id,session?.user?.role],
+    enabled:session?.user?.role==='faculty'||session?.user?.role==='student',
+    queryFn:async():Promise<ClassLink[]>=>{
+      if(session?.user?.role==='faculty'){
+        const offerings=await api<OfferingSummary[]>('/me/offerings');
+        return offerings.map(o=>({to:`/faculty/offerings/${o.id}`,label:`${o.subject.code} · ${o.subject.title} · ${o.term}`,icon:'↳'}));
+      }
+      if(session?.user?.role==='student'){
+        const subjects=await api<MySubject[]>('/me/subjects');
+        return subjects.map(s=>({to:`/student/offerings/${s.offering_id}`,label:`${s.subject.code} · ${s.subject.title} · ${s.term}`,icon:'↳'}));
+      }
+      return [];
+    }});
   const [open,setOpen]=useState(false);const [failure,setFailure]=useState('');
   const menuButton=useRef<HTMLButtonElement>(null);
   // the phone menu is a disclosure: Escape closes it and gives focus back to the button that opened it
@@ -80,7 +94,7 @@ export function Shell(){
     </header>
     <aside className={'sidebar '+(open?'open':'')}>
       <nav aria-label="Main" onClick={()=>setOpen(false)}>
-        {navigation(user.role, schoolYears.data).map(group=><div className="nav-group" key={group.label}>
+        {navigation(user.role, schoolYears.data, classes.data??[]).map(group=><div className="nav-group" key={group.label}>
           <p className="nav-label">{group.label}</p>
           {group.items.map(i=>i.children?
             <div className="nav-subgroup" key={i.to}>
@@ -96,6 +110,7 @@ export function Shell(){
             </NavLink>) }
         </div>)}
       </nav>
+      {user.role!=='admin'&&classes.error&&<p className="sidebar-note" role="alert">Class links could not be loaded: {classes.error.message}</p>}
       <p className="sidebar-note">Governor Mariano E. Villafuerte Community College<br/>BS Entrepreneurship</p>
     </aside>
     <main id="main" className="content">{failure&&<p role="alert" className="error">{failure}</p>}<Outlet/></main>

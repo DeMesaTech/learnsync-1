@@ -18,7 +18,8 @@ try{
   const year=(await call(admin,'POST','/school-years',{label:'2026-2027',start_date:'2026-06-01',end_date:'2027-04-30',terms:[{name:'First Semester',sequence:1,start_date:'2026-06-01',end_date:'2027-03-31'}]})).data;const term=year.terms[0];
   const subject=(await call(admin,'POST','/subjects',{code:'ENT 101',title:'Introduction to Entrepreneurship',units:'3',year_level:1,semester:1})).data;
   const section=(await call(admin,'POST',`/terms/${term.id}/sections`,{name:'1A',year_level:1})).data;
-  const O=(await call(admin,'POST',`/terms/${term.id}/offerings`,{subject_id:subject.id,faculty_id:id('faculty1@example.com'),section_ids:[section.id]})).data.id;
+  const emptySection=(await call(admin,'POST',`/terms/${term.id}/sections`,{name:'1B',year_level:1})).data;
+  const O=(await call(admin,'POST',`/terms/${term.id}/offerings`,{subject_id:subject.id,faculty_id:id('faculty1@example.com'),section_ids:[section.id,emptySection.id]})).data.id;
   const emails=['student1@example.com','student2@example.com','student3@example.com'];
   for(const e of emails)await call(admin,'POST',`/sections/${section.id}/members`,{student_id:id(e)});
   const teach=await newPage(browser,{state:F});await teach.goto('/faculty');
@@ -34,6 +35,17 @@ try{
   check('class days (Mon, Wed, Fri) are plain and the other four say "no class"',await page.locator('table.att-grid thead .att-head',{hasText:'no class'}).count()===4);
   check('only one grid cell is in the tab order (roving focus)',await page.locator('table.att-grid tbody button[tabindex="0"]').count()===1);
   check('axe finds no violations on the grid',(await axe(page)).length===0);
+  const sectionFilter=page.getByRole('combobox',{name:'Filter attendance by section'});
+  check('an empty section remains selectable',await sectionFilter.locator('option').filter({hasText:'1B (0)'}).count()===1);
+  await sectionFilter.selectOption(emptySection.id);
+  await page.getByText('No students are enrolled through this section.').waitFor();
+  await sectionFilter.selectOption(section.id);
+  await page.locator('table.att-grid').waitFor();
+  await page.getByRole('button',{name:'Month',exact:true}).click();
+  await page.getByRole('button',{name:'One day',exact:true}).click();
+  check('calendar range is retained in One day mode',await page.getByRole('button',{name:'Month',exact:true}).getAttribute('aria-pressed')==='true');
+  await page.getByRole('button',{name:'Grid',exact:true}).click();
+  check('calendar range is retained when returning to Grid mode',await page.getByRole('button',{name:'Month',exact:true}).getAttribute('aria-pressed')==='true');
   // the student column stays in view while the dates scroll sideways (a month is wider than the screen)
   await page.getByRole('button',{name:'Month',exact:true}).click();
   await page.waitForFunction(()=>{const w=document.querySelector('.table-wrap');return w&&w.scrollWidth>w.clientWidth});
@@ -86,10 +98,23 @@ try{
   await cell(2,1).click();
   await page.getByRole('alert').filter({hasText:'could not save'}).waitFor({timeout:8000});
   check('a failed save shows the reason with Retry and outlines the cell',await page.getByRole('button',{name:'Retry'}).count()===1&&await page.locator('.att-cell.err').count()===1);
+  await sectionFilter.selectOption(emptySection.id);
+  check('a section cannot change while attendance changes are unsaved',await sectionFilter.inputValue()===section.id);
   await page.unroute('**/attendance');
   await page.getByRole('button',{name:'Retry'}).click();
   await page.getByText('All changes saved.').waitFor({timeout:8000});
   check('Retry saves the kept change',await page.locator('.att-cell.err').count()===0);
+  const pendingSave=page.waitForResponse(r=>r.url().includes('/attendance')&&r.request().method()==='PUT');
+  await cell(0,2).click();
+  await sectionFilter.selectOption(emptySection.id);
+  const saveResponse=await pendingSave;
+  await page.getByText('No students are enrolled through this section.').waitFor();
+  s=await sessions();
+  const posted=saveResponse.request().postDataJSON();
+  const savedDay=s.sessions.find(x=>x.date===posted.session_date);
+  check('switching sections flushes a pending grid mark before changing',saveResponse.ok()&&Object.entries(posted.marks).every(([id,value])=>savedDay?.marks[id]===value));
+  await sectionFilter.selectOption(section.id);
+  await page.locator('table.att-grid').waitFor();
 
   // ---- class days and an extra date
   await page.locator('details.more summary',{hasText:'Class days'}).click();

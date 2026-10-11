@@ -173,6 +173,8 @@ def test_faculty_see_counts_for_their_own_class_and_never_chats(db, graded, ai):
     rows = {r["student"]: r for r in body["students"]}
     assert rows["s1"]["done"] == 1 and rows["s1"]["total"] == 2 and rows["s1"]["percent"] == 50
     assert rows["s2"]["done"] == 0 and rows["s2"]["inactive"] is True and body["average_percent"] == 25
+    assert (rows["s1"]["section_id"], rows["s1"]["section"]) == (graded["sec_a"]["id"], "1A")
+    assert (rows["s2"]["section_id"], rows["s2"]["section"]) == (graded["sec_b"]["id"], "1B")
     assert "private question" not in page.text and "Secret study answer" not in page.text
     stranger = Api(make_account(db, "other@example.com", "faculty").email)
     assert stranger.get(t(graded, "/progress")).status_code == 404

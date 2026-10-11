@@ -19,11 +19,16 @@ export function OfferingRoster({embedded=false}:{embedded?:boolean}){
   const offering=useQuery({queryKey:['offering',offeringId],queryFn:()=>api<OfferingSummary>(`/offerings/${offeringId}`)});
   const [history,setHistory]=useState(false);
   const roster=useQuery({queryKey:['roster',offeringId,history],queryFn:()=>api<RosterRow[]>(`/offerings/${offeringId}/students${history?'?history=true':''}`)});
+  const [sectionId,setSectionId]=useState('');
   const [dialog,setDialog]=useState(false);
   const [message,setMessage]=useState('');
   const refresh=()=>queryClient.invalidateQueries({queryKey:['roster',offeringId]});
   const parent=useOrigin(isAdmin?'/admin/academics':'/faculty/subjects',isAdmin?'School years':'My Classes');
   const back=parent.to;
+  const selectedSection=offering.data?.sections.find(s=>s.id===sectionId);
+  const belongsToSection=(r:RosterRow,s:{id:string;name:string})=>
+    r.section_id===s.id||(r.section_id==null&&r.section===s.name);
+  const visible=roster.data?.filter(r=>!selectedSection||belongsToSection(r,selectedSection))??[];
 
   async function clear(r:RosterRow){
     try{await send('DELETE',`/offerings/${offeringId}/exceptions/${r.student_id}`);setMessage('Exception removed.');refresh()}
@@ -34,12 +39,18 @@ export function OfferingRoster({embedded=false}:{embedded?:boolean}){
     {!embedded&&<div className="page-heading"><div><p className="eyebrow">{offering.data?.term}</p><h1>{offering.data?`${offering.data.subject.code} roster`:'Student roster'}</h1>{offering.data&&<p className="muted">{offering.data.subject.title} · {offering.data.faculty.display_name}</p>}</div>
       {isAdmin&&offering.data?.term_status==='open'&&<button className="primary" onClick={()=>{setMessage('');setDialog(true)}}>Add exception</button>}</div>}
     {!isAdmin&&<label className="inline"><input type="checkbox" checked={history} onChange={e=>setHistory(e.target.checked)}/> Show withdrawn students</label>}
+    {offering.data&&offering.data.sections.length>0&&<label>Section<select aria-label="Filter students by section" value={sectionId} onChange={e=>setSectionId(e.target.value)}>
+      <option value="">All sections ({roster.data?.length??offering.data.enrolled})</option>{offering.data.sections.map(s=><option key={s.id} value={s.id}>
+        {s.name} ({roster.data?roster.data.filter(r=>belongsToSection(r,s)).length:s.enrolled})
+      </option>)}
+    </select></label>}
     {message&&<p role="status">{message}</p>}
     {roster.isPending?<p>Loading…</p>:roster.error?<p role="alert">{roster.error.message}</p>:
       roster.data.length===0?<section className="panel"><p>No students are enrolled in this subject yet.</p></section>:
+      visible.length===0?<section className="panel"><p>No students are enrolled in this section.</p></section>:
       <section className="panel"><div className="table-wrap" tabIndex={0} role="region" aria-label="Students"><table>
         <thead><tr><th>Student</th><th>Number</th><th>Section</th><th>Status</th>{isAdmin&&<th>Note</th>}{isAdmin&&<th><span className="sr-only">Actions</span></th>}</tr></thead>
-        <tbody>{roster.data.map(r=><tr key={r.student_id}>
+        <tbody>{visible.map(r=><tr key={r.student_id}>
           <td>{isAdmin?r.display_name:<Link state={here} to={`/faculty/offerings/${offeringId}/students/${r.student_id}`}>{r.display_name}</Link>}</td><td>{r.student_number}</td><td>{r.section??'—'}</td>
           <td><span className="badge">{labels[r.status]}{r.source==='exception'&&r.status==='enrolled'?' · irregular':''}</span></td>
           {isAdmin&&<td>{r.exception_reason??''}</td>}

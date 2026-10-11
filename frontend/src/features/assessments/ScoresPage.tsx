@@ -22,6 +22,7 @@ export function ScoresPage(){
   const origin=useOrigin(`/faculty/offerings/${offering.id}/classwork${a.data?`?type=${catOfKind(a.data.kind)}`:''}`,'Classwork');
   const rows=useQuery({queryKey:['scores',assessmentId],queryFn:()=>api<ScoreRow[]>(`${base}/scores`)});
   const attempts=useQuery({queryKey:['attempts',assessmentId],queryFn:()=>api<AttemptRow[]>(`${base}/attempts`),enabled:a.data?.kind==='online_quiz'});
+  const [sectionId,setSectionId]=useState('');
   const [message,setMessage]=useState('');
   const refresh=()=>Promise.all([queryClient.invalidateQueries({queryKey:['scores',assessmentId]}),queryClient.invalidateQueries({queryKey:['attempts',assessmentId]}),queryClient.invalidateQueries({queryKey:['gradebook',offering.id]})]).then(()=>undefined);
   // the table's rows as of right now (after a save has refreshed them), so a feedback-only save with a blank score still counts as ungraded
@@ -30,6 +31,8 @@ export function ScoresPage(){
   if(a.error||!a.data?.published)return <section className="panel"><h2>Not available</h2><p role="alert">{a.error?.message??'Publish this assessment first.'}</p><Link to={`/faculty/offerings/${offering.id}/classwork`}>Back to classwork</Link></section>;
   const rev=a.data.published;const kind=a.data.kind;
   const toReturn=rows.data?.filter(r=>r.to_return).length??0;
+  const visibleRows=rows.data?.filter(r=>!sectionId||r.section_id===sectionId)??[];
+  const visibleAttempts=attempts.data?.filter(r=>!sectionId||r.section_id===sectionId)??[];
 
   async function release(){
     if(!await ask({title:`Return ${toReturn} graded result${toReturn===1?'':'s'}?`,message:'Students will see the scores and feedback straight away.',yes:`Return ${toReturn}`}))return;
@@ -43,15 +46,18 @@ export function ScoresPage(){
       <div className="actions"><Link className="button" to={`/faculty/offerings/${offering.id}/assessments/${assessmentId}/edit`}>{closed?'View settings':'Edit settings'}</Link>
       <button className={toReturn>0?'primary':''} disabled={closed||toReturn===0} onClick={release}>{toReturn>0?`Return ${toReturn} graded result${toReturn===1?'':'s'}`:'All graded results returned'}</button></div></div>
     {message&&<p role="status">{message}</p>}
-    {kind==='online_quiz'&&<Attempts base={base} attempts={attempts} closed={closed} onChanged={refresh} setMessage={setMessage}/>}
+    {offering.sections.length>0&&<><label>Section<select aria-label="Filter scores by section" value={sectionId} onChange={e=>setSectionId(e.target.value)}>
+      <option value="">All sections ({offering.enrolled})</option>{offering.sections.map(s=><option key={s.id} value={s.id}>{s.name} ({s.enrolled})</option>)}
+    </select></label><p className="muted">The section filter only changes the lists below; assessment actions still apply to all applicable students.</p></>}
+    {kind==='online_quiz'&&<Attempts base={base} attempts={attempts} sections={offering.sections} sectionId={sectionId} closed={closed} onChanged={refresh} setMessage={setMessage}/>}
     {rows.isPending||(kind==='online_quiz'&&attempts.isPending)?<p>Loading students…</p>:rows.error?<p role="alert">{rows.error.message}</p>:kind==='online_quiz'&&attempts.error?<p role="alert">{attempts.error.message}</p>:
-      <ScoreTable key={assessmentId} rows={kind==='online_quiz'?rows.data.filter(r=>!attempts.data?.some(x=>x.student_id===r.student_id)):rows.data}
-        kind={kind} base={base} max={rev.max_points} closed={closed} onSaved={refresh} setMessage={setMessage} current={current}
+      <ScoreTable key={assessmentId} rows={kind==='online_quiz'?visibleRows.filter(r=>!visibleAttempts.some(x=>x.student_id===r.student_id)):visibleRows}
+        sections={offering.sections} kind={kind} base={base} max={rev.max_points} closed={closed} onSaved={refresh} setMessage={setMessage} current={current}
         heading={kind==='online_quiz'?'Students with no attempts':'Scores'}/>}
   </>;
 }
 
-function ScoreTable({rows,kind,base,max,closed,onSaved,setMessage,current,heading}:{rows:ScoreRow[];kind:Assessment['kind'];base:string;max:number;closed:boolean;onSaved:()=>Promise<void>;setMessage:(m:string)=>void;current:()=>ScoreRow[];heading:string}){
+function ScoreTable({rows,sections,kind,base,max,closed,onSaved,setMessage,current,heading}:{rows:ScoreRow[];sections:OfferingSummary['sections'];kind:Assessment['kind'];base:string;max:number;closed:boolean;onSaved:()=>Promise<void>;setMessage:(m:string)=>void;current:()=>ScoreRow[];heading:string}){
   const [permission,setPermission]=useState<ScoreRow|null>(null);
   const [ungradedOnly,setUngradedOnly]=useState(false);
   const [saved,setSaved]=useState<Set<string>>(new Set());   // rows remount after a save, so the mark lives here
@@ -67,14 +73,14 @@ function ScoreTable({rows,kind,base,max,closed,onSaved,setMessage,current,headin
     <p className="muted">{rows.filter(ungraded).length} of {rows.length} still ungraded. Press Enter in a score box to save and move to the next student.</p>
     {shown.length===0&&<p className="muted">Everyone listed has a score.</p>}
     <div className="table-wrap" role="region" aria-label={heading} tabIndex={0}><table className="stack" role="table">
-      <thead role="rowgroup"><tr role="row"><th role="columnheader">Student</th>{kind==='activity'&&<th role="columnheader">Submission</th>}<th role="columnheader">Score (of {fmt(max)})</th><th role="columnheader">Feedback</th><th role="columnheader"><span className="sr-only">Actions</span></th></tr></thead>
-      <tbody role="rowgroup">{shown.map((r,i)=><ScoreRowEditor key={r.student_id+r.score_revision} row={r} kind={kind} base={base} max={max} closed={closed} onSaved={onSaved} setMessage={setMessage} onPermission={()=>setPermission(r)}
+      <thead role="rowgroup"><tr role="row"><th role="columnheader">Student</th><th role="columnheader">Section</th>{kind==='activity'&&<th role="columnheader">Submission</th>}<th role="columnheader">Score (of {fmt(max)})</th><th role="columnheader">Feedback</th><th role="columnheader"><span className="sr-only">Actions</span></th></tr></thead>
+      <tbody role="rowgroup">{shown.map((r,i)=><ScoreRowEditor key={r.student_id+r.score_revision} row={r} section={sections.find(s=>s.id===r.section_id)?.name??'—'} kind={kind} base={base} max={max} closed={closed} onSaved={onSaved} setMessage={setMessage} onPermission={()=>setPermission(r)}
         saved={saved.has(r.student_id)&&!r.new_version_since_grading} onEdit={()=>mark(r.student_id,false)} onDone={advance=>{mark(r.student_id,true);const now=current();setMessage(`Saved ${r.student}. ${now.filter(ungraded).length} of ${now.length} still need grading.`);focusNext.current=advance?(shown[i+1]?`s-${shown[i+1].student_id}`:'ungraded-only'):null}}/>)}</tbody></table></div>
     {permission&&<PermissionDialog base={base} row={permission} onClose={()=>setPermission(null)} onDone={()=>{setPermission(null);setMessage('Permission granted. The student can submit once more.');onSaved()}}/>}
   </section>;
 }
 
-function ScoreRowEditor({row,kind,base,max,closed,onSaved,setMessage,onPermission,saved,onEdit,onDone}:{row:ScoreRow;kind:Assessment['kind'];base:string;max:number;closed:boolean;onSaved:()=>Promise<void>;setMessage:(m:string)=>void;onPermission:()=>void;saved:boolean;onEdit:()=>void;onDone:(advance:boolean)=>void}){
+function ScoreRowEditor({row,section,kind,base,max,closed,onSaved,setMessage,onPermission,saved,onEdit,onDone}:{row:ScoreRow;section:string;kind:Assessment['kind'];base:string;max:number;closed:boolean;onSaved:()=>Promise<void>;setMessage:(m:string)=>void;onPermission:()=>void;saved:boolean;onEdit:()=>void;onDone:(advance:boolean)=>void}){
   const [score,setScore]=useState(row.score===null?'':String(row.score));
   const [feedback,setFeedback]=useState(row.feedback);
   const [error,setError]=useState('');
@@ -89,6 +95,8 @@ function ScoreRowEditor({row,kind,base,max,closed,onSaved,setMessage,onPermissio
   const sub=row.latest;
   return <tr role="row">
     <td role="cell" data-label="Student">{row.student}<br/><span className="muted">{row.student_number}</span></td>
+    <td role="cell" data-label="Section">{section}</td>
+    <td role="cell" data-label="Section">{section}</td>
     {kind==='activity'&&<td role="cell" data-label="Submission">{sub?<>
       <a className="touch" href={`/api/files/${sub.file.id}/download`}>{sub.file.name}</a><br/>
       <span className="muted">Version {sub.version} of {row.versions} · {when(sub.submitted_at)}</span>{sub.is_late&&<> <span className="badge">Late</span></>}
@@ -121,10 +129,11 @@ function PermissionDialog({base,row,onClose,onDone}:{base:string;row:ScoreRow;on
     <div className="actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary">Grant permission</button></div></form></Dialog>;
 }
 
-function Attempts({base,attempts,closed,onChanged,setMessage}:{base:string;attempts:UseQueryResult<AttemptRow[]>;closed:boolean;onChanged:()=>void;setMessage:(m:string)=>void}){
+function Attempts({base,attempts,sections,sectionId,closed,onChanged,setMessage}:{base:string;attempts:UseQueryResult<AttemptRow[]>;sections:OfferingSummary['sections'];sectionId:string;closed:boolean;onChanged:()=>void;setMessage:(m:string)=>void}){
   const ask=useConfirm();
   const [review,setReview]=useState<string|null>(null);
   const open=attempts.data?.filter(x=>x.state==='in_progress').length??0;
+  const visible=attempts.data?.filter(x=>!sectionId||x.section_id===sectionId)??[];
   async function closeOpen(){
     if(!await ask({title:'Close all open attempts?',message:'Whatever each student saved is scored as their submission.',yes:'Close attempts',danger:true}))return;
     try{const r=await post<{closed:number}>(`${base}/attempts/close-open`,{});setMessage(`Closed ${r.closed} open attempt${r.closed===1?'':'s'}.`);onChanged()}
@@ -132,9 +141,9 @@ function Attempts({base,attempts,closed,onChanged,setMessage}:{base:string;attem
   }
   return <section className="panel"><div className="page-heading"><h3>Attempts</h3>
     {open>0&&<button disabled={closed} onClick={closeOpen}>Close {open} open attempt{open===1?'':'s'}</button>}</div>
-    {attempts.isPending?<p>Loading…</p>:attempts.error?<p role="alert">{attempts.error.message}</p>:attempts.data.length===0?<p className="muted">No student has started this quiz yet.</p>:
-      <div className="table-wrap" role="region" aria-label="Attempts" tabIndex={0}><table><thead><tr><th>Student</th><th>Attempt</th><th>Status</th><th>Score</th><th>Submitted</th><th><span className="sr-only">Actions</span></th></tr></thead>
-        <tbody>{attempts.data.map(x=><tr key={x.id}><td>{x.student}</td><td>{x.attempt_number}</td><td><span className="badge">{x.state==='submitted'?'Submitted':'In progress'}</span></td>
+    {attempts.isPending?<p>Loading…</p>:attempts.error?<p role="alert">{attempts.error.message}</p>:visible.length===0?<p className="muted">{sectionId?'No attempts in this section.':'No student has started this quiz yet.'}</p>:
+      <div className="table-wrap" role="region" aria-label="Attempts" tabIndex={0}><table><thead><tr><th>Student</th><th>Section</th><th>Attempt</th><th>Status</th><th>Score</th><th>Submitted</th><th><span className="sr-only">Actions</span></th></tr></thead>
+        <tbody>{visible.map(x=><tr key={x.id}><td>{x.student}</td><td>{sections.find(s=>s.id===x.section_id)?.name??'—'}</td><td>{x.attempt_number}</td><td><span className="badge">{x.state==='submitted'?'Submitted':'In progress'}</span></td>
           <td>{x.state==='submitted'?`${fmt(x.score)} / ${fmt(x.max_score)}`:'—'}</td><td>{when(x.submitted_at)}</td>
           <td>{x.state==='submitted'&&<button onClick={()=>setReview(x.id)}>Review answers</button>}</td></tr>)}</tbody></table></div>}
     {review&&<ReviewDialog base={base} attemptId={review} closed={closed} onClose={()=>setReview(null)} onChanged={()=>{onChanged();queryClient.invalidateQueries({queryKey:['attempt-detail',review]})}}/>}

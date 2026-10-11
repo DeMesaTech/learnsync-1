@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.config import settings
 from app.errors import fail
-from app.features.academics.models import Enrollment
+from app.features.academics.models import Enrollment, Section
 from app.features.accounts.models import Account, now
 from app.features.assessments.definitions import revision as assessment_revision
 from app.features.assessments.definitions import section_ids_of as assessment_sections
@@ -110,6 +110,8 @@ def student_progress(db, student, offering_id):
 
 def faculty_progress(db, offering):
     """Counts only. Chats, answers and scores are not part of this view."""
+    sections = {section.id: section.name for section in db.scalars(
+        select(Section).where(Section.term_id == offering.term_id))}
     rows = db.execute(select(Enrollment, Account).join(Account, Account.id == Enrollment.student_id)
                       .where(Enrollment.offering_id == offering.id, Enrollment.status == "enrolled")
                       .order_by(Account.display_name)).all()
@@ -119,7 +121,9 @@ def faculty_progress(db, offering):
         s = summary(db, offering, enrollment, account.id)
         recent = sum(1 for d in s["days"][-7:] for _ in range(d["count"]))
         out.append({"student_id": account.id, "student": account.display_name,
-                    "student_number": account.student_number, "total": s["total"],
+                    "student_number": account.student_number, "section_id": enrollment.section_id,
+                    "section": sections.get(enrollment.section_id),
+                    "total": s["total"],
                     "done": s["done"], "percent": s["percent"], "last_activity_at":
                     s["last_activity_at"], "recent_events": recent,
                     "inactive": s["last_activity_at"] is None or s["last_activity_at"] < since})

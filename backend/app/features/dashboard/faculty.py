@@ -116,9 +116,13 @@ def review_queue(db, teacher):
             link = f"/faculty/offerings/{offering.id}/assessments/{a.id}/scores"
             for r in submissions.faculty_rows(db, offering, a, targeted_students(db, offering, a)):
                 if r["latest"] and not r["graded_current_version"]:
+                    section = next((s for s in summaries[offering.id]["sections"]
+                                    if s["id"] == r["section_id"]), None)
                     items.append({"offering_id": offering.id, "assessment_id": a.id, "title": rev.title,
                                   "subject": summaries[offering.id]["subject"]["code"],
                                   "student_id": r["student_id"], "student": r["student"],
+                                  "section_id": r["section_id"],
+                                  "section": section["name"] if section else None,
                                   "submitted_at": r["latest"]["submitted_at"], "late": r["latest"]["is_late"],
                                   "resubmitted": bool(r["new_version_since_grading"]), "link": link})
     items.sort(key=lambda x: x["submitted_at"])

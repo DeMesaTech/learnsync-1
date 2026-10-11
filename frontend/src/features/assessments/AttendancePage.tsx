@@ -36,15 +36,20 @@ function ModeToggle({mode,onChange}:{mode:Mode;onChange:(m:Mode)=>void}){
 
 export function AttendancePage(){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
-  const [sectionId,setSectionId]=useState(offering.sections[0]?.id??'');
+  const [selection,setSelection]=useState({offeringId:offering.id,sectionId:offering.sections[0]?.id??''});
+  const activeSectionId=selection.offeringId===offering.id?selection.sectionId:offering.sections[0]?.id??'';
+  const sectionId=offering.sections.some(s=>s.id===activeSectionId)?activeSectionId:offering.sections[0]?.id??'';
+  const setSectionId=(id:string)=>setSelection({offeringId:offering.id,sectionId:id});
   const [mode,setMode]=useState<Mode>(()=>window.matchMedia('(min-width:768px)').matches?'grid':'day');   // a grid needs room; phones start with one day
+  const [date,setDate]=useState(today);
+  const [range,setRange]=useState<'week'|'month'>('week');
   const query=useQuery({queryKey:['attendance',offering.id,sectionId],enabled:!!sectionId,
     queryFn:()=>api<Data>(`/teach/offerings/${offering.id}/attendance?section_id=${sectionId}`)});
   if(offering.sections.length===0)return <section className="panel"><h2>No sections</h2><p>This subject has no sections yet.</p></section>;
-  const props={offering,sectionId,setSectionId,query,setMode};
+  const props={offering,sectionId,setSectionId,query,setMode,date,setDate,range,setRange};
   return <>
     <div className="page-heading"><div><h2>Attendance</h2><p className="muted">Present counts fully, late counts as part of a day (set in your grading policy), absent counts zero, excused days are left out. A student you have not marked is pending, not absent.</p></div></div>
-    {mode==='grid'?<GridView {...props}/>:<DayView {...props}/>}
+    {mode==='grid'?<GridView key={`${offering.id}:${sectionId}`} {...props}/>:<DayView {...props}/>}
   </>;
 }
 
@@ -81,14 +86,15 @@ function AttendanceExport({offering,sectionId,from,to,label}:{offering:OfferingS
     {message&&<p role="status">{message}</p>}</details>;
 }
 
-interface ViewProps{offering:OfferingSummary;sectionId:string;setSectionId:(id:string)=>void;query:UseQueryResult<Data>;setMode:(m:Mode)=>void}
+interface ViewProps{
+  offering:OfferingSummary;sectionId:string;setSectionId:(id:string)=>void;query:UseQueryResult<Data>;setMode:(m:Mode)=>void;
+  date:string;setDate:(date:string)=>void;range:'week'|'month';setRange:(range:'week'|'month')=>void
+}
 
 /** Students down, dates across. Each change is saved on its own (debounced per date); a failed save is flagged with Retry. */
-function GridView({offering,sectionId,setSectionId,query,setMode}:ViewProps){
+function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,range,setRange}:ViewProps){
   const toast=useToast();
   const closed=offering.term_status==='closed';
-  const [view,setView]=useState<'week'|'month'>('week');
-  const [anchor,setAnchor]=useState(today());
   const [edits,setEdits]=useState<Record<string,Record<string,Status|null>>>({});     // typed but not yet confirmed saved
   const [periods,setPeriods]=useState<Record<string,Period>>({});
   const [errors,setErrors]=useState<Record<string,string>>({});
@@ -98,12 +104,13 @@ function GridView({offering,sectionId,setSectionId,query,setMode}:ViewProps){
   const [note,setNote]=useState('');
   const pending=useRef<Record<string,Record<string,Status|null>>>({});
   const timers=useRef<Record<string,number>>({});
+  const inFlight=useRef<Record<string,Promise<boolean>>>({});
   const table=useRef<HTMLTableElement>(null);
 
   const sessions=query.data?.sessions??[];const roster=query.data?.roster??[];
   const byDate=new Map(sessions.map(s=>[s.date,s]));
-  const first=view==='week'?monday(anchor):iso(new Date(parse(anchor).getFullYear(),parse(anchor).getMonth(),1));
-  const last=view==='week'?shift(first,6):iso(new Date(parse(anchor).getFullYear(),parse(anchor).getMonth()+1,0));
+  const first=range==='week'?monday(date):iso(new Date(parse(date).getFullYear(),parse(date).getMonth(),1));
+  const last=range==='week'?shift(first,6):iso(new Date(parse(date).getFullYear(),parse(date).getMonth()+1,0));
   const span:string[]=[];for(let d=first;d<=last;d=shift(d,1))span.push(d);
   const meeting=offering.meeting_days??0;
   const dates=span;                                                       // every day is shown, class day or not
@@ -117,23 +124,38 @@ function GridView({offering,sectionId,setSectionId,query,setMode}:ViewProps){
   const unsaved=Object.values(edits).reduce((n,e)=>n+Object.keys(e).length,0);
   const status:SaveStatus=unsaved===0?'saved':saving>0?'saving':Object.keys(errors).length>0?'failed':'dirty';
 
-  async function flush(d:string){
+  async function flush(d:string):Promise<boolean>{
+    const active=inFlight.current[d];
+    if(active){
+      const saved=await active;
+      if(inFlight.current[d]===active)delete inFlight.current[d];
+      if(!saved)return false;
+      return Object.keys(pending.current[d]??{}).length?flush(d):true;
+    }
     const marks=pending.current[d];
-    if(!marks||Object.keys(marks).length===0)return;
+    if(!marks||Object.keys(marks).length===0)return true;
     pending.current[d]={};setSaving(n=>n+1);
-    try{
-      await send('PUT',`/teach/offerings/${offering.id}/attendance`,{section_id:sectionId,session_date:d,period:periodOf(d),marks});
-      setErrors(p=>{const n={...p};delete n[d];return n});
-      await Promise.all([queryClient.invalidateQueries({queryKey:['attendance',offering.id]}),queryClient.invalidateQueries({queryKey:['gradebook',offering.id]})]);
-      setEdits(p=>{const n={...p};const cur={...n[d]};for(const s of Object.keys(marks)){if(cur[s]===marks[s])delete cur[s]}
-        if(Object.keys(cur).length>0)n[d]=cur;else delete n[d];return n});
-    }catch(e){pending.current[d]={...marks,...pending.current[d]};setErrors(p=>({...p,[d]:errorText(e)}))}
-    finally{setSaving(n=>n-1)}
+    const request=(async()=>{
+      try{
+        await send('PUT',`/teach/offerings/${offering.id}/attendance`,{section_id:sectionId,session_date:d,period:periodOf(d),marks});
+        setErrors(p=>{const n={...p};delete n[d];return n});
+        await Promise.all([queryClient.invalidateQueries({queryKey:['attendance',offering.id]}),queryClient.invalidateQueries({queryKey:['gradebook',offering.id]})]);
+        setEdits(p=>{const n={...p};const cur={...n[d]};for(const s of Object.keys(marks)){if(cur[s]===marks[s])delete cur[s]}
+          if(Object.keys(cur).length>0)n[d]=cur;else delete n[d];return n});
+        return true;
+      }catch(e){pending.current[d]={...marks,...pending.current[d]};setErrors(p=>({...p,[d]:errorText(e)}));return false}
+      finally{setSaving(n=>n-1)}
+    })();
+    inFlight.current[d]=request;
+    const saved=await request;
+    if(inFlight.current[d]===request)delete inFlight.current[d];
+    return saved;
   }
   async function flushAll():Promise<boolean>{
     for(const d of Object.keys(timers.current))window.clearTimeout(timers.current[d]);
-    await Promise.all(Object.keys(pending.current).map(flush));
-    return Object.values(pending.current).every(m=>Object.keys(m).length===0);
+    const dates=new Set([...Object.keys(pending.current),...Object.keys(inFlight.current)]);
+    const saved=await Promise.all([...dates].map(flush));
+    return saved.every(Boolean);
   }
   useFlushOnLeave(status,flushAll);
   useEffect(()=>()=>{for(const d of Object.keys(timers.current))window.clearTimeout(timers.current[d])},[]);
@@ -166,21 +188,24 @@ function GridView({offering,sectionId,setSectionId,query,setMode}:ViewProps){
     try{await send('PUT',`/teach/offerings/${offering.id}/schedule`,{meeting_days:classDays});await queryClient.invalidateQueries({queryKey:['offering']});setNote('Class days saved.');toast('Class days saved.')}
     catch(e){setNote(errorText(e))}
   }
-  const go=(change:()=>void)=>{void flushAll().then(change)};
-  const title=view==='week'?`Week of ${parse(first).toLocaleDateString(undefined,{month:'short',day:'numeric'})} – ${parse(last).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}`:parse(anchor).toLocaleDateString(undefined,{month:'long',year:'numeric'});
-  const step=(n:number)=>go(()=>setAnchor(view==='week'?shift(anchor,7*n):addMonths(anchor,n)));
+  const go=(change:()=>void)=>{void flushAll().then(saved=>{if(saved)change()})};
+  const changeSection=(id:string)=>{if(id!==sectionId)go(()=>setSectionId(id))};
+  const title=range==='week'?`Week of ${parse(first).toLocaleDateString(undefined,{month:'short',day:'numeric'})} – ${parse(last).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}`:parse(date).toLocaleDateString(undefined,{month:'long',year:'numeric'});
+  const step=(n:number)=>go(()=>setDate(range==='week'?shift(date,7*n):addMonths(date,n)));
 
   return <>
     <section className="panel"><div className="page-heading"><h3>{title}</h3>
       <div className="actions"><ModeToggle mode="grid" onChange={m=>go(()=>setMode(m))}/>
-        <div className="tabs" role="group" aria-label="Grid range">{(['week','month'] as const).map(v=><button key={v} className={view===v?'active':''} aria-pressed={view===v} onClick={()=>go(()=>setView(v))}>{v==='week'?'Week':'Month'}</button>)}</div>
-        <button onClick={()=>step(-1)}>← Previous</button><button onClick={()=>go(()=>setAnchor(today()))}>Today</button><button onClick={()=>step(1)}>Next →</button></div></div>
-      {offering.sections.length>1&&<label>Section<select value={sectionId} onChange={e=>go(()=>setSectionId(e.target.value))}>{offering.sections.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>}
+        <div className="tabs" role="group" aria-label="Attendance calendar range">{(['week','month'] as const).map(v=><button key={v} className={range===v?'active':''} aria-pressed={range===v} onClick={()=>go(()=>setRange(v))}>{v==='week'?'Week':'Month'}</button>)}</div>
+        <button onClick={()=>step(-1)}>← Previous {range}</button><button onClick={()=>go(()=>setDate(today()))}>Today</button><button onClick={()=>step(1)}>Next {range}</button></div></div>
+      {offering.sections.length>1&&<label>Section<select aria-label="Filter attendance by section" value={sectionId} onChange={e=>changeSection(e.target.value)}>
+        {offering.sections.map(s=><option key={s.id} value={s.id}>{s.name} ({s.enrolled})</option>)}
+      </select></label>}
       <details className="more"><summary>Class days</summary>
         <fieldset><legend>Class days (marked in the grid; every day is always shown)</legend><div className="chips">{DAY.map((n,i)=><label className="inline" key={n}><input type="checkbox" checked={(classDays&(1<<i))!==0} onChange={e=>setClassDays(e.target.checked?classDays|(1<<i):classDays&~(1<<i))}/> {n}</label>)}</div>
           <button disabled={classDays===(offering.meeting_days??0)} onClick={saveDays}>Save class days</button></fieldset>
         {note&&<p role="status">{note}</p>}</details>
-      <AttendanceExport offering={offering} sectionId={sectionId} from={first} to={last} label={view==='week'?'This week':'This month'}/>
+      <AttendanceExport offering={offering} sectionId={sectionId} from={first} to={last} label={range==='week'?'This week':'This month'}/>
       <p role="status" className="muted">{closed?'This term is closed, so attendance is read-only.':status==='saved'?'All changes saved.':status==='saving'?'Saving…':status==='failed'?`${unsaved} change${unsaved===1?'':'s'} not saved. Use Retry below.`:'Saving in a moment…'}</p>
       {Object.entries(errors).map(([d,m])=><p key={d} role="alert" className="error">{pretty(d)}: {m} <button onClick={()=>void flush(d)}>Retry</button></p>)}
     </section>
@@ -188,7 +213,7 @@ function GridView({offering,sectionId,setSectionId,query,setMode}:ViewProps){
       <section className="panel"><div className="table-wrap" role="region" aria-label="Attendance grid, scrolls sideways" tabIndex={0}>
         <table className="att-grid" ref={table}><caption className="sr-only">Attendance: students down, dates across. Use the arrow keys to move between cells, then P, L, A or E to mark and Delete to clear. Enter or Space changes the status.</caption>
           <thead><tr><th scope="col" className="sticky">Student</th>{dates.map(d=>{const rec=byDate.get(d);const marked=roster.filter(r=>valueOf(d,r.student_id)!==null).length;
-            const full=view==='week'||isClass(d)||!!rec;      // a month is wide: only class days and recorded days carry the controls
+            const full=range==='week'||isClass(d)||!!rec;      // a month is wide: only class days and recorded days carry the controls
             return <th scope="col" key={d} className={meeting>0&&!isClass(d)&&!rec?'att-off':undefined}><div className="att-head"><strong>{DAY[dayOf(d)]} {parse(d).getDate()}</strong>
               {meeting>0&&!isClass(d)&&!rec&&<span className="muted">no class</span>}
               {full&&(rec?<span className="muted">{PERIOD_LABEL[rec.period]}</span>
@@ -205,12 +230,10 @@ function GridView({offering,sectionId,setSectionId,query,setMode}:ViewProps){
 }
 
 /** The original one-day register: quick roll call, and a place to remove a recorded day. */
-function DayView({offering,sectionId,setSectionId,query,setMode}:ViewProps){
+function DayView({offering,sectionId,setSectionId,query,setMode,date,setDate,range,setRange}:ViewProps){
   const ask=useConfirm();
-  const [date,setDate]=useState(today());
   const [period,setPeriod]=useState<Period>('midterm');
   const [message,setMessage]=useState('');   // lives here: the register remounts after every save
-  const [view,setView]=useState<'week'|'month'>('week');
   const register=useRef<HTMLDivElement>(null);
   const unsaved=useRef(false);   // the register reports here, so leaving a day with unsaved marks asks first
   const go=async(change:()=>void)=>{if(unsaved.current&&!await ask({title:'Discard unsaved marks?',message:'The attendance marks you have not saved will be lost.',yes:'Discard marks',danger:true}))return;unsaved.current=false;change()};
@@ -221,24 +244,26 @@ function DayView({offering,sectionId,setSectionId,query,setMode}:ViewProps){
   const week=Array.from({length:7},(_,i)=>shift(monday(date),i));
   const monthStart=monday(iso(new Date(parse(date).getFullYear(),parse(date).getMonth(),1)));
   const monthCells=Array.from({length:42},(_,i)=>shift(monthStart,i)).filter((d,i)=>i<35||parse(d).getMonth()===parse(date).getMonth());
-  const cells=view==='week'?week:monthCells;
+  const cells=range==='week'?week:monthCells;
   const total=query.data?.roster.length??0;
   return <>
     <section className="panel"><div className="page-heading"><h3>One day</h3><div className="actions"><ModeToggle mode="day" onChange={m=>go(()=>setMode(m))}/></div></div>
       <div className="grid-2">
-      <label>Section<select value={sectionId} onChange={e=>go(()=>setSectionId(e.target.value))}>{offering.sections.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-      <label>Date<input type="date" value={date} onChange={e=>go(()=>setDate(e.target.value))}/></label></div>
+      <label>Section<select aria-label="Filter attendance by section" value={sectionId} onChange={e=>go(()=>setSectionId(e.target.value))}>
+        {offering.sections.map(s=><option key={s.id} value={s.id}>{s.name} ({s.enrolled})</option>)}
+      </select></label>
+      <label>Date<input type="date" value={date} onChange={e=>{if(e.target.value)go(()=>setDate(e.target.value))}}/></label></div>
       <label>Grading period<select value={existing?existing.period:period} disabled={!!existing} onChange={e=>setPeriod(e.target.value as Period)}><option value="midterm">Midterm</option><option value="finals">Finals</option></select></label>
       {existing&&<p className="muted">This day is already recorded under {PERIOD_LABEL[existing.period]}. Changing marks updates it.</p>}
-      <AttendanceExport offering={offering} sectionId={sectionId} from={cells[0]} to={cells[cells.length-1]} label={view==='week'?'The week shown':'The month shown'}/>
+      <AttendanceExport offering={offering} sectionId={sectionId} from={cells[0]} to={cells[cells.length-1]} label={range==='week'?'The week shown':'The month shown'}/>
     </section>
-    <section className="panel" aria-labelledby="week-h"><div className="page-heading"><h3 id="week-h">{view==='week'?`Week of ${parse(week[0]).toLocaleDateString(undefined,{month:'short',day:'numeric'})} – ${parse(week[6]).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}`:parse(date).toLocaleDateString(undefined,{month:'long',year:'numeric'})}</h3>
-      <div className="actions"><div className="tabs" role="group" aria-label="Calendar view">{(['week','month'] as const).map(v=><button key={v} className={view===v?'active':''} aria-pressed={view===v} onClick={()=>setView(v)}>{v==='week'?'Week':'Month'}</button>)}</div>
-        <button onClick={()=>go(()=>setDate(view==='week'?shift(date,-7):addMonths(date,-1)))}>← Previous {view}</button><button onClick={()=>go(()=>setDate(today()))}>Today</button><button onClick={()=>go(()=>setDate(view==='week'?shift(date,7):addMonths(date,1)))}>Next {view} →</button></div></div>
-      {view==='month'&&<div className="cal head" aria-hidden="true">{DAY.map(d=><span key={d}>{d}</span>)}</div>}
-      <ul className={`cal${view==='month'?' month':''}`} aria-label={view==='week'?'Days of the week':'Days of the month'}>{cells.map(d=>{const rec=byDate.get(d);const marked=rec?Object.keys(rec.marks).length:0;const dow=dayOf(d);
-        return <li key={d} className={view==='month'&&parse(d).getMonth()!==parse(date).getMonth()?'other':undefined}><button aria-pressed={d===date} aria-label={`${DAY[dow]} ${parse(d).toLocaleDateString(undefined,{month:'long',day:'numeric'})}: ${rec?`recorded, ${marked} of ${total} marked`:'not recorded'}`} className={`${d===date?'on ':''}${d===today()?'today ':''}${rec?(marked<total?'partial':'full'):''}`} onClick={()=>openDay(d)}>
-          {view==='week'&&<span>{DAY[dow]}</span>}<strong>{parse(d).getDate()}</strong><span className="muted">{rec?`${marked}/${total}`:'—'}</span></button></li>})}</ul>
+    <section className="panel" aria-labelledby="week-h"><div className="page-heading"><h3 id="week-h">{range==='week'?`Week of ${parse(week[0]).toLocaleDateString(undefined,{month:'short',day:'numeric'})} – ${parse(week[6]).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}`:parse(date).toLocaleDateString(undefined,{month:'long',year:'numeric'})}</h3>
+      <div className="actions"><div className="tabs" role="group" aria-label="Attendance calendar range">{(['week','month'] as const).map(v=><button key={v} className={range===v?'active':''} aria-pressed={range===v} onClick={()=>go(()=>setRange(v))}>{v==='week'?'Week':'Month'}</button>)}</div>
+        <button onClick={()=>go(()=>setDate(range==='week'?shift(date,-7):addMonths(date,-1)))}>← Previous {range}</button><button onClick={()=>go(()=>setDate(today()))}>Today</button><button onClick={()=>go(()=>setDate(range==='week'?shift(date,7):addMonths(date,1)))}>Next {range}</button></div></div>
+      {range==='month'&&<div className="cal head" aria-hidden="true">{DAY.map(d=><span key={d}>{d}</span>)}</div>}
+      <ul className={`cal${range==='month'?' month':''}`} aria-label={range==='week'?'Days of the week':'Days of the month'}>{cells.map(d=>{const rec=byDate.get(d);const marked=rec?Object.keys(rec.marks).length:0;const dow=dayOf(d);
+        return <li key={d} className={range==='month'&&parse(d).getMonth()!==parse(date).getMonth()?'other':undefined}><button aria-pressed={d===date} aria-label={`${DAY[dow]} ${parse(d).toLocaleDateString(undefined,{month:'long',day:'numeric'})}: ${rec?`recorded, ${marked} of ${total} marked`:'not recorded'}`} className={`${d===date?'on ':''}${d===today()?'today ':''}${rec?(marked<total?'partial':'full'):''}`} onClick={()=>openDay(d)}>
+          {range==='week'&&<span>{DAY[dow]}</span>}<strong>{parse(d).getDate()}</strong><span className="muted">{rec?`${marked}/${total}`:'—'}</span></button></li>})}</ul>
       <p className="muted">Green underline: everyone marked. Amber: some students still not marked. Dashed outline: today.</p></section>
     {query.isPending?<p>Loading…</p>:query.error?<p role="alert">{query.error.message}</p>:
       <div ref={register} tabIndex={-1} aria-label="Attendance register" style={{outline:'none',scrollMarginTop:96}}><Register key={`${sectionId}|${date}|${existing?.id??'new'}|${query.dataUpdatedAt}`} offering={offering} sectionId={sectionId} date={date} period={existing?existing.period:period} roster={query.data.roster} initial={existing?.marks??{}} closed={offering.term_status==='closed'} setMessage={setMessage} unsaved={unsaved} sessionId={existing?.id}/></div>}

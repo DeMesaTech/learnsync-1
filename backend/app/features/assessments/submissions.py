@@ -117,7 +117,8 @@ def faculty_rows(db, offering, assessment, enrollments):
         shown = latest_release(db, assessment.id, account.id) if score and score.score is not None else None
         out.append({
             "student_id": account.id, "student": account.display_name,
-            "student_number": account.student_number, "versions": len(subs),
+            "student_number": account.student_number, "section_id": enrollment.section_id,
+            "versions": len(subs),
             "latest": submission_view(db, last) if last else None,
             "score": score.score if score else None,
             "feedback": score.feedback if score else "",

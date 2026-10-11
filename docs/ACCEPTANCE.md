@@ -2,6 +2,43 @@
 
 Implementation started 2026-10-06. No milestone is yet accepted.
 
+### 2026-10-11 (Attendance grid section selector follow-up)
+- Fixed the grid's save-before-switch guard to await each in-flight/pending date save through the same result path and only then switch the section; successful saves no longer leave a stale in-flight marker blocking selection.
+- Added a browser regression check that changes sections during the autosave delay and verifies the mark was persisted before the empty roster is shown.
+- Passed: frontend production build/type-check, ESLint, editor diagnostics, E2E script syntax check, and `git diff --check`.
+- Note: the production build completed with the existing large-JavaScript-chunk warning.
+- Blocked: live attendance browser interaction was not run because no disposable database was confirmed.
+
+### 2026-10-11 (Section selection and attendance navigation follow-up)
+- Kept zero-enrollment sections in the Attendance, Scores, and Gradebook selectors and showed their enrollment counts; Gradebook options now come from all sections assigned to the offering rather than only sections present in grade rows.
+- Added section names to faculty progress rows and made progress filtering/counts accept either the section ID or its name, avoiding empty results when the identifiers are absent or inconsistent.
+- Unified Attendance's selected date and Week/Month range across Grid and One day modes. Section/date/range/mode navigation now waits for pending saves and stays put after save failure; switching sections starts with clean grid edit state.
+- Added regression assertions for section identity in faculty progress and for selecting empty sections, carrying calendar range across Attendance modes, and blocking section changes after a failed save.
+- Passed: frontend production build/type-check, ESLint, editor diagnostics, backend Ruff, E2E script syntax check, and `git diff --check`.
+- Blocked: focused `test_progress.py` setup could not connect to Postgres at `127.0.0.1:15432`; assertions did not run. The attendance browser flow was not run because no disposable database was confirmed.
+- Note: the production build completed with the existing large-JavaScript-chunk warning.
+
+### 2026-10-11 (Faculty roster section filter follow-up)
+- Fixed empty roster results when the API response has the section name but omits the newer section ID: filtering now matches the section ID when present and falls back to the section name otherwise.
+- Section options now show the number of students in the currently loaded roster, and have an explicit accessible filter label.
+- Added a regression assertion that roster responses include the section ID.
+- Passed: frontend production build/type-check, ESLint, editor diagnostics, backend Ruff, and `git diff --check`.
+- Blocked: the focused roster API regression test could not initialize because the isolated Postgres test database at `127.0.0.1:15432` timed out during fixture setup.
+
+### 2026-10-11 (Attendance and progress section filters)
+- Made Attendance and Learning progress section selections specific to the current offering, so navigating between subjects cannot leave a stale section ID selected or produce an empty/mismatched list.
+- Added accessible labels to both filters and student counts to their section options.
+- Passed: frontend production build/type-check, ESLint, editor diagnostics, and `git diff --check`.
+- Note: the production build reports the existing large-JavaScript-chunk warning; build completed successfully.
+- Blocked: no authenticated browser workflow was run to verify filter interaction against live offering data.
+
+### 2026-10-11 (Faculty/student sidebar links and section filters)
+- Removed the Teachers entry from admin sidebar navigation while leaving its existing admin-only routes intact.
+- Added direct offering links under My Classes for faculty and students.
+- Added section filtering to the roster, faculty progress, activity review, assessment scores, and quiz-attempt lists. Existing gradebook, class-standing, and attendance filters remain available.
+- Passed: frontend production build/type-check, ESLint, editor diagnostics, backend Ruff, and `git diff --check`.
+- Blocked: focused backend pytest suites could not connect to the isolated Postgres test database at `127.0.0.1:15432`; every selected test failed during fixture setup with a connection timeout, so route assertions did not run.
+
 ### 2026-10-10 (Student and faculty import entry points; teacher management)
 - Moved the student import entry into the term's Sections panel, added a teacher import entry in Offerings, and added admin-only teacher account management and CSV/XLSX preview/review/commit pages. Faculty imports create invited faculty accounts only; existing faculty are skipped, row errors block the whole commit, and invitation mail failures are reported for retry.
 - Added the `/admin/teachers` and `/admin/teachers/import` routes to the design-system route map.

@@ -46,7 +46,6 @@ export function GradebookPage(){
   const book=query.data;
   const periods=[...book.policy.periods.map(p=>p.key),'course'];
   const shown=periods.filter(p=>!only||p==='course'||p===only);
-  const sections=[...new Set(book.rows.map(r=>r.section).filter((s):s is string=>!!s))].sort();
   const rows=book.rows.filter(r=>(!section||r.section===section)&&`${r.display_name} ${r.student_number}`.toLowerCase().includes(find.trim().toLowerCase()));
   const byPeriod=(period:string)=>book.columns.filter(c=>c.period===period);
   const label=(key:string|null)=>book.policy.categories.find(c=>c.key===key)?.label??key??'';
@@ -98,7 +97,7 @@ export function GradebookPage(){
       <p className="muted">— means pending (not scored yet). 0.00 is a real recorded zero. “Unreleased change” means the student still sees an older result. Grades and ranks to share or download are on the Class standing tab.</p>
       <details className="more"><summary>Filter students</summary>
         <div className="actions"><label>Find a student<input type="search" value={find} onChange={e=>setFind(e.target.value)} placeholder="Name or student number"/></label>
-          <label>Section<select value={section} onChange={e=>setSection(e.target.value)}><option value="">All sections</option>{sections.map(s=><option key={s} value={s}>{s}</option>)}</select></label>
+          <label>Section<select aria-label="Filter scores and grades by section" value={section} onChange={e=>setSection(e.target.value)}><option value="">All sections ({book.rows.length})</option>{offering.sections.map(s=><option key={s.id} value={s.name}>{s.name} ({s.enrolled})</option>)}</select></label>
           <label>Period<select value={only} onChange={e=>setOnly(e.target.value)}><option value="">All periods</option>{book.policy.periods.map(p=><option key={p.key} value={p.key}>{PERIOD_LABEL[p.key]??p.key}</option>)}</select></label></div></details>
       <p className="muted" role="status">Showing {rows.length} of {book.rows.length} students.{editing?' Editing: type a score in any cell, then save once.':''}</p>
       {!editing&&<div className="actions"><button disabled={closed} onClick={()=>{setEditing(true);setMessage('')}}>Edit scores</button><span className="muted">{closed?'This term is closed, so scores are read-only.':'Type scores straight into the table below.'}</span></div>}

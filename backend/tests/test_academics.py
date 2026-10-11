@@ -40,7 +40,9 @@ def test_assigned_faculty_and_enrolled_students_see_offering(db, world):
     faculty = Api("faculty@example.com")
     mine = faculty.get("/api/me/offerings").json()
     assert [o["id"] for o in mine] == [oid] and mine[0]["enrolled"] == 1
-    assert list(roster(faculty, oid)) == [str(s1.id)]
+    faculty_roster = roster(faculty, oid)
+    assert list(faculty_roster) == [str(s1.id)]
+    assert faculty_roster[str(s1.id)]["section_id"] == world["sections"][0]["id"]
 
     student1 = Api("s1@example.com")
     assert [s["offering_id"] for s in student1.get("/api/me/subjects").json()] == [oid]

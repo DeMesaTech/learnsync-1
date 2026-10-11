@@ -3,9 +3,10 @@ starting and submitting are serialised per student and assessment, so concurrent
 never create an extra attempt or score twice."""
 from decimal import Decimal
 
-from sqlalchemy import func, select, text
+from sqlalchemy import and_, func, select, text
 
 from app.errors import fail
+from app.features.academics.models import Enrollment
 from app.features.accounts.commands import audit
 from app.features.accounts.models import Account, now
 from app.features.study.events import record_event
@@ -193,13 +194,17 @@ def submit(db, student, offering_id, attempt_id, idempotency_key, answers):
 
 def faculty_attempts(db, offering, assessment):
     rows = db.execute(
-        select(QuizAttempt, Account.display_name, Account.student_number)
+        select(QuizAttempt, Account.display_name, Account.student_number, Enrollment.section_id)
         .join(Account, Account.id == QuizAttempt.student_id)
+        .outerjoin(Enrollment, and_(Enrollment.student_id == QuizAttempt.student_id,
+                                    Enrollment.offering_id == offering.id))
         .where(QuizAttempt.assessment_id == assessment.id)
         .order_by(Account.display_name, QuizAttempt.attempt_number)).all()
     return [{"id": a.id, "student_id": a.student_id, "student": name, "student_number": number,
+             "section_id": section_id,
              "attempt_number": a.attempt_number, "state": a.state, "score": a.score,
-             "max_score": a.max_score, "submitted_at": a.submitted_at} for a, name, number in rows]
+             "max_score": a.max_score, "submitted_at": a.submitted_at}
+            for a, name, number, section_id in rows]
 
 
 def faculty_attempt(db, assessment, attempt_id):

@@ -221,7 +221,8 @@ def offering_roster(db, offering_id, actor, history=False):
     out = []
     for enrollment, account, section_name in rows:
         row = {"student_id": account.id, "display_name": account.display_name,
-               "student_number": account.student_number, "section": section_name,
+               "student_number": account.student_number, "section_id": enrollment.section_id,
+               "section": section_name,
                "source": enrollment.source, "status": enrollment.status}
         if actor.role == "admin" and account.id in exceptions:
             row["exception_reason"] = exceptions[account.id].reason
@@ -233,6 +234,7 @@ def offering_roster(db, offering_id, actor, history=False):
             if exc.action == "exclude" and student_id not in listed:
                 account = db.get(Account, student_id)
                 out.append({"student_id": account.id, "display_name": account.display_name,
+                            "section_id": None,
                             "student_number": account.student_number, "section": None,
                             "source": "exception", "status": "excluded",
                             "exception_reason": exc.reason})
