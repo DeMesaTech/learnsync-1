@@ -242,7 +242,6 @@ p {
   padding: 32px 18px;
   position: relative;
   isolation: isolate;
-  overflow: hidden;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-content: center;
@@ -252,8 +251,8 @@ p {
 
 .auth-login::before {
   content: '';
-  position: absolute;
-  inset: -6px;
+  position: fixed;
+  inset: -6px 0;
   z-index: -1;
   background:
     linear-gradient(rgba(5, 19, 26, 0.28), rgba(5, 19, 26, 0.28)),
@@ -298,6 +297,52 @@ p {
   margin-top: 30px
 }
 
+.auth-tip {
+  margin-top: 28px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-alt);
+  color: var(--muted);
+  font-size: .875rem;
+}
+
+.auth-tip-title {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.auth-tip p:last-child {
+  margin-bottom: 0;
+}
+
+.auth-social-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.auth-social-links a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  color: var(--action);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.auth-social-links a:hover {
+  color: var(--focus);
+}
+
+.auth-social-links svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
 .auth-links {
   margin-top: 20px
 }
@@ -308,8 +353,51 @@ p {
   margin-bottom: 0;
 }
 
+.auth-login > .auth-card {
+  z-index: 2;
+}
+
 .auth-card form .primary {
   width: 100%
+}
+
+.auth-password-field {
+  display: grid;
+  gap: 6px;
+  margin: 16px 0;
+}
+
+.auth-password {
+  position: relative;
+}
+
+.auth-password input {
+  padding-right: 48px;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 9px;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.auth-password-toggle:hover {
+  background: var(--surface-alt);
+}
+
+.auth-password-toggle svg {
+  width: 20px;
+  height: 20px;
 }
 
 dialog {
@@ -424,6 +512,26 @@ dialog::backdrop {
     flex-direction: row;
     justify-content: space-between;
     align-items: center
+  }
+}
+
+@media(min-width:760px) {
+  .auth-login {
+    max-width: 1080px;
+    margin-inline: auto;
+    grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+    justify-items: stretch;
+    align-items: stretch;
+  }
+
+  .auth-login .auth-brand {
+    width: auto;
+  }
+
+  .auth-login > .auth-card {
+    align-self: stretch;
+    width: 100%;
+    margin-left: -72px;
   }
 }
 

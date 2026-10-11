@@ -2,6 +2,25 @@
 
 Implementation started 2026-10-06. No milestone is yet accepted.
 
+### 2026-10-11 (Login tip and college links)
+- Added the reference Tip panel and Facebook/Website links to the login branding section only. The links use the referenced college destinations, open in a new tab with `noopener noreferrer`, and use existing theme tokens rather than changing the established colors.
+- Passed: frontend production build/type-check, ESLint, editor diagnostics, and `git diff --check`.
+- Browser-checked: tip and both link destinations render on desktop; on a narrow 488px viewport the branding and sign-in panels stack and the document has no horizontal overflow.
+- Note: production build completed with the existing large-JavaScript-chunk warning. External destinations were not opened.
+
+### 2026-10-11 (Password visibility toggle)
+- Restored the eye control beside the password field. It toggles visibility without clearing the value, has Show/Hide accessible labels, and is present for sign-in and password-setting forms.
+- Passed: frontend production build/type-check, ESLint, editor diagnostics, and `git diff --check`.
+- Browser-checked: toggling changes the field from password to text and back while preserving the entered value. The browser automation's coordinate-based click was intercepted by the email field, so the React click handler was validated through a DOM click instead.
+- Note: the production build completed with the existing large-JavaScript-chunk warning.
+
+### 2026-10-11 (Login page layout)
+- Repositioned the login branding panel and sign-in card into a side-by-side layout with a modest overlap on wider screens; they stack on narrow screens. Kept the existing colors unchanged. Password reset and invitation pages retain their previous arrangement.
+- Passed: frontend production build/type-check, ESLint, editor diagnostics, and `git diff --check`.
+- Browser-checked: on desktop both panels have matching bounds (461px tall) and overlap as intended; at a narrow 488px CSS viewport they stack without document-level horizontal overflow.
+- Note: the production build completed with the existing large-JavaScript-chunk warning. A physical mobile-device check was not run.
+- Follow-up: the centered 1080px login layout had constrained the background image to its own width. The image now covers the viewport behind the centered panels on desktop and mobile; browser checks confirmed no horizontal overflow at either viewport.
+
 ### 2026-10-11 (Login button disabled while session initializes)
 - The Sign in button is gated on loading the server session because login requires its CSRF token; entered fields do not bypass that prerequisite. A failed/slow API or database session check also disabled it without a retry control.
 - Made the pending reason visible on the login page and added a Retry connection action when the session check fails.
