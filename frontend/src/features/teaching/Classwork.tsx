@@ -12,10 +12,10 @@ import {GenerateDialog} from '../study/Generate';
 import {NewDialog,assessmentStatus,assessmentTitle} from '../assessments/Assessments';
 import {detail as workDetail} from '../assessments/Work';
 import {KIND_LABEL,fmt,type Assessment,type Kind,type LearnItem as Work} from '../assessments/types';
-import {KIND,NewItemDialog,itemTitle,stateLabel,useNodes} from './Content';
+import {ItemEditorDialog,KIND,NewItemDialog,itemTitle,stateLabel,useNodes} from './Content';
 import {type Item,type LearnItem,type LearnSyllabus,type Outline,type SyllabusState} from './types';
 
-type Create={type:'item';kind:Item['kind']}|{type:'assessment';kind:Kind}|{type:'ai'}|null;
+type Create={type:'item';kind:Item['kind']}|{type:'item-editor';itemId:string}|{type:'assessment';kind:Kind}|{type:'ai'}|null;
 interface Row{canUnpublish:boolean;pending:boolean;cat:Cat;key:string;type:'item'|'assessment';id:string;title:string;label:string;anchor:string|null;archived:boolean;status:string;published:boolean;to:string;meta:string}
 
 const CREATE:[string,Create|'stream'][]=[['Lesson',{type:'item',kind:'lesson'}],['File',{type:'item',kind:'file'}],['Link',{type:'item',kind:'reference'}],
@@ -115,7 +115,8 @@ export function FacultyClasswork(){
       <>
       {stranded&&<p className="warn" role="status">Items cannot be reordered because some are attached to a topic that is no longer in the syllabus. <Link to={stranded.to}>Open “{stranded.title}”</Link> and choose a current topic.</p>}
       {tree.map(n=>branch(n,0))}</>}
-    {create?.type==='item'&&<NewItemDialog offering={offering} nodes={nodes} kind={create.kind} onClose={()=>setCreate(null)} onCreated={i=>created(`${base}/content/${i.id}/edit`)}/>}
+    {create?.type==='item'&&<NewItemDialog offering={offering} nodes={nodes} kind={create.kind} onClose={()=>setCreate(null)} onCreated={i=>{setCreate({type:'item-editor',itemId:i.id});queryClient.invalidateQueries({queryKey:['items',offering.id]})}}/>}
+    {create?.type==='item-editor'&&<ItemEditorDialog itemId={create.itemId} onClose={()=>{setCreate(null);queryClient.invalidateQueries({queryKey:['items',offering.id]})}}/>}
     {create?.type==='assessment'&&<NewDialog offering={offering} kind={create.kind} onClose={()=>setCreate(null)} onCreated={a=>created(`${base}/assessments/${a.id}/edit`)}/>}
     {create?.type==='ai'&&<GenerateDialog offering={offering} onClose={()=>setCreate(null)} onCreated={a=>created(`${base}/assessments/${a.id}/edit`)}/>}
   </>;

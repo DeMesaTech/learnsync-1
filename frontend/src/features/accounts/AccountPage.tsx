@@ -86,10 +86,18 @@ export function Audit(){
 }
 
 export function Accounts(){
+  return <AccountDirectory/>;
+}
+
+export function Teachers(){
+  return <AccountDirectory facultyOnly/>;
+}
+
+function AccountDirectory({facultyOnly=false}:{facultyOnly?:boolean}){
   const {session}=useAuth();
   const confirm=useConfirm();
   const [search,setSearch]=useState('');
-  const [role,setRole]=useState('');
+  const [role,setRole]=useState(facultyOnly?'faculty':'');
   const [status,setStatus]=useState(()=>{
     const v=new URLSearchParams(window.location.search).get('status') ?? '';
     return ['invited','active','inactive'].includes(v)?v:'';
@@ -154,7 +162,7 @@ export function Accounts(){
   async function submit(e:FormEvent<HTMLFormElement>){
     e.preventDefault();
     const data=new FormData(e.currentTarget);
-    const role=data.get('role');
+    const role=facultyOnly?'faculty':data.get('role');
     try{
       await post('/accounts',{email:data.get('email'),display_name:data.get('display_name'),role,student_number:role==='student'?data.get('student_number'):null});
       setDialog(false);
@@ -170,18 +178,21 @@ export function Accounts(){
       <div className="page-heading">
         <div>
           <p className="eyebrow">Administration</p>
-          <h1>User accounts</h1>
-          <p className="muted">Invite users and manage access. Accounts are deactivated rather than deleted so audit history is preserved.</p>
+          <h1>{facultyOnly?'Teacher management':'User accounts'}</h1>
+          <p className="muted">{facultyOnly?'Invite teachers and manage faculty account access. Accounts are deactivated rather than deleted so teaching history is preserved.':'Invite users and manage access. Accounts are deactivated rather than deleted so audit history is preserved.'}</p>
         </div>
-        <button className="primary" onClick={()=>{setMessage('');setDialog(true);}}>Invite user</button>
+        <div className="actions">
+          {facultyOnly&&<Link className="button" to="/admin/teachers/import">Import teachers</Link>}
+          <button className="primary" onClick={()=>{setMessage('');setDialog(true);}}>{facultyOnly?'Invite teacher':'Invite user'}</button>
+        </div>
       </div>
 
       <div className="filters">
         <label>
-          Search accounts
+          {facultyOnly?'Search teachers':'Search accounts'}
           <input value={search} onChange={e=>changeFilters(()=>{setSearch(e.target.value);setPage(1);})} placeholder="Name or email"/>
         </label>
-        <label>
+        {!facultyOnly&&<label>
           Role
           <select value={role} onChange={e=>changeFilters(()=>{setRole(e.target.value);setPage(1);})}>
             <option value="">All roles</option>
@@ -189,7 +200,7 @@ export function Accounts(){
             <option value="faculty">Faculty</option>
             <option value="admin">Admins</option>
           </select>
-        </label>
+        </label>}
         <label>
           Status
           <select value={status} onChange={e=>changeFilters(()=>{setStatus(e.target.value);setPage(1);})}>
@@ -208,7 +219,7 @@ export function Accounts(){
       ) : query.error ? (
         <p role="alert">{query.error.message}</p>
       ) : query.data.length===0 ? (
-        <p className="panel muted">No accounts match these filters.</p>
+        <p className="panel muted">No {facultyOnly?'teachers':'accounts'} match these filters.</p>
       ) : (
         <>
           <div className="actions">
@@ -291,7 +302,7 @@ export function Accounts(){
       </div>
 
       {dialog && (
-        <Dialog title="Invite user" onClose={()=>setDialog(false)}>
+        <Dialog title={facultyOnly?'Invite teacher':'Invite user'} onClose={()=>setDialog(false)}>
           <form onSubmit={submit}>
             <label>
               Full name
@@ -301,18 +312,18 @@ export function Accounts(){
               Email
               <input name="email" type="email" required />
             </label>
-            <label>
+            {!facultyOnly&&<label>
               Role
               <select name="role">
                 <option value="student">Student</option>
                 <option value="faculty">Faculty</option>
                 <option value="admin">Admin</option>
               </select>
-            </label>
-            <label>
+            </label>}
+            {!facultyOnly&&<label>
               Student number (students only)
               <input name="student_number" maxLength={50} />
-            </label>
+            </label>}
             <p className="muted">The user receives a link to verify their email and choose a password.</p>
             {message && <p role="alert">{message}</p>}
             <div className="actions">

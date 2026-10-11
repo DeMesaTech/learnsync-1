@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from app.config import settings
 from app.features.academics import imports
 from app.features.academics.models import Subject
+from app.features.accounts import faculty_imports
 from app.features.accounts.models import Account
 
 
@@ -18,6 +19,7 @@ def stage(db, actors, tmp_path, monkeypatch):
     monkeypatch.setattr(settings(), "upload_root", tmp_path / "uploads")
     sent = []
     monkeypatch.setattr(imports, "send_link", lambda account, token, purpose: sent.append(account.email))
+    monkeypatch.setattr(faculty_imports, "send_link", lambda account, token, purpose: sent.append(account.email))
     admin = Api("admin@example.com")
     year = admin.post("/api/school-years", {
         "label": "2026-2027", "start_date": "2026-06-01", "end_date": "2027-04-30",
@@ -144,6 +146,76 @@ def test_uploads_are_private_and_admin_only(db, stage):
     faculty = Api("faculty@example.com")
     assert faculty.upload("/api/student-imports", "s.csv", CSV).status_code == 403
     assert faculty.get(f"/api/student-imports/{preview['id']}").status_code == 403
+
+
+FACULTY_CSV = (b"email,display_name\r\n"
+               b"teacher.one@example.com,Teacher One\r\n"
+               b"teacher.two@example.com,Teacher Two\r\n")
+
+
+def faculty_upload(stage, content=FACULTY_CSV, name="teachers.csv"):
+    return stage["admin"].upload("/api/faculty-imports", name, content)
+
+
+def test_faculty_import_preview_and_commit(db, stage):
+    before = account_count(db)
+    response = faculty_upload(stage)
+    assert response.status_code == 201, response.text
+    preview = response.json()
+    assert preview["summary"] == {"new": 2, "existing": 0, "errors": 0, "total": 2}
+    assert account_count(db) == before
+    done = stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit")
+    assert done.status_code == 200, done.text
+    assert done.json() == {"created": 2, "existing": 0, "email_failed": []}
+    assert sorted(stage["sent"]) == ["teacher.one@example.com", "teacher.two@example.com"]
+    teacher = db.scalar(select(Account).where(Account.email == "teacher.one@example.com"))
+    assert teacher.role == "faculty" and teacher.status == "invited"
+    assert stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit").status_code == 409
+
+
+def test_faculty_import_reports_duplicates_and_non_faculty_accounts_without_partial_create(db, stage):
+    make_account(db, "taken@example.com", "student", student_number="S-1")
+    before = account_count(db)
+    content = (b"email,display_name\n"
+               b"first@example.com,First Teacher\n"
+               b"not-an-email,Invalid Teacher\n"
+               b"first@example.com,Duplicate Teacher\n"
+               b"taken@example.com,Existing Student\n")
+    preview = faculty_upload(stage, content).json()
+    assert preview["summary"] == {"new": 1, "existing": 0, "errors": 3, "total": 4}
+    rows = {row["row"]: row for row in preview["rows"]}
+    assert "not valid" in rows[3]["errors"][0]
+    assert "repeats row 2" in rows[4]["errors"][0]
+    assert "different account" in rows[5]["errors"][0]
+    response = stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit")
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "import_has_errors"
+    assert account_count(db) == before and stage["sent"] == []
+
+
+def test_faculty_import_skips_existing_faculty_and_supports_xlsx(db, stage):
+    make_account(db, "existing-teacher@example.com", "faculty")
+    book = openpyxl.Workbook()
+    book.active.append(["Email Address", "Teacher Name"])
+    book.active.append(["existing-teacher@example.com", "Existing Teacher"])
+    book.active.append(["new-teacher@example.com", "New Teacher"])
+    buffer = io.BytesIO()
+    book.save(buffer)
+    response = faculty_upload(stage, buffer.getvalue(), "teachers.xlsx")
+    assert response.status_code == 201, response.text
+    preview = response.json()
+    assert preview["summary"] == {"new": 1, "existing": 1, "errors": 0, "total": 2}
+    done = stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit")
+    assert done.status_code == 200
+    assert done.json() == {"created": 1, "existing": 1, "email_failed": []}
+    assert stage["sent"] == ["new-teacher@example.com"]
+
+
+def test_faculty_import_validation_and_role_access(stage):
+    assert faculty_upload(stage, FACULTY_CSV, "teachers.exe").status_code == 422
+    assert faculty_upload(stage, b"email,name\nx@example.com,X\n").status_code == 422
+    faculty = Api("faculty@example.com")
+    assert faculty.upload("/api/faculty-imports", "teachers.csv", FACULTY_CSV).status_code == 403
 
 
 # ---------- prospectus ----------

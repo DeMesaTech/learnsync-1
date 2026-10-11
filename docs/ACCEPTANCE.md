@@ -2,6 +2,20 @@
 
 Implementation started 2026-10-06. No milestone is yet accepted.
 
+### 2026-10-10 (Student and faculty import entry points; teacher management)
+- Moved the student import entry into the term's Sections panel, added a teacher import entry in Offerings, and added admin-only teacher account management and CSV/XLSX preview/review/commit pages. Faculty imports create invited faculty accounts only; existing faculty are skipped, row errors block the whole commit, and invitation mail failures are reported for retry.
+- Added the `/admin/teachers` and `/admin/teachers/import` routes to the design-system route map.
+- Passed: backend Ruff and Python compile checks; faculty CSV parser smoke checks for aliases, empty files, and invalid UTF-8; Alembic upgrade/current confirmed revision `6e2b5ab0973a` is the configured database head; frontend ESLint and production build.
+- Blocked: `pytest tests\test_imports.py -q` could not initialize because the isolated Postgres test database at `127.0.0.1:15432` timed out. No live browser workflow was run.
+- Note: production build completed with the existing large-JavaScript-chunk warning.
+
+### 2026-10-10 (Student file preview and faculty content editor)
+- Enlarged student file previews, including a responsive full-width PDF frame and image preview.
+- Changed faculty item creation so a successful create opens the item editor as a second step in a wide modal; closing flushes autosaved edits first. Existing direct editor routes remain available.
+- Added browser-flow assertions for the second-step modal and preview dimensions.
+- Passed: frontend ESLint, production build, and Node syntax checks for the updated browser tests.
+- Blocked: live browser flows were not run because the affected scripts create/publish test data and no disposable database was confirmed for this pass.
+
 ### 2026-10-10 (Admin account action icons)
 - Replaced the question-mark placeholders in the account actions column with inline mail, activate/deactivate, and ownership-transfer icons; accessible button names remain in place.
 - Passed: frontend ESLint (`npm run lint`) and production build (`npm run build`).

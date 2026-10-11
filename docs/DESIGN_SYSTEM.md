@@ -14,7 +14,7 @@ Several plan routes became tabs of one offering page; this is the actual map (so
 
 Public: `/login`, `/forgot-password`, `/reset-password`, `/accept-invitation`. Signed in: `/account`; each role's home `/admin`, `/faculty`, `/student`.
 
-Admin (`/admin/...`): `academics` (school years and terms), `terms/:termId`, `terms/:termId/import-students`, `subjects`, `subjects/import`, `subjects/import/:importId`, `offerings/:offeringId` (roster), `accounts`, `issues` (reports), `audit`.
+Admin (`/admin/...`): `academics` (school years and terms), `terms/:termId` (Sections and Offerings tabs; student and teacher imports are launched from their matching tabs), `terms/:termId/import-students`, `teachers` (faculty account management), `teachers/import` (reviewed faculty import), `subjects`, `subjects/import`, `subjects/import/:importId`, `offerings/:offeringId` (roster), `accounts`, `issues` (reports), `audit`.
 
 Faculty (`/faculty/...`): `subjects`, `issues` (report a problem), and per offering `offerings/:offeringId` with tabs `` (students), `syllabus`, `content`, `content/:itemId/edit`, `assessments`, `assessments/:assessmentId/edit`, `assessments/:assessmentId/scores`, `attendance`, `gradebook` (publish grades and export), `progress`, `announcements`.
 

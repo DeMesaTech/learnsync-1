@@ -78,11 +78,13 @@ try{
   check('submitting the empty form by keyboard is refused and the dialog stays open on the missing title',stillOpen&&invalid);
   await tabTo(tp,d=>d.inDialog&&d.tag==='input'&&/Title/.test(d.name),'the Title field',{back:true});await tp.keyboard.type('Keyboard walkthrough lesson');
   await tabTo(tp,named(/Create and edit/,'button'),'Create and edit');await press(tp,'Enter');
+  await tp.locator('dialog.item-editor-dialog').waitFor();
+  check('creating content stays in the dialog and opens the editor as its second step',new URL(tp.url()).pathname.endsWith('/classwork')&&await tp.locator('dialog.item-editor-dialog').getByText('Lesson content').count()===1);
   await tp.getByText('Lesson content').waitFor();
   await tabTo(tp,d=>d.editable,'the lesson editor');await tp.keyboard.type('Typed with the keyboard only.');await tp.waitForTimeout(2500);
   check('the editor autosaves what was typed',(await tp.locator('.save-indicator').innerText()).includes('Saved'));
   // a change made elsewhere: the next edit must surface the conflict, and both choices must be reachable
-  const itemUrl=tp.url();const itemId=itemUrl.split('/').slice(-2)[0];created.item=itemId;
+  const itemId=await tp.evaluate(async([offering,title])=>{const items=await(await fetch(`/api/teach/offerings/${offering}/items`)).json();return items.find(i=>i.draft?.title===title)?.id},[O,'Keyboard walkthrough lesson']);created.item=itemId;
   await tp.evaluate(async([o,id])=>{const csrf=(await (await fetch('/api/auth/session')).json()).csrf;const H={'X-CSRF-Token':csrf,'Content-Type':'application/json'};
     const it=await (await fetch(`/api/teach/offerings/${o}/items/${id}`)).json();
     await fetch(`/api/teach/offerings/${o}/items/${id}/draft`,{method:'PUT',headers:H,body:JSON.stringify({expected_counter:it.draft.counter,title:'Changed in another tab',body_html:'<p>Other tab</p>',reference_url:null,reference_note:'',anchor_node_id:null})})},[O,itemId]);
@@ -90,7 +92,7 @@ try{
   await tp.getByText('This draft was changed somewhere else').waitFor();
   await tabTo(tp,named(/Keep my version/,'button'),'Keep my version');await press(tp,'Enter');await tp.waitForTimeout(1500);
   check('an edit conflict is resolved with the keyboard and saving resumes',(await tp.locator('.save-indicator').innerText()).includes('Saved'));
-  await tabTo(tp,named(/^Publish$/,'button'),'Publish');await press(tp,'Enter');await tp.waitForURL(/\/classwork$/);
+  await tabTo(tp,named(/^Publish$/,'button'),'Publish');await press(tp,'Enter');await tp.locator('dialog[open]').waitFor({state:'detached'});
   check('the lesson is published with the keyboard',(await tp.locator('main').innerText()).includes('Published v1'));
 
   // ---------- C. gradebook: edit a score, reach the publish control ----------

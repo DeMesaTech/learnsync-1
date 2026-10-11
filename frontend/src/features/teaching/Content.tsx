@@ -1,5 +1,5 @@
 import {useToast} from '../../components/undo';
-import {useEffect,useState,type FormEvent} from 'react';
+import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
 import {Link,useNavigate,useOutletContext,useParams} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
 import {api,post,send,upload,errorText} from '../../app/api';
@@ -49,6 +49,10 @@ export function NewItemDialog({offering,nodes,kind,onClose,onCreated}:{offering:
 export function ItemEditorPage(){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const {itemId}=useParams();
+  return <ItemEditorContent offering={offering} itemId={itemId??''}/>;
+}
+
+function useEditableItem(offering:OfferingSummary,itemId:string){
   const closed=offering.term_status==='closed';
   const base=`/teach/offerings/${offering.id}/items/${itemId}`;
   const query=useQuery({queryKey:['item',itemId],queryFn:()=>api<Item>(base)});
@@ -60,6 +64,36 @@ export function ItemEditorPage(){
     setStarting(true);
     post(`${base}/draft`,{}).then(()=>query.refetch()).finally(()=>setStarting(false));
   },[needsDraft]); // eslint-disable-line react-hooks/exhaustive-deps
+  return {closed,query,item};
+}
+
+export function ItemEditorDialog({itemId,onClose}:{itemId:string;onClose:()=>void}){
+  const {offering}=useOutletContext<{offering:OfferingSummary}>();
+  const [closeError,setCloseError]=useState('');
+  const flushEditor=useRef<()=>Promise<boolean>>(async()=>true);
+  const registerFlush=useCallback((flush:()=>Promise<boolean>)=>{flushEditor.current=flush},[]);
+  const {closed,query,item}=useEditableItem(offering,itemId);
+
+  async function closeEditor(){
+    setCloseError('');
+    if(!await flushEditor.current()){
+      setCloseError('The latest changes could not be saved. Resolve the save issue before closing.');
+      return false;
+    }
+    onClose();
+    return true;
+  }
+
+  return <Dialog title={item?`Edit ${KIND[item.kind].toLowerCase()}`:'Edit content'} className="item-editor-dialog" confirmOnClose={false} onClose={closeEditor}>
+    {query.isPending?<p>Loading content…</p>:query.error||!item?<p role="alert">{query.error?.message??'Content is unavailable.'}</p>
+      :item.draft?<ItemEditor key={item.draft.version} offering={offering} item={item} refetch={()=>query.refetch()} modal onDone={onClose} onFlushReady={registerFlush}/>
+        :closed?<ReadOnlyItem offering={offering} item={item}/>:<p>Preparing a draft…</p>}
+    {closeError&&<p role="alert">{closeError}</p>}
+  </Dialog>;
+}
+
+function ItemEditorContent({offering,itemId}:{offering:OfferingSummary;itemId:string}){
+  const {closed,query,item}=useEditableItem(offering,itemId);
   if(query.isPending)return <p>Loading…</p>;
   if(query.error||!item)return <section className="panel"><h2>Item unavailable</h2><p role="alert">{query.error?.message}</p><Link to={`/faculty/offerings/${offering.id}/classwork`}>Back to classwork</Link></section>;
   if(!item.draft)return closed?<ReadOnlyItem offering={offering} item={item}/>:<p>Preparing a draft…</p>;
@@ -72,7 +106,7 @@ function ReadOnlyItem({offering,item}:{offering:OfferingSummary;item:Item}){
     {item.published?.body_html&&<div className="rich-content" dangerouslySetInnerHTML={{__html:item.published.body_html}}/>}</section>;
 }
 
-function ItemEditor({offering,item,refetch}:{offering:OfferingSummary;item:Item;refetch:()=>void}){
+function ItemEditor({offering,item,refetch,modal=false,onDone,onFlushReady}:{offering:OfferingSummary;item:Item;refetch:()=>void;modal?:boolean;onDone?:()=>void;onFlushReady?:(flush:()=>Promise<boolean>)=>void}){
   const ask=useConfirm();const toast=useToast();
   const draft=item.draft!;
   const {session}=useAuth();
@@ -85,15 +119,17 @@ function ItemEditor({offering,item,refetch}:{offering:OfferingSummary;item:Item;
   const auto=useAutosave<ItemDraftContent>({storageKey:draftKey(session?.user?.id,offering.id,`item-${item.id}`),counter:draft.counter,
     initial:{title:draft.title,body_html:draft.body_html??'',reference_url:draft.reference_url??'',reference_note:draft.reference_note,anchor_node_id:draft.anchor_node_id},
     save:(v,counter)=>send<{counter:number}>('PUT',`${base}/draft`,{expected_counter:counter,title:v.title,body_html:v.body_html,reference_url:v.reference_url||null,reference_note:v.reference_note,anchor_node_id:v.anchor_node_id||null})});
+  useEffect(()=>{onFlushReady?.(auto.flush)},[auto.flush,onFlushReady]);
   useFlushOnLeave(auto.status,auto.flush);
   const v=auto.value;const set=(patch:Partial<ItemDraftContent>)=>auto.setValue({...v,...patch});
   const back=`/faculty/offerings/${offering.id}/classwork`;
+  const finish=()=>onDone?onDone():navigate(back);
 
   async function serverDraft(){const fresh=await api<Item>(base);if(!fresh.draft)throw new Error('The draft no longer exists.');return fresh.draft}
   async function publish(){
     setMessage('');
     if(!await auto.flush()){setMessage('Resolve the save problem above before publishing.');return}
-    try{await post(`${base}/draft/publish`,{expected_counter:auto.counter()});auto.discardRecovered();queryClient.invalidateQueries({queryKey:['items',offering.id]});toast('Published. Students can see it now.');navigate(back)}
+    try{await post(`${base}/draft/publish`,{expected_counter:auto.counter()});auto.discardRecovered();queryClient.invalidateQueries({queryKey:['items',offering.id]});toast('Published. Students can see it now.');finish()}
     catch(e){setMessage(errorText(e))}
   }
   async function discard(){
@@ -102,7 +138,7 @@ function ItemEditor({offering,item,refetch}:{offering:OfferingSummary;item:Item;
     await auto.flush();
     try{
       if(published)await send('DELETE',`${base}/draft?expected_counter=${auto.counter()}`);else await send('DELETE',base);
-      auto.discardRecovered();queryClient.invalidateQueries({queryKey:['items',offering.id]});navigate(back);
+      auto.discardRecovered();queryClient.invalidateQueries({queryKey:['items',offering.id]});finish();
     }catch(e){setMessage(errorText(e))}
   }
   async function setSettings(patch:{section_ids?:string[];archived?:boolean}){
@@ -118,7 +154,7 @@ function ItemEditor({offering,item,refetch}:{offering:OfferingSummary;item:Item;
   }
 
   return <>
-    <p className="back"><Link to={back}>← Content</Link></p>
+    {!modal&&<p className="back"><Link to={back}>← Content</Link></p>}
     <div className="page-heading"><div><p className="eyebrow">{({lesson:'Lesson',file:'File',reference:'Link'})[item.kind]}</p><h2>{v.title||'Untitled'}</h2>
       <p className="muted">{item.published?`Students see version ${item.published.version} until you publish this draft.`:'Not visible to students until you publish.'}</p></div>
       <SaveIndicator status={auto.status} message={auto.message} storageFailed={auto.storageFailed} onRetry={auto.retry}/></div>

@@ -105,12 +105,14 @@ try{
   await teach.locator('dialog').getByLabel('Title').fill('Starting a venture');
   await teach.locator('dialog').getByLabel('Attach to a syllabus topic').selectOption({label:'Chapter 1 - Foundations › What is a venture?'});
   await teach.locator('dialog').getByRole('button',{name:'Create and edit'}).click();
+  await teach.locator('dialog.item-editor-dialog').waitFor();
+  check('creating lesson opens its editor as the second modal step',await teach.locator('dialog.item-editor-dialog').getByText('Lesson content').count()===1&&new URL(teach.url()).pathname.endsWith('/classwork'));
   await teach.locator('.rich-content').click();
   await teach.keyboard.type('A venture starts when someone finds a real customer problem and builds a solution for it.');
   await teach.waitForTimeout(2500);
   await shot(teach,'flow-1-lesson-editor');
   await teach.getByRole('button',{name:'Publish'}).click();
-  await teach.waitForURL(/\/classwork$/);
+  await teach.locator('dialog[open]').waitFor({state:'detached'});
   await teach.getByText('Published v1').first().waitFor();
   check('the lesson is published',(await text(teach)).includes('Starting a venture'));
 

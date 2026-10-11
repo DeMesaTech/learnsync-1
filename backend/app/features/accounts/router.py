@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,7 +16,7 @@ from app.security import (
     verify_password,
 )
 
-from . import commands, queries
+from . import commands, faculty_imports, queries
 from .models import Account, now
 from .schemas import (
     AcceptToken,
@@ -108,6 +108,27 @@ def account_count(search: str = Query("", max_length=150),
                   status: str | None = Query(None, pattern="^(invited|active|inactive)$"),
                   actor=Depends(admin), db: Session = Depends(get_db)):
     return {"total": queries.count_accounts(db, search, role, status)}
+
+
+@router.post("/faculty-imports", status_code=201)
+def create_faculty_import(file: UploadFile = File(...), actor=Depends(admin),
+                          db: Session = Depends(get_db)):
+    imp = faculty_imports.create_faculty_import(db, actor, file)
+    return faculty_imports.faculty_preview(db, imp)
+
+
+@router.get("/faculty-imports/{import_id}")
+def faculty_import(import_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):
+    imp = db.get(faculty_imports.FacultyImport, import_id)
+    if not imp:
+        fail(404, "not_found", "Import not found.")
+    return faculty_imports.faculty_preview(db, imp)
+
+
+@router.post("/faculty-imports/{import_id}/commit")
+def commit_faculty_import(import_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):
+    return faculty_imports.commit_faculty_import(db, actor, import_id)
+
 
 @router.post("/accounts", response_model=AccountView, status_code=201)
 def invite(data: Invite, actor=Depends(admin), db: Session = Depends(get_db)):

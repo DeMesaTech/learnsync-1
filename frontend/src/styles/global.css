@@ -322,6 +322,11 @@ dialog {
   padding: 24px
 }
 
+dialog.item-editor-dialog {
+  width: min(920px, calc(100vw - 24px));
+  max-height: 92dvh
+}
+
 dialog::backdrop {
   background: #05131acc
 }
@@ -335,6 +340,44 @@ dialog::backdrop {
 
 .dialog-heading h2 {
   margin: 0
+}
+
+.file-card {
+  display: grid;
+  gap: 16px;
+  margin: 24px auto 0;
+  max-width: 1100px
+}
+
+.file-frame {
+  display: block;
+  width: 100%;
+  height: min(72vh, 820px);
+  min-height: 480px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff
+}
+
+.file-image {
+  display: block;
+  width: 100%;
+  max-height: min(72vh, 820px);
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-alt)
+}
+
+@media(max-width:639px) {
+  .file-frame {
+    height: 65vh;
+    min-height: 360px
+  }
+
+  .file-image {
+    max-height: 65vh
+  }
 }
 
 .sr-only,

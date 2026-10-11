@@ -20,7 +20,7 @@ function navigation(role:'admin'|'faculty'|'student', schoolYears?:SchoolYear[])
     const terms=(schoolYears??[]).flatMap(year=>year.terms.map(term=>({to:`${home}/terms/${term.id}`,label:`${year.label} · ${term.name}`,icon:'↳'})));
     return [
       {label:'Your workspace',items:[{to:home,label:'Dashboard',icon:'⌂',end:true},{to:`${home}/accounts`,label:'User accounts',icon:'♙'}]},
-      {label:'Academic management',items:[{to:`${home}/academics`,label:'School years',icon:'☰',children:terms.length?terms:undefined},{to:`${home}/subjects`,label:'Prospectus',icon:'▤'}]},
+      {label:'Academic management',items:[{to:`${home}/academics`,label:'School years',icon:'☰',children:terms.length?terms:undefined},{to:`${home}/subjects`,label:'Prospectus',icon:'▤'},{to:`${home}/teachers`,label:'Teachers',icon:'♙'}]},
       {label:'Oversight',items:[{to:`${home}/issues`,label:'Reports',icon:'?'},{to:`${home}/audit`,label:'Audit history',icon:'◷'}]},
       account];
   }

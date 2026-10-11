@@ -21,6 +21,10 @@ STUDENT_HEADERS = {
     "display_name": {"display_name", "name", "full_name", "student_name"},
     "section": {"section", "section_name", "class"},
 }
+FACULTY_HEADERS = {
+    "email": {"email", "email_address", "e_mail"},
+    "display_name": {"display_name", "name", "full_name", "teacher_name", "faculty_name"},
+}
 
 
 def _norm(header):
@@ -61,6 +65,41 @@ def read_student_rows(path, ext):
         rows.append({"row": number, **{
             f: _cell(raw[i]) if i < len(raw) else "" for f, i in columns.items()}})
         rows[-1].setdefault("section", "")
+    return rows
+
+
+def read_faculty_rows(path, ext):
+    """Return [{row, email, display_name}] with source row numbers."""
+    if ext == ".csv":
+        text = path.read_text(encoding="utf-8-sig")
+        dialect = csv.excel_tab if text.count("\t") > text.count(",") else csv.excel
+        table = list(csv.reader(io.StringIO(text), dialect))
+    else:
+        workbook = openpyxl.load_workbook(io.BytesIO(path.read_bytes()), read_only=True,
+                                           data_only=True)
+        table = [[_cell(c) for c in row] for row in workbook.worksheets[0].iter_rows(values_only=True)]
+        workbook.close()
+    table = [row for row in table if any(_cell(cell) for cell in row)]
+    if not table:
+        fail(422, "file_empty", "No rows were found in this file.")
+    columns = {}
+    for index, header in enumerate(table[0]):
+        for field, names in FACULTY_HEADERS.items():
+            if _norm(header) in names and field not in columns:
+                columns[field] = index
+    missing = [field for field in ("email", "display_name") if field not in columns]
+    if missing:
+        fail(422, "columns_missing", "Missing required columns: " + ", ".join(missing)
+             + ". Expected headers: email, display_name.")
+    if len(table) - 1 > MAX_ROWS:
+        fail(422, "too_many_rows", f"Import at most {MAX_ROWS} teachers at a time.")
+    rows = []
+    for number, raw in enumerate(table[1:], start=2):
+        rows.append({"row": number, **{
+            field: _cell(raw[index]) if index < len(raw) else ""
+            for field, index in columns.items()}})
+    if not rows:
+        fail(422, "file_empty", "No teacher rows were found in this file.")
     return rows
 
 

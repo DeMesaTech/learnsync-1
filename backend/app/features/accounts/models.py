@@ -56,6 +56,17 @@ class AccountToken(Base):
     payload: Mapped[dict] = mapped_column(JSONB, default=dict)
 
 
+class FacultyImport(Base):
+    __tablename__ = "faculty_import"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    file_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("stored_file.id"))
+    rows: Mapped[list] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(12), default="previewed")
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("account.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_event"
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

@@ -36,7 +36,6 @@ export function TermWorkspace(){
     <div className="page-heading">
       <div><p className="eyebrow">{year?.label}</p><h1>{term.name}</h1>
         <span className={`badge ${term.status}`}>{term.status}</span></div>
-      <Link className={offerings.data?.length&&offerings.data.every(o=>o.enrolled===0)?'button primary':'button'} to={`/admin/terms/${termId}/import-students`}>Import students</Link>
     </div>
     {closed&&<p className="warn" role="status">This term is closed. Reopen it from School years to make changes.</p>}
     <nav className="tabs" aria-label="Term workspace tabs">
@@ -46,7 +45,10 @@ export function TermWorkspace(){
 
     {tab==='sections'?
       <section className="panel">
-        <div className="page-heading"><h2>Sections</h2><button className={sections.data?.length===0?'primary':''} disabled={closed} onClick={()=>setDialog('section')}>Add section</button></div>
+        <div className="page-heading"><h2>Sections</h2><div className="actions">
+          <Link className="button" to={`/admin/terms/${termId}/import-students`}>Import students</Link>
+          <button className={sections.data?.length===0?'primary':''} disabled={closed} onClick={()=>setDialog('section')}>Add section</button>
+        </div></div>
         {sections.isPending?<p>Loading…</p>:sections.error?<p role="alert">{sections.error.message}</p>:
           sections.data.length===0?<p className="muted">No sections yet. Add one, or copy structure when creating the school year.</p>:
           <div className="table-wrap"><table><caption className="sr-only">Sections of this term</caption>
@@ -56,7 +58,10 @@ export function TermWorkspace(){
       </section>
       :
       <section className="panel">
-        <div className="page-heading"><h2>Offerings</h2><button className={sections.data?.length&&offerings.data?.length===0?'primary':''} disabled={closed||!sections.data} onClick={()=>setDialog('offering')}>Assign subjects</button></div>
+        <div className="page-heading"><h2>Offerings</h2><div className="actions">
+          <Link className="button" to="/admin/teachers/import">Import teachers</Link>
+          <button className={sections.data?.length&&offerings.data?.length===0?'primary':''} disabled={closed||!sections.data} onClick={()=>setDialog('offering')}>Assign subjects</button>
+        </div></div>
         {offerings.isPending?<p>Loading…</p>:offerings.error?<p role="alert">{offerings.error.message}</p>:
           offerings.data.length===0?<p className="muted">No subjects are assigned yet.</p>:
           <div className="table-wrap" tabIndex={0} role="region" aria-label="Offerings by teacher"><table className="offerings-table">

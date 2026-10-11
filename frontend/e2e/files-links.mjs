@@ -70,6 +70,8 @@ try{
   await stu.getByRole('heading',{name:'Handout PDF '+n}).waitFor();
   const frame=stu.locator('iframe.file-frame');
   check('a PDF is shown in the page',await frame.count()===1&&(await frame.getAttribute('src')).includes('/preview'));
+  const previewSize=await frame.boundingBox();
+  check('the PDF preview fills a readable file card',!!previewSize&&previewSize.width>=600&&previewSize.height>=400,JSON.stringify(previewSize));
   const headers=await stu.evaluate(async src=>{const r=await fetch(src,{credentials:'same-origin'});return {status:r.status,type:r.headers.get('content-type'),disp:r.headers.get('content-disposition'),sniff:r.headers.get('x-content-type-options')}},await frame.getAttribute('src'));
   check('the preview is served inline, as a PDF, with nosniff',headers.status===200&&headers.type==='application/pdf'&&headers.disp.startsWith('inline')&&headers.sniff==='nosniff',JSON.stringify(headers));
   check('the download button is still there',await stu.getByRole('link',{name:/Download handout\.pdf/}).count()===1);
