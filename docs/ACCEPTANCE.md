@@ -2,6 +2,12 @@
 
 Implementation started 2026-10-06. No milestone is yet accepted.
 
+### 2026-10-11 (Login button disabled while session initializes)
+- The Sign in button is gated on loading the server session because login requires its CSRF token; entered fields do not bypass that prerequisite. A failed/slow API or database session check also disabled it without a retry control.
+- Made the pending reason visible on the login page and added a Retry connection action when the session check fails.
+- Passed: frontend production build/type-check, ESLint, and editor diagnostics.
+- Note: production build completed with the existing large-JavaScript-chunk warning.
+
 ### 2026-10-11 (Attendance grid section selector follow-up)
 - Fixed the grid's save-before-switch guard to await each in-flight/pending date save through the same result path and only then switch the section; successful saves no longer leave a stale in-flight marker blocking selection.
 - Added a browser regression check that changes sections during the autosave delay and verifies the mark was persisted before the empty roster is shown.

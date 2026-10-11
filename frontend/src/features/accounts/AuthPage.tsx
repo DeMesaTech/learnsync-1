@@ -7,7 +7,7 @@ import logoUrl from '../../img/gmvcc.png';
 export function AuthPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { session, loading, error: connectionError } = useAuth();
+  const { session, loading, error: connectionError, retry } = useAuth();
   const kind = location.pathname;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -81,10 +81,12 @@ export function AuthPage() {
           <h2>{title}</h2>
           <p className="muted">Use your school account to continue.</p>
           {connectionError && (
-            <p role="alert">
-              Cannot reach the server. Start the API and database, then refresh.
-            </p>
+            <div role="alert">
+              <p>Cannot reach the server. Start the API and database, then try again.</p>
+              <button type="button" onClick={retry}>Retry connection</button>
+            </div>
           )}
+          {isLogin && loading && <p role="status">Checking the sign-in session…</p>}
           <form onSubmit={submit}>
             {(isLogin || isReset) && (
               <label>
@@ -123,7 +125,7 @@ export function AuthPage() {
               className="primary"
               disabled={busy || loading || !!connectionError || (!isLogin && !isReset && !token)}
             >
-              {busy ? 'Please wait…' : isLogin ? 'Sign in' : isReset ? 'Send reset link' : 'Save password'}
+              {busy ? 'Please wait…' : isLogin && loading ? 'Checking connection…' : isLogin ? 'Sign in' : isReset ? 'Send reset link' : 'Save password'}
             </button>
           </form>
           {!isLogin && !isReset && !token && (
