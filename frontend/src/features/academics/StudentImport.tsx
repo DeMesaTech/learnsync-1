@@ -27,7 +27,7 @@ export function StudentImport(){
   return <>
     <p className="back"><Link to={`/admin/terms/${termId}`}>← Term workspace</Link></p>
     <h1>Import students</h1>
-    <p className="muted">Upload a CSV or Excel file with the columns <code>student_number</code>, <code>email</code>, <code>display_name</code> and optionally <code>section</code> (an existing section name in this term). You review the result before anything is created. New students receive an invitation email.</p>
+    <p className="muted">Upload a CSV or Excel file with <code>student_number</code> and <code>email</code>, plus either <code>display_name</code> or <code>firstName</code>, <code>Middle Initial</code> and <code>lastName</code>. Split names are combined as first, middle, last; the middle part is optional. Excel imports read each worksheet with student columns; CSV imports read the file as one table. You may also include <code>section</code> (an existing section name in this term). Review the result before anything is created. New students receive an invitation email.</p>
     <section className="panel"><form onSubmit={submit}>
       <label>Student list<input name="file" type="file" required accept=".csv,.xlsx"/></label>
       <button className="primary" disabled={busy}>{busy?'Checking…':'Preview import'}</button>
@@ -44,7 +44,7 @@ export function StudentImport(){
       {preview.summary.errors>0&&<ul className="rows" aria-label="Rows to fix">{preview.rows.filter(r=>r.status==='error').flatMap(r=>r.errors.map(m=><li key={`${r.row}-${m}`} className="error">Row {r.row}: {m}</li>))}</ul>}
       <div className="table-wrap" tabIndex={0} role="region" aria-label="Import preview"><table><thead><tr><th>Row</th><th>Student no.</th><th>Name</th><th>Email</th><th>Section</th><th>Result</th></tr></thead>
         <tbody>{preview.rows.map(r=><tr key={r.row} className={r.status==='error'?'row-error':''}>
-          <td>{r.row}</td><td>{r.student_number}</td><td>{r.display_name}</td><td>{r.email}</td><td>{r.section||'—'}</td>
+          <td>{r.source_sheet ? `${r.source_sheet}, row ${r.source_row}` : r.row}</td><td>{r.student_number}</td><td>{r.display_name}</td><td>{r.email}</td><td>{r.section||'—'}</td>
           <td>{r.status==='error'?r.errors.map(m=><div className="error" key={m}>{m}</div>):r.status}</td></tr>)}</tbody></table></div>
       <div className="actions"><button className="primary" disabled={busy||preview.summary.errors>0} onClick={commit}>{preview.summary.errors>0?`Fix ${preview.summary.errors} ${preview.summary.errors===1?'row':'rows'} to import`:`Import ${preview.summary.total} students`}</button></div>
     </section>}

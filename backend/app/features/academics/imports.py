@@ -27,6 +27,12 @@ def validate_students(db, rows, term_id):
     sections = {s.name: s for s in db.scalars(select(Section).where(Section.term_id == term_id))} \
         if term_id else {}
     seen_email, seen_number, out = {}, {}, []
+
+    def source_row(raw):
+        if raw.get("source_sheet"):
+            return f"worksheet {raw['source_sheet']} row {raw['source_row']}"
+        return f"row {raw['row']}"
+
     for raw in rows:
         errors = []
         email = raw["email"].strip().lower()
@@ -41,11 +47,11 @@ def validate_students(db, rows, term_id):
         if not name or len(name) > 150:
             errors.append("Name is required (max 150 characters).")
         if email in seen_email:
-            errors.append(f"Email repeats row {seen_email[email]}.")
+            errors.append(f"Email repeats {seen_email[email]}.")
         if number in seen_number:
-            errors.append(f"Student number repeats row {seen_number[number]}.")
-        seen_email.setdefault(email, raw["row"])
-        seen_number.setdefault(number, raw["row"])
+            errors.append(f"Student number repeats {seen_number[number]}.")
+        seen_email.setdefault(email, source_row(raw))
+        seen_number.setdefault(number, source_row(raw))
         section = raw.get("section", "").strip()
         if section and not term_id:
             errors.append("Choose a term to assign sections.")
@@ -66,9 +72,13 @@ def validate_students(db, rows, term_id):
                 SectionMember.status == "active")) if term_id else None
             if section and current and section in sections and current.section_id != sections[section].id:
                 errors.append("Student already belongs to a different section this term.")
-        out.append({"row": raw["row"], "student_number": number, "email": email,
-                    "display_name": name, "section": section,
-                    "status": "error" if errors else status, "errors": errors})
+        result = {"row": raw["row"], "student_number": number, "email": email,
+                  "display_name": name, "section": section,
+                  "status": "error" if errors else status, "errors": errors}
+        if raw.get("source_sheet"):
+            result["source_sheet"] = raw["source_sheet"]
+            result["source_row"] = raw["source_row"]
+        out.append(result)
     return out
 
 
@@ -245,4 +255,3 @@ def commit_prospectus(db, actor, import_id, expected_revision):
           {"created": created, "skipped_existing": len(rows) - created})
     db.commit()
     return {"created": created, "skipped_existing": len(rows) - created}
-

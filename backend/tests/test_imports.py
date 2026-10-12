@@ -7,7 +7,7 @@ from helpers import Api, make_account
 from sqlalchemy import func, select
 
 from app.config import settings
-from app.features.academics import imports
+from app.features.academics import documents, imports
 from app.features.academics.models import Subject
 from app.features.accounts import faculty_imports
 from app.features.accounts.models import Account
@@ -123,6 +123,42 @@ def test_xlsx_import_and_header_aliases(db, stage):
     assert preview["summary"]["new"] == 1
 
 
+@pytest.mark.parametrize("middle_header", ["MiddleInitial", "Middle Initial"])
+def test_student_import_combines_split_name_columns(tmp_path, middle_header):
+    book = openpyxl.Workbook()
+    sheet = book.active
+    sheet.append(["Student Number", "email", "lastName", "firstName", middle_header])
+    sheet.append(["2026-200", "juan@example.com", "Dela Cruz", "Juan", "Adan"])
+    sheet.append(["2026-201", "ana@example.com", "Reyes,", "Ana", None])
+    path = tmp_path / "split-names.xlsx"
+    book.save(path)
+
+    rows = documents.read_student_rows(path, ".xlsx")
+
+    assert [row["display_name"] for row in rows] == ["Juan Adan Dela Cruz", "Ana Reyes"]
+
+
+def test_student_xlsx_import_reads_each_sheet_and_keeps_source_location(tmp_path):
+    book = openpyxl.Workbook()
+    first = book.active
+    first.title = "1A"
+    first.append(["Student Number", "email", "lastName", "firstName", "MiddleInitial"])
+    first.append(["S-1", "one@example.com", "Cruz", "Ana", "Reyes"])
+    second = book.create_sheet("2A")
+    second.append(["Section 2A roster"])
+    second.append([])
+    second.append(["Student Number", "email", "lastName", "firstName", "Middle Initial"])
+    second.append(["S-2", "two@example.com", "Santos", "Ben", None])
+    path = tmp_path / "sectioned-students.xlsx"
+    book.save(path)
+
+    rows = documents.read_student_rows(path, ".xlsx")
+
+    assert [row["display_name"] for row in rows] == ["Ana Reyes Cruz", "Ben Santos"]
+    assert [(row["source_sheet"], row["source_row"]) for row in rows] == [
+        ("1A", 2), ("2A", 4)]
+
+
 def test_file_validation(db, stage):
     assert upload(stage, CSV, "students.exe").status_code == 422
     assert upload(stage, b"this is not a zip", "students.xlsx").status_code == 422
@@ -219,6 +255,43 @@ def test_faculty_import_validation_and_role_access(stage):
 
 
 # ---------- prospectus ----------
+
+def test_docx_subject_rows_keep_their_year_and_semester_heading(tmp_path):
+    doc = Document()
+    sections = [
+        ("1st YEAR — 1st Semester", [("BCA 1", "Accounting Plus", "6"),
+                                    ("GEN ED 001", "Purposive Communication", "3")]),
+        ("1st YEAR — 2nd Semester", [("AE 113", "Financial Accounting & Reporting", "6")]),
+        ("2nd YEAR — 1st Semester", [("EnCC 213", "Market Research and Consumer", "3")]),
+        ("2nd YEAR — 2nd Semester", [("EnCC 214", "Opportunity Seeking", "3")]),
+        ("3rd YEAR — 1st Semester", [("EnCC 314", "Business Plan Preparation I", "4")]),
+        ("3rd YEAR — 2nd Semester", [("SPT ELEC 343", "Franchising and Retail Management", "3")]),
+    ]
+    for heading, subjects in sections:
+        doc.add_paragraph(heading)
+        table = doc.add_table(rows=1, cols=5)
+        for cell, value in zip(table.rows[0].cells,
+                               ("Subject Code", "Descriptive Title", "Lec", "Lab", "Units")):
+            cell.text = value
+        for code, title, units in subjects:
+            for cell, value in zip(table.add_row().cells, (code, title, "3", "0", units)):
+                cell.text = value
+
+    path = tmp_path / "prospectus.docx"
+    doc.save(path)
+    draft, warnings = documents.parse_prospectus(documents.read_lines(path, ".docx"))
+
+    assert [(row["code"], row["year_level"], row["semester"]) for row in draft] == [
+        ("BCA 1", 1, 1),
+        ("GEN ED 001", 1, 1),
+        ("AE 113", 1, 2),
+        ("ENCC 213", 2, 1),
+        ("ENCC 214", 2, 2),
+        ("ENCC 314", 3, 1),
+        ("SPT ELEC 343", 3, 2),
+    ]
+    assert warnings == []
+
 
 def docx_bytes(lines):
     doc = Document()

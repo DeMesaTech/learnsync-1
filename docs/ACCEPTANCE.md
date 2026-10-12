@@ -2,6 +2,24 @@
 
 Implementation started 2026-10-06. No milestone is yet accepted.
 
+### 2026-10-13 (Student import split names)
+- Student CSV/XLSX imports accept separate `firstName`, `lastName`, and optional `MiddleInitial`/`Middle Initial` columns when no combined display-name column is supplied. Names are assembled as first + middle + last, skipping blank parts and trimming stray edge commas. Existing `display_name`/`name` formats continue to work.
+- Updated the import instructions and added regression coverage for both middle-initial header spellings, optional middle values, and trailing commas.
+- Passed: direct import of the supplied Sectioning workbook’s first sheet read all 48 student rows; its first student was assembled as “FRANCIS KHIAN OLIVA ABAQUITA” with student number and email intact. A direct check also verified “Juan Adan Dela Cruz” and omitted an empty middle value. Backend Ruff, frontend lint/build, and `git diff --check` passed.
+- Not run: pytest requires the configured test database, which has timed out during migration setup in this session.
+
+### 2026-10-13 (Multi-sheet student workbook import)
+- Excel student import locates roster headers in the first 25 rows and reads every worksheet; preview rows include source worksheet and Excel row. CSV remains a single-table import. Split name columns assemble first + middle + last, with the middle part optional.
+- Added regression coverage for two worksheets with different header offsets and source locations.
+- Passed: the supplied Sectioning workbook produced 806 rows from all 20 worksheets; its first student's first, middle, and last name were assembled in order. Direct split-name cases, backend Ruff, frontend lint/build, and `git diff --check` passed.
+- Not run: API pytest is blocked by the configured test Postgres timing out during migration setup.
+
+### 2026-10-13 (DOCX prospectus row extraction)
+- Fixed DOCX parsing to preserve paragraph/table order, associate each heading with the subject table immediately following it, and extract subject code/title/units from their labeled columns. Expanded subject-code matching for multi-part codes such as `GEN ED 001` and `SPT ELEC 343`.
+- Added a regression test covering headings across all six year/semester combinations.
+- Passed: compared extraction against the supplied curriculum’s labeled tables: all 47 non-total subject rows parsed, no missing subjects or unit mismatches, all rows placed into the six expected numeric year/semester combinations, and no warnings. Ruff and `git diff --check` passed.
+- Not run: API/pytest regression depends on the configured test Postgres, which previously timed out during migration setup.
+
 ### 2026-10-12 (Syllabus replacement upload)
 - Made replacement upload explicit on the published syllabus page: DOCX/PDF imports create a reviewable replacement draft, with a clear notice that students keep the current publication until the replacement is published.
 - Imported replacement drafts retain the published grading policy; the published revision remains unchanged until publish and is preserved as superseded history afterwards. Existing drafts must still be resolved before import.
