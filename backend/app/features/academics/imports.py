@@ -121,13 +121,14 @@ def commit_student_import(db, actor, import_id):
     if imp.term_id:
         commands.open_term(db, imp.term_id)
     results = validate_students(db, imp.rows, imp.term_id)   # re-check: data may have changed
-    if any(r["status"] == "error" for r in results):
-        fail(409, "import_has_errors",
-             "Fix the highlighted rows and upload the file again. Nothing was imported.")
+    importable = [row for row in results if row["status"] != "error"]
+    skipped = len(results) - len(importable)
+    if not importable:
+        fail(409, "import_no_valid_rows", "There are no valid rows to import.")
     sections = {s.name: s for s in db.scalars(
         select(Section).where(Section.term_id == imp.term_id))} if imp.term_id else {}
     created, invitations = 0, []
-    for r in results:
+    for r in importable:
         if r["status"] == "new":
             account = Account(email=r["email"], display_name=r["display_name"], role="student",
                               student_number=r["student_number"], status="invited")
@@ -142,7 +143,7 @@ def commit_student_import(db, actor, import_id):
             commands.place_in_section(db, section, account.id)
     imp.status, imp.committed_at = "committed", now()
     audit(db, actor, "student_import.committed", "student_import", imp.id,
-          {"created": created, "existing": len(results) - created})
+          {"created": created, "existing": len(importable) - created, "skipped": skipped})
     db.commit()
     failed = []
     for account, token in invitations:   # send after commit; failures are resendable
@@ -150,7 +151,8 @@ def commit_student_import(db, actor, import_id):
             send_link(account, token, "invite")
         except HTTPException:
             failed.append(account.email)
-    return {"created": created, "existing": len(results) - created, "email_failed": failed}
+    return {"created": created, "existing": len(importable) - created, "skipped": skipped,
+            "email_failed": failed}
 
 
 # ---------- prospectus ----------

@@ -2,6 +2,12 @@
 
 Implementation started 2026-10-06. No milestone is yet accepted.
 
+### 2026-10-13 (Skip invalid student import rows)
+- Student import now commits valid rows while skipping rows with validation errors; the preview warns about the skip and the commit result reports the skipped count. Commit revalidates the preview and refuses safely when every row has an error.
+- Updated the mixed valid/error regression to verify valid students are created and invited, invalid rows are skipped, and a repeated commit is still refused. Added an all-invalid regression.
+- Passed: backend Ruff, frontend ESLint, frontend production build/type-check, and `git diff --check`.
+- Blocked: focused `tests/test_imports.py` could not set up its database because Postgres at `127.0.0.1:15432` timed out before tests ran. The production build completed with the existing large-JavaScript-chunk warning.
+
 ### 2026-10-13 (Student import split names)
 - Student CSV/XLSX imports accept separate `firstName`, `lastName`, and optional `MiddleInitial`/`Middle Initial` columns when no combined display-name column is supplied. Names are assembled as first + middle + last, skipping blank parts and trimming stray edge commas. Existing `display_name`/`name` formats continue to work.
 - Updated the import instructions and added regression coverage for both middle-initial header spellings, optional middle values, and trailing commas.

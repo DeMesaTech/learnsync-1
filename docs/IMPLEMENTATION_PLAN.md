@@ -1596,7 +1596,7 @@ Acceptance:
 - Assigned faculty sees it.
 - Correct students see it.
 - Other users do not.
-- Import errors are previewed; no silent partial commit.
+- Import errors are previewed; the admin may explicitly import valid student rows while skipping error rows, with both counts reported. No rows are silently omitted.
 - Historical context survives new-year setup.
 
 Prospectus extraction must produce a reviewed draft, not blindly create subjects. A failed parser still allows manual entry.

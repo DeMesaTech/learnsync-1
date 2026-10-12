@@ -56,7 +56,7 @@ def test_student_import_preview_then_commit(db, stage):
     assert account_count(db) == before            # preview creates nothing
     done = stage["admin"].post(f"/api/student-imports/{preview['id']}/commit")
     assert done.status_code == 200, done.text
-    assert done.json() == {"created": 3, "existing": 0, "email_failed": []}
+    assert done.json() == {"created": 3, "existing": 0, "skipped": 0, "email_failed": []}
     assert sorted(stage["sent"]) == ["ana@example.com", "ben@example.com", "cara@example.com"]
     ana = db.scalar(select(Account).where(Account.email == "ana@example.com"))
     assert ana.role == "student" and ana.status == "invited" and ana.student_number == "2026-001"
@@ -66,7 +66,7 @@ def test_student_import_preview_then_commit(db, stage):
     assert stage["admin"].post(f"/api/student-imports/{preview['id']}/commit").status_code == 409
 
 
-def test_import_with_errors_creates_nothing(db, stage):
+def test_student_import_skips_error_rows_and_commits_valid_rows(db, stage):
     make_account(db, "taken@example.com", "faculty")
     bad = (b"student_number,email,display_name,section\n"
            b"2026-001,ok@example.com,Fine Student,1A\n"
@@ -83,8 +83,26 @@ def test_import_with_errors_creates_nothing(db, stage):
     assert "repeats row 2" in by_row[4]["errors"][0]
     assert "different account" in by_row[5]["errors"][0]
     assert "does not exist" in by_row[6]["errors"][0]
+    done = stage["admin"].post(f"/api/student-imports/{preview['id']}/commit")
+    assert done.status_code == 200, done.text
+    assert done.json() == {"created": 1, "existing": 0, "skipped": 4, "email_failed": []}
+    assert account_count(db) == before + 1
+    assert stage["sent"] == ["ok@example.com"]
+    member = db.scalar(select(Account).where(Account.email == "ok@example.com"))
+    assert member.display_name == "Fine Student"
+    assert stage["admin"].post(f"/api/student-imports/{preview['id']}/commit").status_code == 409
+
+
+def test_student_import_refuses_when_every_row_has_errors(db, stage):
+    content = (b"student_number,email,display_name,section\n"
+               b"2026-010,bad-email,Invalid Student,9Z\n")
+    preview = upload(stage, content).json()
+    before = account_count(db)
+
     refused = stage["admin"].post(f"/api/student-imports/{preview['id']}/commit")
-    assert refused.status_code == 409 and refused.json()["error"]["code"] == "import_has_errors"
+
+    assert refused.status_code == 409
+    assert refused.json()["error"]["code"] == "import_no_valid_rows"
     assert account_count(db) == before and stage["sent"] == []
 
 
@@ -107,7 +125,7 @@ def test_reimporting_the_same_file_is_a_no_op(db, stage):
     assert again["summary"] == {"new": 0, "existing": 3, "errors": 0, "total": 3}
     done = stage["admin"].post(f"/api/student-imports/{again['id']}/commit")
     assert done.status_code == 200, done.text
-    assert done.json() == {"created": 0, "existing": 3, "email_failed": []}
+    assert done.json() == {"created": 0, "existing": 3, "skipped": 0, "email_failed": []}
     assert stage["sent"] == []                                  # nobody is re-invited
     members = stage["admin"].get(f"/api/sections/{stage['sections']['1A']['id']}/members").json()
     assert len(members) == 2                                    # no duplicate placement

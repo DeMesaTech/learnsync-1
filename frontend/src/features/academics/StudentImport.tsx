@@ -7,7 +7,7 @@ import type {StudentPreview} from './types';
 export function StudentImport(){
   const {termId}=useParams();
   const [preview,setPreview]=useState<StudentPreview|null>(null);
-  const [result,setResult]=useState<{created:number;existing:number;email_failed:string[]}|null>(null);
+  const [result,setResult]=useState<{created:number;existing:number;skipped:number;email_failed:string[]}|null>(null);
   const [error,setError]=useState('');
   const [busy,setBusy]=useState(false);
 
@@ -20,7 +20,7 @@ export function StudentImport(){
   async function commit(){
     if(!preview)return;setBusy(true);setError('');
     try{
-      setResult(await post(`/student-imports/${preview.id}/commit`,{}));setPreview(null);
+      setResult(await post<{created:number;existing:number;skipped:number;email_failed:string[]}>(`/student-imports/${preview.id}/commit`,{}));setPreview(null);
       queryClient.invalidateQueries({queryKey:['sections',termId]});queryClient.invalidateQueries({queryKey:['offerings',termId]});
     }catch(err){setError(errorText(err))}finally{setBusy(false)}
   }
@@ -34,19 +34,19 @@ export function StudentImport(){
     </form></section>
     {error&&<p role="alert">{error}</p>}
     {result&&<section className="panel" role="status"><h2>Import complete</h2>
-      <p>{result.created} student{result.created===1?'':'s'} invited, {result.existing} already existed.</p>
+      <p>{result.created} student{result.created===1?'':'s'} invited, {result.existing} already existed, {result.skipped} error row{result.skipped===1?'':'s'} skipped.</p>
       {result.email_failed.length>0&&<p className="warn">Invitation emails could not be sent to: {result.email_failed.join(', ')}. Use “Resend invitation” in User accounts.</p>}
       <Link className="button primary" to={`/admin/terms/${termId}`}>Back to the term</Link></section>}
     {preview&&<section className="panel">
       <h2>Preview</h2>
       <p>{preview.summary.new} new · {preview.summary.existing} existing · <span className={preview.summary.errors?'error':''}>{preview.summary.errors} with errors</span></p>
-      {preview.summary.errors>0&&<p className="warn" role="alert">Nothing can be imported while rows have errors. Fix the file and upload it again.</p>}
-      {preview.summary.errors>0&&<ul className="rows" aria-label="Rows to fix">{preview.rows.filter(r=>r.status==='error').flatMap(r=>r.errors.map(m=><li key={`${r.row}-${m}`} className="error">Row {r.row}: {m}</li>))}</ul>}
+      {preview.summary.errors>0&&<p className="warn" role="status">Rows with errors will be skipped. Valid rows can still be imported.</p>}
+      {preview.summary.errors>0&&<ul className="rows" aria-label="Rows to skip">{preview.rows.filter(r=>r.status==='error').flatMap(r=>r.errors.map(m=><li key={`${r.row}-${m}`} className="error">{r.source_sheet?`${r.source_sheet}, row ${r.source_row}`:`Row ${r.row}`}: {m}</li>))}</ul>}
       <div className="table-wrap" tabIndex={0} role="region" aria-label="Import preview"><table><thead><tr><th>Row</th><th>Student no.</th><th>Name</th><th>Email</th><th>Section</th><th>Result</th></tr></thead>
         <tbody>{preview.rows.map(r=><tr key={r.row} className={r.status==='error'?'row-error':''}>
           <td>{r.source_sheet ? `${r.source_sheet}, row ${r.source_row}` : r.row}</td><td>{r.student_number}</td><td>{r.display_name}</td><td>{r.email}</td><td>{r.section||'—'}</td>
           <td>{r.status==='error'?r.errors.map(m=><div className="error" key={m}>{m}</div>):r.status}</td></tr>)}</tbody></table></div>
-      <div className="actions"><button className="primary" disabled={busy||preview.summary.errors>0} onClick={commit}>{preview.summary.errors>0?`Fix ${preview.summary.errors} ${preview.summary.errors===1?'row':'rows'} to import`:`Import ${preview.summary.total} students`}</button></div>
+      <div className="actions"><button className="primary" disabled={busy||preview.summary.new+preview.summary.existing===0} onClick={commit}>{preview.summary.new+preview.summary.existing===0?'No valid rows to import':`Import ${preview.summary.new+preview.summary.existing} valid student${preview.summary.new+preview.summary.existing===1?'':'s'}${preview.summary.errors?`, skip ${preview.summary.errors} error row${preview.summary.errors===1?'':'s'}`:''}`}</button></div>
     </section>}
   </>;
 }
