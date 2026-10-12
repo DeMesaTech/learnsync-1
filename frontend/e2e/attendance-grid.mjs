@@ -61,6 +61,11 @@ try{
   await page.getByText('All changes saved.').waitFor();
   let s=await sessions();
   check('the change was saved on its own (no Save button)',s.sessions.length===1&&Object.values(s.sessions[0].marks).join()==='present'&&await page.getByRole('button',{name:/^Save attendance/}).count()===0);
+  await cell(0,0).focus();
+  await page.getByRole('button',{name:'Unmark selected attendance'}).click();
+  await page.getByText('All changes saved.').waitFor();
+  s=await sessions();
+  check('the unmark button clears the selected attendance in the grid',(await cell(0,0).innerText())==='·'&&s.sessions[0].marks[rid(0)]===undefined);
 
   // ---- keyboard: letters mark and move down, Delete clears
   await cell(1,0).focus();

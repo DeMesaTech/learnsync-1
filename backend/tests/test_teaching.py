@@ -3,7 +3,7 @@ import uuid
 
 from docx import Document
 from fastapi.testclient import TestClient
-from helpers import PDF, Api, learn, make_account, make_outline, publish_syllabus, t, uid
+from helpers import PDF, POLICY, Api, learn, make_account, make_outline, publish_syllabus, t, uid
 
 from app.main import app
 
@@ -163,6 +163,30 @@ def test_syllabus_import_reads_a_template_into_a_reviewable_draft(course):
     assert course["st1"].get(learn(course, "/syllabus")).json()["published"] is None
     again = fac.upload(t(course, "/syllabus/import"), "syllabus.docx", docx_syllabus())
     assert again.status_code == 409 and again.json()["error"]["code"] == "draft_exists"
+
+
+def test_upload_replaces_published_syllabus_only_after_review_and_keeps_policy(course):
+    published = publish_syllabus(course, policy=POLICY)
+    fac, student = course["fac"], course["st1"]
+
+    response = fac.upload(t(course, "/syllabus/import"), "replacement.docx", docx_syllabus())
+    assert response.status_code == 201, response.text
+    draft = response.json()["draft"]
+    assert draft["version"] == 2 and draft["source_file"]["name"] == "replacement.docx"
+    assert draft["grading_policy"] == POLICY
+    current = fac.get(t(course, "/syllabus")).json()
+    assert current["published"]["id"] == published["id"] and current["draft"]["id"] == draft["id"]
+    assert student.get(learn(course, "/syllabus")).json()["published"]["id"] == published["id"]
+
+    done = fac.post(t(course, "/syllabus/draft/publish"),
+                    {"expected_counter": draft["counter"]})
+    assert done.status_code == 200, done.text
+    state = fac.get(t(course, "/syllabus")).json()
+    assert state["published"]["version"] == 2 and state["published"]["grading_policy"] == POLICY
+    assert [(entry["version"], entry["state"]) for entry in state["history"]] == [
+        (2, "published"), (1, "superseded")]
+    assert state["draft"] is None
+    assert student.get(learn(course, "/syllabus")).json()["published"]["version"] == 2
 
 
 def test_unreadable_syllabus_falls_back_to_manual_editing(course):

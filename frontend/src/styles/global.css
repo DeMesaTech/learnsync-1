@@ -423,7 +423,8 @@ dialog {
   padding: 24px
 }
 
-dialog.item-editor-dialog {
+dialog.item-editor-dialog,
+dialog.assessment-editor-dialog {
   width: min(920px, calc(100vw - 24px));
   max-height: 92dvh
 }

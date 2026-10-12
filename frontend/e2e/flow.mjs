@@ -130,9 +130,15 @@ try{
   check('the lesson is published',(await text(teach)).includes('Starting a venture'));
 
   await teach.goto(`/faculty/offerings/${O}/classwork?type=quiz`);
+  await teach.getByRole('heading',{name:'No quizzes yet'}).waitFor();
+  check('the faculty Grades tab remains visible when this subject has no published assessments',
+    await teach.getByRole('link',{name:'Grades',exact:true}).isVisible());
   await teach.getByText('+ Create').click();await teach.getByRole('button',{name:'Quiz',exact:true}).click();
   await teach.locator('dialog').getByLabel('Title').fill('Venture basics quiz');
-  await teach.locator('dialog').getByRole('button',{name:'Create and set up'}).click();
+  await teach.locator('dialog').getByRole('button',{name:'Create and edit'}).click();
+  await teach.locator('dialog').getByRole('navigation',{name:'Quiz steps'}).waitFor();
+  check('new assessment editing is the second page of the Create modal',
+    (await teach.locator('dialog').count())===1&&new URL(teach.url()).pathname===`/faculty/offerings/${O}/classwork`);
   await teach.getByLabel('Grading category').selectOption({label:'Quizzes (100%)'});
   await teach.getByLabel('Grading period').selectOption({label:'Midterm'});
   await teach.getByRole('button',{name:'Next',exact:true}).click();                 // the quiz is a three-step stepper

@@ -22,13 +22,16 @@ export function SyllabusPage(){
   const query=useQuery({queryKey:['syllabus',offering.id],queryFn:()=>api<SyllabusState>(url)});
   const [message,setMessage]=useState('');
   const [warnings,setWarnings]=useState<string[]>([]);
+  const [uploading,setUploading]=useState(false);
   const refresh=()=>queryClient.invalidateQueries({queryKey:['syllabus',offering.id]});
 
   async function start(){setMessage('');try{await post(`${url}/draft`,{});refresh()}catch(e){setMessage(errorText(e))}}
   async function importFile(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setMessage('');
-    try{const result=await upload<{warnings:string[]}>(`${url}/import`,new FormData(e.currentTarget));setWarnings(result.warnings);refresh()}
+    setUploading(true);
+    try{const result=await upload<{warnings:string[]}>(`${url}/import`,new FormData(e.currentTarget));setWarnings(result.warnings);await refresh()}
     catch(err){setMessage(errorText(err))}
+    finally{setUploading(false)}
   }
   if(query.isPending)return <p>Loading syllabus…</p>;
   if(query.error)return <p role="alert">{query.error.message}</p>;
@@ -41,6 +44,10 @@ export function SyllabusPage(){
       <section className="panel"><div className="page-heading"><div><h2>Published syllabus · version {published.version}</h2>
         <p className="muted">Students see this version. Editing creates a separate draft; students keep seeing this version until you publish.</p></div>
         <button className="primary" disabled={closed} onClick={start}>Edit syllabus</button></div></section>
+      {!closed&&<section className="panel"><h3>Replace syllabus from a file</h3>
+        <p className="muted">Upload a DOCX or PDF to create a replacement draft. The current published syllabus and grading policy stay in effect until you review and publish the replacement.</p>
+        <form onSubmit={importFile}><label>Replacement syllabus (DOCX or PDF)<input name="file" type="file" required accept=".docx,.pdf" disabled={uploading}/></label>
+          <button className="primary" disabled={uploading}>{uploading?'Uploading…':'Upload replacement'}</button></form></section>}
       <CoveragePanel offering={offering} published={published} closed={closed}/>
       <OutlineView outline={published.outline} policy={published.grading_policy}/>
     </>:<section className="panel"><h2>No syllabus yet</h2>
@@ -48,8 +55,6 @@ export function SyllabusPage(){
       <div className="actions"><button className="primary" disabled={closed} onClick={start}>Start from scratch</button></div>
       {!closed&&<form onSubmit={importFile}><label>Import from a syllabus file (DOCX or PDF)<input name="file" type="file" required accept=".docx,.pdf"/></label><button>Import into a draft</button></form>}
     </section>}
-    {published&&!closed&&<section className="panel"><h3>Start a new draft from a file</h3>
-      <form onSubmit={importFile}><label>Syllabus file (DOCX or PDF)<input name="file" type="file" required accept=".docx,.pdf"/></label><button>Import into a draft</button></form></section>}
   </>;
 }
 

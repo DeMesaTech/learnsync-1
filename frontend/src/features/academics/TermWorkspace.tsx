@@ -18,6 +18,7 @@ export function TermWorkspace(){
   const [dialog,setDialog]=useState<'section'|'offering'|null>(null);
   const [editing,setEditing]=useState<OfferingSummary|null>(null);
   const [tab,setTab]=useState<'sections'|'offerings'>('sections');
+  const [teacherFilter,setTeacherFilter]=useState('');
   const year=years.data?.find(y=>y.terms.some(t=>t.id===termId));
   const term=year?.terms.find(t=>t.id===termId);
   const closed=term?.status==='closed';
@@ -31,6 +32,7 @@ export function TermWorkspace(){
     sections.forEach(section=>group.rows.push({offering,section}));
     return groups;
   },[]).sort((a,b)=>a.name.localeCompare(b.name));
+  const visibleTeacherGroups=teacherGroups?.filter(group=>!teacherFilter||group.id===teacherFilter);
 
   if(years.isPending)return <p>Loading…</p>;
   if(!term)return <section className="panel"><h1>Term not found</h1><Link to="/admin/academics">Back to school years</Link></section>;
@@ -70,10 +72,14 @@ export function TermWorkspace(){
         </div></div>
         {offerings.isPending?<p>Loading…</p>:offerings.error?<p role="alert">{offerings.error.message}</p>:
           offerings.data.length===0?<p className="muted">No subjects are assigned yet.</p>:
+          <>
+          {teacherGroups&&teacherGroups.length>1&&<label>Filter offerings by teacher<select aria-label="Filter offerings by teacher" value={teacherFilter} onChange={e=>setTeacherFilter(e.target.value)}>
+            <option value="">All teachers</option>{teacherGroups.map(group=><option key={group.id} value={group.id}>{group.name}</option>)}
+          </select></label>}
           <div className="table-wrap" tabIndex={0} role="region" aria-label="Offerings by teacher"><table className="offerings-table">
             <caption className="sr-only">Teachers, assigned subjects and sections, enrollment counts, and actions</caption>
             <thead><tr><th scope="col">Teacher</th><th scope="col">Subject</th><th scope="col">Section</th><th scope="col">Number of enrolled</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
-            {teacherGroups?.map(group=><tbody key={group.id}>{group.rows.map(({offering,section},index)=>{
+            {visibleTeacherGroups?.map(group=><tbody key={group.id}>{group.rows.map(({offering,section},index)=>{
               const offeringStart=index===0||group.rows[index-1].offering.id!==offering.id;
               return <tr key={`${offering.id}:${section.id}`}>
               {index===0&&<th scope="rowgroup" rowSpan={group.rows.length}>{group.name}</th>}
@@ -82,7 +88,7 @@ export function TermWorkspace(){
               <td><div className="actions"><Link className="button" state={here} to={`/admin/offerings/${offering.id}`}>Roster</Link>
                 <button disabled={closed} onClick={()=>setEditing(offering)}>Edit</button></div></td></tr>;
             })}</tbody>)}
-          </table></div>}
+          </table></div></>}
       </section>
     }
 
@@ -144,6 +150,7 @@ function BulkAssignDialog({termId,termSequence,sections,existing,onClose,onDone}
   const faculty=useQuery({queryKey:['faculty-list'],queryFn:()=>api<Account[]>('/accounts?role=faculty&page_size=100')});
   const [facultyId,setFacultyId]=useState('');
   const [find,setFind]=useState('');
+  const [semesterFilter,setSemesterFilter]=useState<'current'|'all'>('current');
   const [pick,setPick]=useState<Record<string,string[]>>({});          // subject id -> chosen section ids; present = subject selected
   const [reasons,setReasons]=useState<Record<string,string>>({});
   const [error,setError]=useState('');const [busy,setBusy]=useState(false);
@@ -151,7 +158,7 @@ function BulkAssignDialog({termId,termSequence,sections,existing,onClose,onDone}
   const taken=new Set(existing.filter(o=>o.faculty.id===facultyId).map(o=>o.subject.id));
   const fits=(sub:Subject,sec:Section)=>sub.year_level===null||sub.semester===null||(sec.year_level===sub.year_level&&termSequence===sub.semester);
   const needle=find.trim().toLowerCase();
-  const list=(subjects.data??[]).filter(sub=>sub.status==='active'&&(!needle||`${sub.code} ${sub.title}`.toLowerCase().includes(needle)))
+  const list=(subjects.data??[]).filter(sub=>sub.status==='active'&&(semesterFilter==='all'||sub.semester===termSequence)&&(!needle||`${sub.code} ${sub.title}`.toLowerCase().includes(needle)))
     .sort((a,b)=>Number(pick[b.id]!==undefined)-Number(pick[a.id]!==undefined)||Number(a.semester===termSequence?0:1)-Number(b.semester===termSequence?0:1)||a.code.localeCompare(b.code));
   const chosen=Object.keys(pick);
   const subjectOf=(id:string)=>subjects.data?.find(x=>x.id===id);
@@ -174,8 +181,11 @@ function BulkAssignDialog({termId,termSequence,sections,existing,onClose,onDone}
       {faculty.data?.filter(f=>f.status!=='inactive').map(f=><option key={f.id} value={f.id}>{f.display_name}</option>)}</select></label>
     <fieldset className="bulk-subjects"><legend>Subjects and the sections taking each</legend>
       {sections.length===0&&<p className="muted">Add sections first.</p>}
+      <label>Show subjects<select aria-label="Filter subjects by semester" value={semesterFilter} onChange={e=>setSemesterFilter(e.target.value as 'current'|'all')}>
+        <option value="current">Current semester ({termSequence})</option><option value="all">All semesters</option>
+      </select></label>
       <label>Filter subjects<input type="search" value={find} onChange={e=>setFind(e.target.value)} placeholder="Code or title"/></label>
-      {subjects.isPending?<p>Loading subjects…</p>:<ul className="pick-list" aria-label="Subjects">{list.map(sub=>{
+      {subjects.isPending?<p>Loading subjects…</p>:list.length===0?<p className="muted">No active subjects match this semester and search.</p>:<ul className="pick-list" aria-label="Subjects">{list.map(sub=>{
         const on=pick[sub.id]!==undefined,done=taken.has(sub.id);
         return <li key={sub.id} className={on?'on':''}>
           <label className="inline"><input type="checkbox" checked={on} disabled={!facultyId||done} onChange={e=>toggleSubject(sub,e.target.checked)}/>

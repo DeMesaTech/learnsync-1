@@ -139,9 +139,11 @@ def import_source(db, actor, offering, upload):
         subject = db.get(Subject, offering.subject_id)
         outline = Outline(course=CourseInfo(code=subject.code, name=subject.title,
                                             units=str(subject.units)))
+    published = revision(db, syllabus.id, "published")
     draft = SyllabusRevision(syllabus_id=syllabus.id, version=next_version(db, syllabus.id),
-                             outline=outline.model_dump(mode="json"), source_file_id=file.id,
-                             created_by=actor.id)
+                             outline=outline.model_dump(mode="json"),
+                             grading_policy=published.grading_policy if published else None,
+                             source_file_id=file.id, created_by=actor.id)
     db.add(draft)
     audit(db, actor, "syllabus.imported", "offering", offering.id, {"file": file.original_name})
     db.commit()
@@ -262,4 +264,3 @@ def student_view(db, offering, enrollment):
                           "grading_policy": published.grading_policy},
             "covered": [{"node_id": c["node_id"], "covered_on": c["covered_on"]}
                         for c in covered]}
-

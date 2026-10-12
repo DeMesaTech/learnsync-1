@@ -6,20 +6,18 @@ import {ClassworkTypes,FACULTY_CATS,catOfKind} from '../../components/ClassworkT
 import type {Assessment} from '../assessments/types';
 import type {SyllabusState} from './types';
 
-interface Tab{label:string;to:string;segments:string[];hidden?:boolean}
+interface Tab{label:string;to:string;segments:string[]}
 
 /** The subject's main tabs, Classroom-style. Each tab owns several routes (its segments), so the old addresses still light up the right tab. */
 function MainTabs({role,base}:{role:'faculty'|'student';base:string}){
-  const {offeringId}=useParams();const {pathname}=useLocation();
+  const {pathname}=useLocation();
   const segment=pathname.slice(base.length).replace(/^\//,'').split('/')[0];
-  const assessments=useQuery({queryKey:['assessments',offeringId],queryFn:()=>api<{published:unknown}[]>(`/teach/offerings/${offeringId}/assessments`),enabled:role==='faculty'});
-  const graded=!assessments.data||assessments.data.some(a=>a.published);   // Grades stays hidden until something is published (kept while loading)
   const tabs:Tab[]=role==='faculty'
     ?[{label:'Stream',to:`${base}/stream`,segments:['stream','announcements']},{label:'Classwork',to:`${base}/classwork`,segments:['classwork','syllabus','content','assessments']},
-      {label:'People',to:base,segments:['','attendance','progress','students']},{label:'Grades',to:`${base}/grades`,segments:['grades','gradebook','class-standing'],hidden:!graded}]
+      {label:'People',to:base,segments:['','attendance','progress','students']},{label:'Grades',to:`${base}/grades`,segments:['grades','gradebook','class-standing']}]
     :[{label:'Stream',to:`${base}/stream`,segments:['stream','announcements']},{label:'Classwork',to:`${base}/classwork`,segments:['classwork','syllabus','lessons','work']},
       {label:'Grades',to:`${base}/grades`,segments:['grades','results','progress']}];
-  return <nav className="tabs" aria-label="Subject sections">{tabs.filter(t=>!t.hidden).map(t=>{const on=t.segments.includes(segment);
+  return <nav className="tabs" aria-label="Subject sections">{tabs.map(t=>{const on=t.segments.includes(segment);
     return <Link key={t.label} to={t.to} className={on?'active':undefined} aria-current={on?'page':undefined}>{t.label}</Link>})}</nav>;
 }
 

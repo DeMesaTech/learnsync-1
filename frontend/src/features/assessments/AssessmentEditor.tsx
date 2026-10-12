@@ -1,7 +1,8 @@
-import {useEffect,useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import {Link,useNavigate,useOutletContext,useParams} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
 import {api,post,send,errorText} from '../../app/api';
+import {Dialog} from '../../components/Dialog';
 import {queryClient,useAuth} from '../../app/providers';
 import {catOfKind} from '../../components/ClassworkTypes';
 import {useConfirm} from '../../components/confirm';
@@ -35,6 +36,43 @@ export function AssessmentEditorPage(){
   if(query.error||!item)return <section className="panel"><h2>Assessment unavailable</h2><p role="alert">{query.error?.message}</p><Link to={back}>Back to classwork</Link></section>;
   if(!item.draft)return closed?<section className="panel"><p className="back"><Link to={back}>← Classwork</Link></p><h2>{item.published?.title}</h2><p className="muted">This term is closed, so it cannot be edited.</p></section>:<p>Preparing a draft…</p>;
   return <Editor key={item.draft.version} offering={offering} assessment={item} refetch={()=>query.refetch()}/>;
+}
+
+export function AssessmentEditorDialog({offering,assessmentId,onClose}:{offering:OfferingSummary;assessmentId:string;onClose:()=>void}){
+  const base=`/teach/offerings/${offering.id}/assessments/${assessmentId}`;
+  const closed=offering.term_status==='closed';
+  const query=useQuery({queryKey:['assessment',assessmentId],queryFn:()=>api<Assessment>(base)});
+  const refetch=query.refetch;
+  const [starting,setStarting]=useState(false);
+  const [startError,setStartError]=useState('');
+  const [closeError,setCloseError]=useState('');
+  const flushEditor=useRef<()=>Promise<boolean>>(async()=>true);
+  const registerFlush=useCallback((flush:()=>Promise<boolean>)=>{flushEditor.current=flush},[]);
+  const item=query.data;
+  const needsDraft=!!item&&!item.draft&&!closed;
+  useEffect(()=>{
+    if(!needsDraft||starting||startError)return;
+    setStarting(true);
+    post(`${base}/draft`,{}).then(()=>refetch()).catch(e=>setStartError(errorText(e))).finally(()=>setStarting(false));
+  },[needsDraft,starting,startError,base,refetch]);
+
+  async function closeEditor(){
+    setCloseError('');
+    if(!await flushEditor.current()){
+      setCloseError('The latest changes could not be saved. Resolve the save issue before closing.');
+      return false;
+    }
+    onClose();
+    return true;
+  }
+
+  return <Dialog title={item?.draft?.title||item?.published?.title||'Edit assessment'} className="assessment-editor-dialog" confirmOnClose={false} onClose={closeEditor}>
+    {query.isPending?<p>Loading assessment…</p>:query.error||!item?<p role="alert">{query.error?.message??'Assessment is unavailable.'}</p>
+      :item.draft?<Editor key={item.draft.version} offering={offering} assessment={item} refetch={()=>query.refetch()} modal onDone={onClose} onFlushReady={registerFlush}/>
+        :closed?<p className="muted">This term is closed, so the assessment cannot be edited.</p>
+          :startError?<p role="alert">{startError}</p>:<p>Preparing a draft…</p>}
+    {closeError&&<p role="alert">{closeError}</p>}
+  </Dialog>;
 }
 
 const QUIZ_STEPS=[['basics','Basics'],['questions','Questions'],['review','Review & assign']] as const;
@@ -72,7 +110,7 @@ function PasteQuestions({offeringId,locked,onAdd}:{offeringId:string;locked:bool
   </details>;
 }
 
-function Editor({offering,assessment,refetch}:{offering:OfferingSummary;assessment:Assessment;refetch:()=>void}){
+function Editor({offering,assessment,refetch,modal=false,onDone,onFlushReady}:{offering:OfferingSummary;assessment:Assessment;refetch:()=>void;modal?:boolean;onDone?:()=>void;onFlushReady?:(flush:()=>Promise<boolean>)=>void}){
   const ask=useConfirm();const offer=useUndo();
   const draft=assessment.draft!;
   const {session}=useAuth();
@@ -91,6 +129,7 @@ function Editor({offering,assessment,refetch}:{offering:OfferingSummary;assessme
   const [reviewedAt,setReviewedAt]=useState<number|null>(draft.reviewed?draft.counter:null);
   const auto=useAutosave<DraftContent>({storageKey:draftKey(session?.user?.id,offering.id,`assessment-${assessment.id}`),counter:draft.counter,initial:toContent(draft),
     save:(v,counter)=>send<{counter:number}>('PUT',`${base}/draft`,toPayload(v,counter))});
+  useEffect(()=>{onFlushReady?.(auto.flush)},[auto.flush,onFlushReady]);
   useFlushOnLeave(auto.status,auto.flush);
   const v=auto.value;const set=(patch:Partial<DraftContent>)=>auto.setValue({...v,...patch});
   const needsReview=!!draft.ai_generated;
@@ -99,12 +138,13 @@ function Editor({offering,assessment,refetch}:{offering:OfferingSummary;assessme
   const interactive=quiz||assessment.kind==='activity';
   const assignLabel=assessment.published?(interactive?'Update for students':'Update'):SCORED_BY_TEACHER.includes(assessment.kind)?'Add to gradebook':'Assign';
   const index=QUIZ_STEPS.findIndex(s=>s[0]===step);
+  const finish=()=>onDone?onDone():navigate(back);
 
   async function serverDraft(){const fresh=await api<Assessment>(base);if(!fresh.draft)throw new Error('The draft no longer exists.');return {value:toContent(fresh.draft),counter:fresh.draft.counter}}
   async function publish(){
     setMessage('');
     if(!await auto.flush()){setMessage('Resolve the save problem above before publishing.');return}
-    try{await post(`${base}/draft/publish`,{expected_counter:auto.counter()});auto.discardRecovered();queryClient.invalidateQueries({queryKey:['assessments',offering.id]});offer('Published.');navigate(back)}
+    try{await post(`${base}/draft/publish`,{expected_counter:auto.counter()});auto.discardRecovered();queryClient.invalidateQueries({queryKey:['assessments',offering.id]});offer('Published.');finish()}
     catch(e){setMessage(errorText(e))}
   }
   async function markReviewed(){
@@ -118,7 +158,7 @@ function Editor({offering,assessment,refetch}:{offering:OfferingSummary;assessme
     await auto.flush();
     try{
       if(published)await send('DELETE',`${base}/draft?expected_counter=${auto.counter()}`);else await send('DELETE',base);
-      auto.discardRecovered();queryClient.invalidateQueries({queryKey:['assessments',offering.id]});navigate(back);
+      auto.discardRecovered();queryClient.invalidateQueries({queryKey:['assessments',offering.id]});finish();
     }catch(e){setMessage(errorText(e))}
   }
   async function settings(patch:{section_ids?:string[];archived?:boolean}){
@@ -131,7 +171,7 @@ function Editor({offering,assessment,refetch}:{offering:OfferingSummary;assessme
       auto.discardRecovered();await queryClient.invalidateQueries({queryKey:['assessments',offering.id]});
       offer(`“${view.draft?.title||'This'}” is unpublished. Students no longer see it.`,async()=>{
         try{await post(`${base}/draft/publish`,{expected_counter:view.draft!.counter});await queryClient.invalidateQueries({queryKey:['assessments',offering.id]})}catch{/* the draft is still there; the teacher can publish it by hand */}});
-      navigate(back);
+      finish();
     }catch(e){setMessage(errorText(e))}
   }
   async function duplicate(){
@@ -140,7 +180,7 @@ function Editor({offering,assessment,refetch}:{offering:OfferingSummary;assessme
     try{const made=await post<{id:string}>(`${base}/duplicate`,{});queryClient.invalidateQueries({queryKey:['assessments',offering.id]});navigate(`/faculty/offerings/${offering.id}/assessments/${made.id}/edit`)}
     catch(e){setMessage(errorText(e))}
   }
-  async function leave(){if(await auto.flush())navigate(back);else setMessage('Resolve the save problem above first.')}
+  async function leave(){if(await auto.flush())finish();else setMessage('Resolve the save problem above first.')}
   async function go(next:QuizStep){setMessage('');if(await auto.flush())setStep(next);else setMessage('Resolve the save problem above first.')}
   const categories=policy?.categories.filter(c=>c.key!=='attendance')??[];
 
@@ -177,7 +217,7 @@ function Editor({offering,assessment,refetch}:{offering:OfferingSummary;assessme
   const assignButton=<button className="primary" disabled={needsReview&&!reviewed} title={needsReview&&!reviewed?'Mark the quiz as reviewed first':undefined} onClick={publish}>{assignLabel}</button>;
 
   return <>
-    <p className="back"><Link to={back}>← Classwork</Link></p>
+    {!modal&&<p className="back"><Link to={back}>← Classwork</Link></p>}
     <div className="page-heading"><div><p className="eyebrow">{KIND_LABEL[assessment.kind]}{quiz?` · step ${index+1} of ${QUIZ_STEPS.length}`:''}</p><h2>{v.title||'Untitled'}</h2>
       <p className="muted">{assessment.published?`Students see version ${assessment.published.version} until you ${assignLabel.toLowerCase()}.`:'Not visible to students or the gradebook until you assign it.'}</p></div>
       <SaveIndicator status={auto.status} message={auto.message} storageFailed={auto.storageFailed} onRetry={auto.retry}/></div>

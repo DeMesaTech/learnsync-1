@@ -19,8 +19,8 @@ try{
   const term=year.terms[0];
   await call(p,'POST',`/terms/${term.id}/sections`,{name:'1A',year_level:1});
   for(let i=1;i<=27;i++)await call(p,'POST','/accounts',{email:`list${i}@example.com`,display_name:`List Student ${String(i).padStart(2,'0')}`,role:'student',student_number:`L-${i}`});
-  const codes=['LST 101','LST 102','LST 201'];
-  for(const [i,code] of codes.entries())await call(p,'POST','/subjects',{code,title:`List ${code}`,units:'3',year_level:i===2?2:1,semester:1});
+  const codes=['LST 101','LST 102','LST 201','LST 202'];
+  for(const [i,code] of codes.entries())await call(p,'POST','/subjects',{code,title:`List ${code}`,units:'3',year_level:i>=2?2:1,semester:i===3?2:1});
 
   // ---- sections as a table, the page for their students
   await p.goto(`/admin/terms/${term.id}`);await p.waitForLoadState('networkidle');
@@ -66,6 +66,10 @@ try{
   check('subjects stay locked until a teacher is chosen',await d.getByRole('checkbox',{name:/LST 101/}).isDisabled());
   await d.getByLabel('Teacher').selectOption({label:'Demo faculty 1'});
   await d.getByLabel('Filter subjects').fill('LST');
+  check('bulk assignment defaults to subjects in the term semester',await d.getByRole('checkbox',{name:/LST 202/}).count()===0);
+  await d.getByLabel('Filter subjects by semester').selectOption('all');
+  check('all semesters can be shown for intentional off-semester assignments',await d.getByRole('checkbox',{name:/LST 202/}).count()===1);
+  await d.getByLabel('Filter subjects by semester').selectOption('current');
   await d.getByRole('checkbox',{name:/LST 101/}).check();await d.getByRole('checkbox',{name:/LST 201/}).check();
   check('sections that match the subject start ticked and others do not',await d.getByRole('group',{name:'Sections for LST 101'}).locator('input:checked').count()===1&&await d.getByRole('group',{name:'Sections for LST 201'}).locator('input:checked').count()===0);
   check('every selected subject needs a section before Assign is enabled',await d.locator('.actions .primary').isDisabled());
@@ -76,6 +80,15 @@ try{
   await d.locator('.actions .primary').click();await p.locator('.toast').waitFor();
   const offerings=(await call(p,'GET',`/terms/${term.id}/offerings`)).data.map(o=>`${o.subject.code}:${o.sections.map(s=>s.name)}`).sort();
   check('both subjects were assigned with their sections in one go',offerings.join(' ')==='LST 101:1A LST 201:1A',offerings.join(' '));
+  await p.getByRole('button',{name:'Assign subjects'}).click();await d.getByLabel('Teacher').selectOption({label:'Demo faculty 2'});await d.getByLabel('Filter subjects').fill('LST 102');
+  await d.getByRole('checkbox',{name:/LST 102/}).check();await d.locator('.actions .primary').click();await p.locator('.toast').waitFor();
+  const teacherFilter=p.getByRole('combobox',{name:'Filter offerings by teacher'});
+  check('the offerings list provides a teacher filter when several teachers are assigned',await teacherFilter.count()===1&&await teacherFilter.locator('option').count()===3);
+  await teacherFilter.selectOption({label:'Demo faculty 1'});
+  check('filtering by teacher shows only that teacher’s assigned subjects',await p.locator('.offerings-table tbody').innerText().then(t=>t.includes('LST 101')&&t.includes('LST 201')&&!t.includes('LST 102')));
+  await teacherFilter.selectOption({label:'Demo faculty 2'});
+  check('the teacher filter switches the offerings to the selected teacher',await p.locator('.offerings-table tbody').innerText().then(t=>t.includes('LST 102')&&!t.includes('LST 101')));
+  await teacherFilter.selectOption('');
   await p.getByRole('button',{name:'Assign subjects'}).click();await d.getByLabel('Teacher').selectOption({label:'Demo faculty 1'});await d.getByLabel('Filter subjects').fill('LST 101');
   check('a subject the teacher already has is shown as assigned and cannot be picked again',await d.getByRole('checkbox',{name:/LST 101/}).isDisabled());
   check('axe finds no violations on the bulk dialog',(await axe(p)).length===0);

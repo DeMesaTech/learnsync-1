@@ -2,6 +2,28 @@
 
 Implementation started 2026-10-06. No milestone is yet accepted.
 
+### 2026-10-12 (Syllabus replacement upload)
+- Made replacement upload explicit on the published syllabus page: DOCX/PDF imports create a reviewable replacement draft, with a clear notice that students keep the current publication until the replacement is published.
+- Imported replacement drafts retain the published grading policy; the published revision remains unchanged until publish and is preserved as superseded history afterwards. Existing drafts must still be resolved before import.
+- Added a backend regression test for the published → imported draft → published replacement lifecycle, including student visibility, policy retention and revision history.
+- Passed: frontend production build/type-check, ESLint, editor diagnostics for the changed frontend/backend files, backend Ruff, and `git diff --check`.
+- Blocked: the focused pytest cases could not initialize because Postgres at `127.0.0.1:15432` timed out. The production build retains the existing large-JavaScript-chunk warning.
+
+### 2026-10-12 (Term teacher and semester filters)
+- Added a teacher filter to a term's Offerings table when multiple teachers have offerings.
+- Bulk Assign subjects now defaults to active prospectus subjects for the selected term's semester; an All semesters option preserves deliberate cross-semester assignments.
+- Added disposable-workspace E2E assertions for default semester filtering, the all-semester option, and filtering assigned offerings by teacher.
+- Passed: frontend production build/type-check, ESLint, editor diagnostics for `TermWorkspace.tsx`, `node --check frontend\\e2e\\admin-lists.mjs`, and `git diff --check`.
+- Not run: the admin-lists browser scenario requires a disposable database, which was not confirmed. The production build retains the existing large-JavaScript-chunk warning.
+
+### 2026-10-12 (Faculty attendance, Grades tab and assessment creation)
+- Added an explicit Unmark selected attendance action to the grid and renamed the one-day per-student action to Unmark. Clearing still uses the attendance partial-save contract, so only that student's mark is removed.
+- Kept the faculty Grades tab visible even when the offering has no published assessments, eliminating the load-then-hide flash.
+- Changed the Classwork assessment creation flow to open the existing assessment editor as the second dialog step; direct assessment edit routes remain pages. AI-generated assessment drafts use the same modal editor.
+- Added regression assertions to the attendance-grid and fresh-install flow browser scripts, and documented the Classwork interaction in `DESIGN_SYSTEM.md`.
+- Passed: frontend production build/type-check, ESLint, editor diagnostics for changed TSX files, `node --check` for both modified E2E scripts, and `git diff --check`.
+- Not run: browser scenarios require a disposable database, which was not confirmed. The production build retains the existing large-JavaScript-chunk warning.
+
 ### 2026-10-12 (Student progress chart labels)
 - Added a visible caption to both activity charts explaining that bars count completed lessons, submitted quizzes and uploaded activities.
 - Added a fresh-install E2E assertion that both charts show the explanation.

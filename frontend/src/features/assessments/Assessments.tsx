@@ -33,7 +33,6 @@ export function NewDialog({offering,kind,onClose,onCreated}:{offering:OfferingSu
     <fieldset><legend>Applies to</legend><p className="muted">Leave all unchecked for every section.</p>
       {offering.sections.map(s=><label className="inline" key={s.id}><input type="checkbox" checked={chosen.includes(s.id)} onChange={e=>setChosen(e.target.checked?[...chosen,s.id]:chosen.filter(x=>x!==s.id))}/> {s.name}</label>)}</fieldset>
     {error&&<p role="alert">{error}</p>}
-    <div className="actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary">Create and set up</button></div>
+    <div className="actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary">Create and edit</button></div>
   </form></Dialog>;
 }
-

@@ -100,6 +100,7 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
   const [errors,setErrors]=useState<Record<string,string>>({});
   const [saving,setSaving]=useState(0);
   const [active,setActive]=useState({r:0,c:0});
+  const [hasActiveCell,setHasActiveCell]=useState(false);
   const [classDays,setClassDays]=useState(offering.meeting_days??0);
   const [note,setNote]=useState('');
   const pending=useRef<Record<string,Record<string,Status|null>>>({});
@@ -172,6 +173,7 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
   function move(r:number,c:number){
     const rr=Math.max(0,Math.min(roster.length-1,r)),cc=Math.max(0,Math.min(dates.length-1,c));
     setActive({r:rr,c:cc});
+    setHasActiveCell(true);
     table.current?.querySelector<HTMLButtonElement>(`[data-r="${rr}"][data-c="${cc}"]`)?.focus();
   }
   function onKey(e:KeyboardEvent<HTMLButtonElement>,r:number,c:number,d:string,s:string){
@@ -188,7 +190,7 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
     try{await send('PUT',`/teach/offerings/${offering.id}/schedule`,{meeting_days:classDays});await queryClient.invalidateQueries({queryKey:['offering']});setNote('Class days saved.');toast('Class days saved.')}
     catch(e){setNote(errorText(e))}
   }
-  const go=(change:()=>void)=>{void flushAll().then(saved=>{if(saved)change()})};
+  const go=(change:()=>void)=>{void flushAll().then(saved=>{if(saved){setHasActiveCell(false);change()}})};
   const changeSection=(id:string)=>{if(id!==sectionId)go(()=>setSectionId(id))};
   const title=range==='week'?`Week of ${parse(first).toLocaleDateString(undefined,{month:'short',day:'numeric'})} – ${parse(last).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}`:parse(date).toLocaleDateString(undefined,{month:'long',year:'numeric'});
   const step=(n:number)=>go(()=>setDate(range==='week'?shift(date,7*n):addMonths(date,n)));
@@ -211,7 +213,7 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
     </section>
     {query.isPending?<p>Loading…</p>:query.error?<p role="alert">{query.error.message}</p>:roster.length===0?<section className="panel"><p className="muted">No students are enrolled through this section.</p></section>:
       <section className="panel"><div className="table-wrap" role="region" aria-label="Attendance grid, scrolls sideways" tabIndex={0}>
-        <table className="att-grid" ref={table}><caption className="sr-only">Attendance: students down, dates across. Use the arrow keys to move between cells, then P, L, A or E to mark and Delete to clear. Enter or Space changes the status.</caption>
+        <table className="att-grid" ref={table}><caption className="sr-only">Attendance: students down, dates across. Use the arrow keys to move between cells, then P, L, A or E to mark and Delete to clear. Enter or Space changes the status. The Unmark selected attendance button clears the selected cell.</caption>
           <thead><tr><th scope="col" className="sticky">Student</th>{dates.map(d=>{const rec=byDate.get(d);const marked=roster.filter(r=>valueOf(d,r.student_id)!==null).length;
             const full=range==='week'||isClass(d)||!!rec;      // a month is wide: only class days and recorded days carry the controls
             return <th scope="col" key={d} className={meeting>0&&!isClass(d)&&!rec?'att-off':undefined}><div className="att-head"><strong>{DAY[dayOf(d)]} {parse(d).getDate()}</strong>
@@ -224,8 +226,11 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
             {dates.map((d,ci)=>{const v=valueOf(d,r.student_id);const failed=!!errors[d]&&edits[d]?.[r.student_id]!==undefined;
               return <td key={d}><button type="button" className={`att-cell ${v??'none'}${failed?' err':''}`} data-r={ri} data-c={ci} tabIndex={active.r===ri&&active.c===ci?0:-1} disabled={closed}
                 aria-label={`${r.display_name}, ${pretty(d)}: ${v?LABEL[v]:'not marked'}${failed?' (not saved)':''}`}
-                onFocus={()=>setActive({r:ri,c:ci})} onClick={()=>cycle(d,r.student_id)} onKeyDown={e=>onKey(e,ri,ci,d,r.student_id)}>{v?SHORT[v]:'·'}</button></td>})}</tr>)}</tbody></table></div>
-        <p className="muted">P present · L late · A absent · E excused · · not marked. Click a cell to cycle, or focus it and type P, L, A, E (Delete clears). Each change is saved by itself.</p></section>}
+                onFocus={()=>{setActive({r:ri,c:ci});setHasActiveCell(true)}} onClick={()=>cycle(d,r.student_id)} onKeyDown={e=>onKey(e,ri,ci,d,r.student_id)}>{v?SHORT[v]:'·'}</button></td>})}</tr>)}</tbody></table></div>
+        <p className="muted">P present · L late · A absent · E excused · · not marked. Click a cell to cycle, or focus it and type P, L, A, E (Delete clears). The Unmark selected attendance button clears the selected cell. Each change is saved by itself.</p></section>}
+    {roster.length>0&&dates.length>0&&(()=>{const student=hasActiveCell?roster[active.r]:undefined;const activeDate=hasActiveCell?dates[active.c]:undefined;const mark=student&&activeDate?valueOf(activeDate,student.student_id):null;
+      return <div className="actions"><p className="muted" role="status">{student&&activeDate?`Selected: ${student.display_name}, ${pretty(activeDate)} — ${mark?LABEL[mark]:'not marked'}`:'Select an attendance cell to unmark it.'}</p>
+        <button type="button" disabled={closed||!mark} onClick={()=>{if(student&&activeDate)setMarks(activeDate,{[student.student_id]:null})}}>Unmark selected attendance</button></div>})()}
   </>;
 }
 
@@ -298,6 +303,6 @@ function Register({offering,sectionId,date,period,roster,initial,closed,setMessa
       <tbody>{roster.map(r=><tr key={r.student_id}><td>{r.display_name}<br/><span className="muted">{r.student_number}</span></td>
         <td><fieldset className="seg" disabled={closed}><legend className="sr-only">Attendance for {r.display_name}</legend>
           {STATUS.map(([v,l])=><label key={v} className={marks[r.student_id]===v?`on ${v}`:''}><input type="radio" name={`m-${r.student_id}`} checked={marks[r.student_id]===v} onChange={()=>setMarks({...marks,[r.student_id]:v})}/>{l}</label>)}
-          {marks[r.student_id]&&!closed&&<button type="button" className="linklike" onClick={()=>setMarks({...marks,[r.student_id]:''})} aria-label={`Clear mark for ${r.display_name}`}>Clear</button>}</fieldset></td></tr>)}</tbody></table></div>
+          {marks[r.student_id]&&!closed&&<button type="button" className="linklike" onClick={()=>setMarks({...marks,[r.student_id]:''})} aria-label={`Unmark attendance for ${r.display_name}`}>Unmark</button>}</fieldset></td></tr>)}</tbody></table></div>
     <div className="actions sticky-bar"><button className="primary" disabled={closed||!dirty} onClick={save}>Save attendance</button>{sessionId&&<button disabled={closed} onClick={remove}>Remove this day’s record</button>}{dirty&&<span className="muted">You have unsaved changes.</span>}</div></section>;
 }
