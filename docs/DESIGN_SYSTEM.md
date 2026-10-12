@@ -35,7 +35,7 @@ Confirmations and undo (Phase 3): confirm only what cannot be undone or what stu
 - Faculty Grades stays visible while an offering has no published assessments. From Classwork, creating an assessment uses two dialog steps: set its title and audience, then edit/assign it in the assessment editor. Direct assessment edit links remain pages.
 
 ## Term offering administration
-- The term's Offerings table can be filtered to one teacher when multiple teachers have assignments. Bulk Assign subjects defaults to active subjects placed in that term's semester; an explicit All semesters option remains available for approved exceptions.
+- The term's Offerings table can be filtered to one teacher when multiple teachers have assignments. Bulk Assign subjects defaults to active subjects placed in that term's semester; an explicit All semesters option remains available for approved exceptions. For a prospectus subject with a year-level placement, the assignment dialog lists only sections in that year.
 
 ## Replacing a syllabus
 - On a published syllabus, make “Replace syllabus from a file” available as a DOCX/PDF import. Import creates a reviewable draft; keep the published revision and its grading policy live until faculty publishes the replacement. Preserve the existing grading policy in the imported draft.

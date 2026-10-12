@@ -2,6 +2,12 @@
 
 Implementation started 2026-10-06. No milestone is yet accepted.
 
+### 2026-10-13 (Year-level sections in subject assignment)
+- Bulk subject assignment now lists only sections in the prospectus year level for a year-placed subject. Matching year-level sections are selected by default when they match the term semester; off-semester placements within that same year still require a reason.
+- Updated the admin E2E flow to verify that a year-1 subject lists only year-1 sections and a year-2 subject lists only year-2 sections.
+- Passed: frontend ESLint, production build/type-check, and `git diff --check`.
+- Not run: the focused admin E2E flow requires a disposable database and `ADMIN_LISTS_E2E_DISPOSABLE=1`; it was not run against a database in this session.
+
 ### 2026-10-13 (Prospectus data cleanup command)
 - Added a read-only-by-default maintenance command that can remove uncommitted prospectus previews, delete never-used subjects, archive subjects referenced by offerings, preserve committed import records, and remove only preview upload files with no remaining references. Apply requires the exact configured database name and refuses `_test` databases; each applied cleanup is audited.
 - Added a regression covering dry-run non-mutation, preview and unused-subject deletion, referenced-subject archival, committed-import preservation, and safe orphan upload removal.

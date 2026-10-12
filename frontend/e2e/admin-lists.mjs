@@ -60,6 +60,7 @@ try{
   check('the withdrawal reason is in the audit history',JSON.stringify((await call(p,'GET','/audit?page_size=100')).data).includes('Dropped the course'));
 
   // ---- bulk assignment
+  await call(p,'POST',`/terms/${term.id}/sections`,{name:'2A',year_level:2});
   await p.goto(`/admin/terms/${term.id}`);await p.waitForLoadState('networkidle');
   await p.getByRole('button',{name:'Assign subjects'}).click();
   const d=p.locator('dialog');
@@ -71,15 +72,17 @@ try{
   check('all semesters can be shown for intentional off-semester assignments',await d.getByRole('checkbox',{name:/LST 202/}).count()===1);
   await d.getByLabel('Filter subjects by semester').selectOption('current');
   await d.getByRole('checkbox',{name:/LST 101/}).check();await d.getByRole('checkbox',{name:/LST 201/}).check();
-  check('sections that match the subject start ticked and others do not',await d.getByRole('group',{name:'Sections for LST 101'}).locator('input:checked').count()===1&&await d.getByRole('group',{name:'Sections for LST 201'}).locator('input:checked').count()===0);
+  const yearOneSections=d.getByRole('group',{name:'Sections for LST 101'});
+  const yearTwoSections=d.getByRole('group',{name:'Sections for LST 201'});
+  check('each subject shows only sections from its year level',await yearOneSections.locator('label').count()===1&&(await yearOneSections.innerText()).includes('1A')&&await yearTwoSections.locator('label').count()===1&&(await yearTwoSections.innerText()).includes('2A'));
+  check('matching year-level sections start ticked',await yearOneSections.locator('input:checked').count()===1&&await yearTwoSections.locator('input:checked').count()===1);
+  await yearTwoSections.locator('input').uncheck();
   check('every selected subject needs a section before Assign is enabled',await d.locator('.actions .primary').isDisabled());
-  await d.getByRole('group',{name:'Sections for LST 201'}).locator('input').first().check();
-  check('choosing a section from another year asks for a reason',await d.getByLabel(/Reason for placing LST 201/).count()===1&&await d.locator('.actions .primary').isDisabled());
-  await d.getByLabel(/Reason for placing LST 201/).fill('Irregular cohort');
+  await yearTwoSections.locator('input').check();
   check('the button counts the subjects',(await d.locator('.actions .primary').innerText())==='Assign 2 subjects');
   await d.locator('.actions .primary').click();await p.locator('.toast').waitFor();
   const offerings=(await call(p,'GET',`/terms/${term.id}/offerings`)).data.map(o=>`${o.subject.code}:${o.sections.map(s=>s.name)}`).sort();
-  check('both subjects were assigned with their sections in one go',offerings.join(' ')==='LST 101:1A LST 201:1A',offerings.join(' '));
+  check('both subjects were assigned with their year-level sections in one go',offerings.join(' ')==='LST 101:1A LST 201:2A',offerings.join(' '));
   await p.getByRole('button',{name:'Assign subjects'}).click();await d.getByLabel('Teacher').selectOption({label:'Demo faculty 2'});await d.getByLabel('Filter subjects').fill('LST 102');
   await d.getByRole('checkbox',{name:/LST 102/}).check();await d.locator('.actions .primary').click();await p.locator('.toast').waitFor();
   const teacherFilter=p.getByRole('combobox',{name:'Filter offerings by teacher'});

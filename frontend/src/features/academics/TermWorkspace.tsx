@@ -193,17 +193,18 @@ function BulkAssignDialog({termId,termSequence,sections,existing,onClose,onDone}
   const [error,setError]=useState('');const [busy,setBusy]=useState(false);
   const teacher=faculty.data?.find(f=>f.id===facultyId);
   const taken=new Set(existing.filter(o=>o.faculty.id===facultyId).map(o=>o.subject.id));
+  const matchesYear=(sub:Subject,sec:Section)=>sub.year_level===null||sec.year_level===sub.year_level;
   const fits=(sub:Subject,sec:Section)=>sub.year_level===null||sub.semester===null||(sec.year_level===sub.year_level&&termSequence===sub.semester);
   const needle=find.trim().toLowerCase();
   const list=(subjects.data??[]).filter(sub=>sub.status==='active'&&(semesterFilter==='all'||sub.semester===termSequence)&&(!needle||`${sub.code} ${sub.title}`.toLowerCase().includes(needle)))
     .sort((a,b)=>Number(pick[b.id]!==undefined)-Number(pick[a.id]!==undefined)||Number(a.semester===termSequence?0:1)-Number(b.semester===termSequence?0:1)||a.code.localeCompare(b.code));
   const chosen=Object.keys(pick);
   const subjectOf=(id:string)=>subjects.data?.find(x=>x.id===id);
-  const needsReason=(id:string)=>{const sub=subjectOf(id);return !!sub&&pick[id].some(sid=>{const sec=sections.find(x=>x.id===sid);return !!sec&&!fits(sub,sec)})};   // a section from another year
+  const needsReason=(id:string)=>{const sub=subjectOf(id);return !!sub&&pick[id].some(sid=>{const sec=sections.find(x=>x.id===sid);return !!sec&&!fits(sub,sec)})};
   const ready=!!facultyId&&chosen.length>0&&chosen.every(id=>pick[id].length>0&&(!needsReason(id)||(reasons[id]??'').trim().length>=3));
   function toggleSubject(sub:Subject,on:boolean){
     if(!on){const rest={...pick};delete rest[sub.id];setPick(rest);return}
-    setPick({...pick,[sub.id]:sections.filter(sec=>sub.year_level!==null&&fits(sub,sec)).map(sec=>sec.id)});   // sections that match its year and semester start ticked
+    setPick({...pick,[sub.id]:sections.filter(sec=>sub.year_level!==null&&matchesYear(sub,sec)&&fits(sub,sec)).map(sec=>sec.id)});
   }
   async function submit(e:FormEvent){
     e.preventDefault();setBusy(true);setError('');
@@ -227,13 +228,14 @@ function BulkAssignDialog({termId,termSequence,sections,existing,onClose,onDone}
         return <li key={sub.id} className={on?'on':''}>
           <label className="inline"><input type="checkbox" checked={on} disabled={!facultyId||done} onChange={e=>toggleSubject(sub,e.target.checked)}/>
             <span><strong>{sub.code}</strong> {sub.title} <span className="muted">{sub.year_level?`Year ${sub.year_level}, semester ${sub.semester}`:'not placed'}{done?' · already assigned to this teacher':''}</span></span></label>
-          {on&&<div className="bulk-sections"><div className="chips" role="group" aria-label={`Sections for ${sub.code}`}>{sections.map(sec=>
-            <label className="inline" key={sec.id}><input type="checkbox" checked={pick[sub.id].includes(sec.id)} onChange={e=>setPick({...pick,[sub.id]:e.target.checked?[...pick[sub.id],sec.id]:pick[sub.id].filter(x=>x!==sec.id)})}/> {sec.name} <span className="muted">({sec.member_count}){fits(sub,sec)?'':' · other year'}</span></label>)}</div>
+          {on&&<div className="bulk-sections"><div className="chips" role="group" aria-label={`Sections for ${sub.code}`}>{sections.filter(sec=>matchesYear(sub,sec)).map(sec=>
+            <label className="inline" key={sec.id}><input type="checkbox" checked={pick[sub.id].includes(sec.id)} onChange={e=>setPick({...pick,[sub.id]:e.target.checked?[...pick[sub.id],sec.id]:pick[sub.id].filter(x=>x!==sec.id)})}/> {sec.name} <span className="muted">({sec.member_count}){fits(sub,sec)?'':' · other semester'}</span></label>)}</div>
+            {sections.every(sec=>!matchesYear(sub,sec))&&<p className="muted">No sections exist for this subject’s year level.</p>}
             {pick[sub.id].length===0&&<p className="muted">Choose at least one section.</p>}
-            {needsReason(sub.id)&&<label>Reason for placing {sub.code} with a section from another year (kept in the audit history)<textarea value={reasons[sub.id]??''} onChange={e=>setReasons({...reasons,[sub.id]:e.target.value})} minLength={3} maxLength={1000} required/></label>}</div>}</li>})}</ul>}
+            {needsReason(sub.id)&&<label>Reason for placing {sub.code} outside its prospectus semester (kept in the audit history)<textarea value={reasons[sub.id]??''} onChange={e=>setReasons({...reasons,[sub.id]:e.target.value})} minLength={3} maxLength={1000} required/></label>}</div>}</li>})}</ul>}
       {!facultyId&&<p className="muted">Choose a teacher first.</p>}
     </fieldset>
-    <p className="muted">A subject placed in a year and semester only accepts matching sections. Choosing a section from another year asks for a reason. Nothing is saved unless every selected subject can be assigned.</p>
+    <p className="muted">Subjects with a year-level placement only show sections for that year. An off-semester placement asks for a reason. Nothing is saved unless every selected subject can be assigned.</p>
     {error&&<p role="alert">{error}</p>}
     <div className="actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary" disabled={!ready||busy}>{busy?'Assigning…':chosen.length===0?'Assign subjects':`Assign ${chosen.length} subject${chosen.length===1?'':'s'}`}</button></div>
   </form></Dialog>;
