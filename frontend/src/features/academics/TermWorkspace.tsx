@@ -6,11 +6,14 @@ import {useQuery} from '@tanstack/react-query';
 import {api,post,send,errorText,ApiError,type Account} from '../../app/api';
 import {queryClient} from '../../app/providers';
 import {Dialog} from '../../components/Dialog';
+import {useConfirm} from '../../components/confirm';
 import {yearLabel,type OfferingSummary,type SchoolYear,type Section,type Subject} from './types';
 
 export function TermWorkspace(){
   const {termId}=useParams();
   const here=useHere();
+  const ask=useConfirm();
+  const toast=useToast();
   const years=useQuery({queryKey:['school-years'],queryFn:()=>api<SchoolYear[]>('/school-years')});
   const sections=useQuery({queryKey:['sections',termId],queryFn:()=>api<Section[]>(`/terms/${termId}/sections`)});
   const offerings=useQuery({queryKey:['offerings',termId],queryFn:()=>api<OfferingSummary[]>(`/terms/${termId}/offerings`)});
@@ -19,12 +22,21 @@ export function TermWorkspace(){
   const [editing,setEditing]=useState<OfferingSummary|null>(null);
   const [tab,setTab]=useState<'sections'|'offerings'>('sections');
   const [teacherFilter,setTeacherFilter]=useState('');
+  const [sectionError,setSectionError]=useState('');
+  const [deletingSection,setDeletingSection]=useState<string|null>(null);
   const year=years.data?.find(y=>y.terms.some(t=>t.id===termId));
   const term=year?.terms.find(t=>t.id===termId);
   const closed=term?.status==='closed';
   const highestProgramYear=Math.max(0,...(subjects.data??[]).map(subject=>subject.year_level??0));
   const programYears=Array.from({length:highestProgramYear},(_,index)=>index+1);
   const refresh=()=>{queryClient.invalidateQueries({queryKey:['sections',termId]});queryClient.invalidateQueries({queryKey:['offerings',termId]})};
+  async function removeSection(section:Section){
+    if(!await ask({title:`Delete ${section.name}?`,message:'Only an unused section can be deleted. Sections with students, assignments, or academic records are protected.',yes:'Delete section',danger:true}))return;
+    setDeletingSection(section.id);setSectionError('');
+    try{await send('DELETE',`/sections/${section.id}`);refresh();toast(`${section.name} deleted.`)}
+    catch(err){setSectionError(errorText(err))}
+    finally{setDeletingSection(null)}
+  }
   const teacherGroups=offerings.data?.reduce<{id:string;name:string;rows:{offering:OfferingSummary;section:{id:string;name:string;enrolled:number}}[]}[]>((groups,offering)=>{
     let group=groups.find(item=>item.id===offering.faculty.id);
     if(!group){group={id:offering.faculty.id,name:offering.faculty.display_name,rows:[]};groups.push(group)}
@@ -57,12 +69,14 @@ export function TermWorkspace(){
         {subjects.isError&&<p role="alert">Could not load the prospectus year levels: {subjects.error.message}</p>}
         {!subjects.isError&&subjects.isSuccess&&programYears.length===0&&<p className="muted">No year levels are assigned in the prospectus yet. <Link to="/admin/subjects">Add or place subjects in the prospectus</Link> before creating sections.</p>}
         {!subjects.isError&&programYears.length>0&&<p className="muted">Program duration: {highestProgramYear} year{highestProgramYear===1?'':'s'}, based on the active prospectus subjects.</p>}
+        {sectionError&&<p role="alert">{sectionError}</p>}
         {sections.isPending?<p>Loading…</p>:sections.error?<p role="alert">{sections.error.message}</p>:
           sections.data.length===0?<p className="muted">No sections yet. Add one, or copy structure when creating the school year.</p>:
           <div className="table-wrap"><table><caption className="sr-only">Sections of this term</caption>
             <thead><tr><th scope="col">Section</th><th scope="col">Year level</th><th scope="col">Students</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
             <tbody>{sections.data.map(s=><tr key={s.id}><th scope="row">{s.name}</th><td>{yearLabel(s.year_level)}</td><td>{s.member_count}</td>
-              <td><Link className="button" state={here} to={`/admin/terms/${termId}/sections/${s.id}/students`}>{closed?'View students':'Manage students'}</Link></td></tr>)}</tbody></table></div>}
+              <td><div className="actions"><Link className="button" state={here} to={`/admin/terms/${termId}/sections/${s.id}/students`}>{closed?'View students':'Manage students'}</Link>
+                {!closed&&<button className="danger" disabled={deletingSection!==null} onClick={()=>removeSection(s)}>{deletingSection===s.id?'Deleting…':'Delete section'}</button>}</div></td></tr>)}</tbody></table></div>}
       </section>
       :
       <section className="panel">

@@ -2,6 +2,12 @@
 
 Implementation started 2026-10-06. No milestone is yet accepted.
 
+### 2026-10-13 (Delete unused sections)
+- Added an admin-only delete action with confirmation to the open-term sections list. The API locks the section and permits hard deletion only when it has no student history, offering or enrollment links, targeted teaching content, announcements, coverage, assessments, or attendance records; a 409 explains when historical use protects it.
+- Added regression coverage for successful deletion of an unused section and blocked deletion of assigned and withdrawn-history sections.
+- Passed: backend Ruff, frontend ESLint, frontend production build/type-check, and `git diff --check`.
+- Blocked: focused API test execution requires Postgres at `127.0.0.1:15432`, which timed out during setup. Production build completed with the existing large-JavaScript-chunk warning.
+
 ### 2026-10-13 (Bulk alphabetical section creation)
 - Reworked the Add sections modal to select a year level and quantity, preview the generated labels, and create multiple sections atomically. Names follow the BSE year/letter convention and skip letters already used in that term/year.
 - Added API regression coverage for continuing the sequence across batches, independent sequences by year, and rejecting quantities above the supported maximum.

@@ -106,6 +106,31 @@ def test_bulk_section_create_generates_alphabetical_names_per_year(world):
                       {"year_level": 1, "count": 27}).status_code == 422
 
 
+def test_only_unused_sections_can_be_deleted(world):
+    admin, term_id = world["admin"], world["term"]["id"]
+    empty = admin.post(f"/api/terms/{term_id}/sections",
+                       {"name": "1C", "year_level": 1}).json()
+    response = admin.delete(f"/api/sections/{empty['id']}")
+    assert response.status_code == 204
+    assert all(section["id"] != empty["id"]
+               for section in admin.get(f"/api/terms/{term_id}/sections").json())
+
+    assigned_id = world["sections"][0]["id"]
+    blocked_assignment = admin.delete(f"/api/sections/{assigned_id}")
+    assert blocked_assignment.status_code == 409
+    assert blocked_assignment.json()["error"]["code"] == "section_in_use"
+
+    section_with_history = world["sections"][1]
+    student = world["students"][0]
+    assert add_member(world, section_with_history, student).status_code == 204
+    withdrawn = admin.delete(
+        f"/api/sections/{section_with_history['id']}/members/{student.id}?reason=Moved%20sections")
+    assert withdrawn.status_code == 204
+    blocked_history = admin.delete(f"/api/sections/{section_with_history['id']}")
+    assert blocked_history.status_code == 409
+    assert blocked_history.json()["error"]["code"] == "section_in_use"
+
+
 def test_one_active_section_per_term_and_withdrawal_history(db, world):
     s1 = world["students"][0]
     a, b = world["sections"]
