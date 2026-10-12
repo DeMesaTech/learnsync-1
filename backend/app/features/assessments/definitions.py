@@ -57,7 +57,7 @@ def has_attempts(db, assessment_id):
 def question_view(q):
     return {"key": q.key, "type": q.type, "prompt": q.prompt, "choices": q.choices,
             "correct": q.correct, "explanation": q.explanation, "points": q.points,
-            "source": q.source}
+            "source": q.source, "duration_minutes": q.duration_minutes}
 
 
 def rev_view(db, rev):
@@ -139,7 +139,8 @@ def start_draft(db, actor, assessment):
     for q in questions_of(db, base.id):   # same keys: question identity survives revisions
         db.add(QuizQuestion(revision_id=draft.id, key=q.key, position=q.position, type=q.type,
                             prompt=q.prompt, choices=q.choices, correct=q.correct,
-                            explanation=q.explanation, points=q.points, source=q.source))
+                            explanation=q.explanation, points=q.points,
+                            duration_minutes=q.duration_minutes, source=q.source))
     db.commit()
     return draft
 
@@ -165,7 +166,8 @@ def save_draft(db, actor, offering, assessment, data):
             db.add(QuizQuestion(revision_id=draft.id, key=str(q.key), position=position,
                                 type=q.type, prompt=q.prompt,
                                 choices=[c.model_dump() for c in q.choices], correct=q.correct,
-                                explanation=q.explanation, points=q.points, source=q.source))
+                                explanation=q.explanation, points=q.points,
+                                duration_minutes=q.duration_minutes, source=q.source))
         draft.max_points = sum((q.points for q in data.questions), Decimal(0))
     draft.draft_counter += 1
     db.commit()
@@ -282,7 +284,8 @@ def question_problems(questions):
 
 def locked_signature(questions):
     """What must not change once students have started attempts."""
-    return {q.key: (q.type, Decimal(q.points), tuple(c["id"] for c in q.choices),
+    return {q.key: (q.type, Decimal(q.points), q.duration_minutes,
+                    tuple(c["id"] for c in q.choices),
                     tuple(sorted(normalize_text(a) for a in q.correct))
                     if q.type == "short_answer" else q.correct) for q in questions}
 

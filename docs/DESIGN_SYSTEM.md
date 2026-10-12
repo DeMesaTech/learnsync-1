@@ -6,6 +6,8 @@ Use semantic CSS variables, system/light/dark themes, base mobile layouts, 640px
 
 Short independent forms use native dialog with accessible labels, focus restoration and unsaved-change protection. Imports, syllabus, content editor, quizzes and gradebooks use pages. Server errors and saving/recovery/conflict states must be visible.
 
+In online-quiz authoring, every question has a teacher-editable 1–180 minute limit (5-minute default); lock this setting once attempts exist. During an attempt, show only the current question, its saved-answer status, and an accessible server-expiry countdown. On expiry, keep its saved answer read-only and move to the next question; reload resumes the server clock.
+
 Detailed colors, route inventory and theme rules: IMPLEMENTATION_PLAN.md section 5.
 
 ## Route map as built (supersedes the inventory in IMPLEMENTATION_PLAN.md section 5)

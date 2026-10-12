@@ -78,7 +78,7 @@ def parse_block(lines):
         if points <= 0 or points > 1000:
             return None, "Points must be above zero.", fields["points"][1]
     base = {"key": str(uuid.uuid4()), "prompt": prompt, "explanation": fields.get("why", ("", 0))[0],
-            "points": str(points), "source": None}
+            "points": str(points), "duration_minutes": 5, "source": None}
     if choices:
         letters = [c[0] for c in choices]
         if len(choices) < 2:

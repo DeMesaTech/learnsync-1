@@ -191,6 +191,7 @@ def generate(db, actor, offering_id, data):
         db.add(QuizQuestion(revision_id=rev.id, key=q["key"], position=position, type=q["type"],
                             prompt=q["prompt"], choices=q["choices"], correct=q["correct"],
                             explanation=q["explanation"], points=q["points"],
+                            duration_minutes=5,
                             source={"item_id": str(item.id), "revision_id": str(item_rev.id),
                                     "title": item_rev.title}))
     for section_id in section_ids:

@@ -66,9 +66,14 @@ try{
   check('axe finds no violations on the Questions step',(await axe(page)).length===0);
   await act(()=>page.getByRole('button',{name:'Add 3 questions'}).click());
   await page.getByRole('heading',{name:/^Question 3/}).waitFor();
+  check('pasted questions receive a five-minute timer by default',await page.getByLabel('Time limit (minutes)').count()===3&&await page.getByLabel('Time limit (minutes)').nth(0).inputValue()==='5');
+  await act(()=>page.getByLabel('Time limit (minutes)').nth(0).fill('1'));
+  await act(()=>page.getByLabel('Time limit (minutes)').nth(1).fill('2'));
+  await act(()=>page.getByLabel('Time limit (minutes)').nth(2).fill('3'));
   await act(()=>page.getByRole('button',{name:'Next',exact:true}).click());
   await page.getByText('step 3 of 3').waitFor();
   check('the review step summarises the quiz',(await page.locator('main').innerText()).includes('3 questions · 4 points'));
+  check('the review step shows the combined question time limits',(await page.locator('main').innerText()).includes('6 minutes maximum'));
   check('the final button says Assign',await page.getByRole('button',{name:'Assign',exact:true}).count()===1);
   check('axe finds no violations on the Review step',(await axe(page)).length===0);
   await act(()=>page.getByRole('button',{name:'Assign',exact:true}).click());
@@ -79,6 +84,14 @@ try{
   const student=await newPage(browser,{state:S});await student.goto('/student');
   const todo=(await call(student,'GET','/dashboard/student/todo')).data;
   check('the student now sees Quiz 1 and not the unfinished activity',todo.todo.some(w=>w.title==='Quiz 1')&&!todo.todo.some(w=>w.title==='Activity 1'));
+  const attempt=(await call(student,'POST',`/learn/offerings/${O}/assessments/${quizId}/attempts`,{})).data;
+  const studentAttempt=await newPage(browser,{state:S});
+  await studentAttempt.goto(`/student/offerings/${O}/work/${quizId}/attempts/${attempt.id}`);
+  check('the student sees one timed question and not its answer key',await studentAttempt.getByText('Question 1 of 3').count()===1&&await studentAttempt.getByText('Time remaining:',{exact:false}).count()===1&&!JSON.stringify(attempt).includes('"correct"'));
+  const timerBefore=(await call(student,'GET',`/learn/offerings/${O}/attempts/${attempt.id}`)).data.questions[0].expires_at;
+  await studentAttempt.reload();
+  const timerAfter=(await call(student,'GET',`/learn/offerings/${O}/attempts/${attempt.id}`)).data.questions[0].expires_at;
+  check('reloading resumes with the same server-set question expiry',timerBefore===timerAfter);
 
   // ---- B: Save and exit keeps the work, and editing a published quiz says Update for students
   await page.goto(`/faculty/offerings/${O}/assessments/${quizId}/edit`);await page.waitForLoadState('networkidle');

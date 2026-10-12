@@ -44,10 +44,8 @@ try{
     const csrf=(await (await fetch('/api/auth/session')).json()).csrf;const H={'X-CSRF-Token':csrf,'Content-Type':'application/json'};
     const a=await (await fetch(`/api/teach/offerings/${o}/assessments`,{method:'POST',headers:H,body:JSON.stringify({kind:'online_quiz',title:'Keyboard walkthrough quiz'})})).json();
     const d=(await (await fetch(`/api/teach/offerings/${o}/assessments/${a.id}`)).json()).draft;const ids=[0,1,2,3].map(()=>crypto.randomUUID());
-    const q=[{key:crypto.randomUUID(),type:'multiple_choice',prompt:'Which one is a business form?',choices:ids.map((id,i)=>({id,text:['Partnership','Weather','Rock','Cloud'][i]})),correct:ids[0],explanation:'',points:'1'},
-      {key:crypto.randomUUID(),type:'true_false',prompt:'A sole proprietor has one owner.',choices:[],correct:true,explanation:'',points:'1'},
-      {key:crypto.randomUUID(),type:'short_answer',prompt:'Name one business form.',choices:[],correct:['partnership'],explanation:'',points:'1'}];
-    const s=await (await fetch(`/api/teach/offerings/${o}/assessments/${a.id}/draft`,{method:'PUT',headers:H,body:JSON.stringify({expected_counter:d.counter,title:'Keyboard walkthrough quiz',instructions:'',category_key:null,period:null,max_points:'3',available_from:null,deadline:null,allow_late:false,max_attempts:3,score_rule:'highest',include_in_grade:false,anchor_node_id:null,questions:q})})).json();
+    const q=[{key:crypto.randomUUID(),type:'multiple_choice',prompt:'Which one is a business form?',choices:ids.map((id,i)=>({id,text:['Partnership','Weather','Rock','Cloud'][i]})),correct:ids[0],explanation:'',points:'1'}];
+    const s=await (await fetch(`/api/teach/offerings/${o}/assessments/${a.id}/draft`,{method:'PUT',headers:H,body:JSON.stringify({expected_counter:d.counter,title:'Keyboard walkthrough quiz',instructions:'',category_key:null,period:null,max_points:'1',available_from:null,deadline:null,allow_late:false,max_attempts:3,score_rule:'highest',include_in_grade:false,anchor_node_id:null,questions:q})})).json();
     await fetch(`/api/teach/offerings/${o}/assessments/${a.id}/draft/publish`,{method:'POST',headers:H,body:JSON.stringify({expected_counter:s.counter})});
     return a.id;},O);
   created.quiz=quizId;
@@ -59,11 +57,10 @@ try{
   await tabTo(sp,named(/Start/,'button'),'Start the quiz');await press(sp,'Enter');
   await sp.getByText('Which one is a business form?').waitFor();
   await tabTo(sp,d=>d.type==='radio'&&/Partnership/.test(d.name),'the Partnership choice');await press(sp,'Space');
-  await tabTo(sp,d=>d.type==='radio'&&/^True/.test(d.name),'the True choice');await press(sp,'Space');
-  await tabTo(sp,d=>d.tag==='input'&&d.type==='text'||d.tag==='textarea','the short answer box');await sp.keyboard.type('partnership');await sp.waitForTimeout(1500);
-  await tabTo(sp,named(/Submit answers/,'button'),'Submit answers');await press(sp,'Enter');
+  await sp.waitForTimeout(500);
+  await tabTo(sp,named(/Submit quiz now/,'button'),'Submit quiz now');await press(sp,'Enter');
   await sp.getByRole('heading',{name:'Quiz submitted'}).waitFor();
-  check('a student answers all three question types and submits a quiz with the keyboard alone',(await sp.locator('main').innerText()).includes('3.00 / 3.00'));
+  check('a student answers the active timed question with the keyboard alone and submits early',(await sp.locator('main').innerText()).includes('1.00 / 1.00'));
   await sp.context().close();
 
   // ---------- B. faculty: dialog validation, editor, autosave conflict, publish ----------

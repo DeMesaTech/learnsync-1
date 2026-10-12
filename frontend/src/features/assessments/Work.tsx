@@ -99,11 +99,6 @@ export function WorkDetail(){
     </section></>;
 }
 
-const keyFor=(attemptId:string)=>{
-  try{const k=`learnsync:submit-key:${attemptId}`;const found=sessionStorage.getItem(k);if(found)return found;const fresh=crypto.randomUUID();sessionStorage.setItem(k,fresh);return fresh}
-  catch{return crypto.randomUUID()}
-};
-
 export function AttemptPage(){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const {assessmentId,attemptId}=useParams();
@@ -113,7 +108,8 @@ export function AttemptPage(){
   if(query.isPending)return <p>Loading your attempt…</p>;
   if(query.error||!query.data)return <section className="panel"><h2>Attempt not available</h2><p role="alert">{query.error?.message}</p><Link to={`${base}/${assessmentId}`}>Back to the quiz</Link></section>;
   if(query.data.state==='submitted')return <Finished attempt={query.data} back={`${base}/${assessmentId}`}/>;
-  return <Taking offering={offering} attempt={query.data} url={url} back={`${base}/${assessmentId}`}/>;
+  return <Taking attempt={query.data} url={url} back={`${base}/${assessmentId}`} offeringId={offering.id}
+    refresh={async()=>{const result=await query.refetch();if(result.data?.state==='submitted'){queryClient.invalidateQueries({queryKey:['learn-work',offering.id]});queryClient.invalidateQueries({queryKey:['learn-results',offering.id]})}}}/>;
 }
 
 function Finished({attempt,back}:{attempt:AttemptView;back:string}){
@@ -124,18 +120,31 @@ function Finished({attempt,back}:{attempt:AttemptView;back:string}){
     <p className="muted">The correct answers are not shown.</p><Link className="button primary" to={back} state={carried}>Back to the quiz</Link></section>;
 }
 
+const keyFor=(attemptId:string)=>{
+  try{const k=`learnsync:submit-key:${attemptId}`;const found=sessionStorage.getItem(k);if(found)return found;const fresh=crypto.randomUUID();sessionStorage.setItem(k,fresh);return fresh}
+  catch{return crypto.randomUUID()}
+};
+
 type SaveState='saved'|'saving'|'unsaved'|'failed';
 
-function Taking({offering,attempt,url,back}:{offering:OfferingSummary;attempt:AttemptView;url:string;back:string}){
+function Taking({attempt,url,back,offeringId,refresh}:{attempt:AttemptView;url:string;back:string;offeringId:string;refresh:()=>Promise<void>}){
   const ask=useConfirm();const toast=useToast();
   const carriedState=useLocation().state;
   const [answers,setAnswers]=useState<Record<string,unknown>>(attempt.answers);
   const [state,setState]=useState<SaveState>('saved');
   const [message,setMessage]=useState('');
+  const [remaining,setRemaining]=useState(0);
+  const latest=useRef(answers);const dirty=useRef(false);const timer=useRef<ReturnType<typeof setTimeout>>(undefined);const running=useRef<Promise<boolean>|null>(null);
+  const syncing=useRef(false);
+  const saveRef=useRef<()=>Promise<boolean>>(async()=>true);
+  const clockOffset=useRef(Date.parse(attempt.server_now)-Date.now());
   const [done,setDone]=useState<AttemptView|null>(null);
   const [submitting,setSubmitting]=useState(false);
-  const latest=useRef(answers);const dirty=useRef(false);const timer=useRef<ReturnType<typeof setTimeout>>(undefined);const running=useRef<Promise<boolean>|null>(null);
   const submitKey=useRef(keyFor(attempt.id));
+  const active=attempt.questions.find(q=>q.key===attempt.active_question_key);
+  const activeIndex=attempt.questions.findIndex(q=>q.key===attempt.active_question_key);
+  useEffect(()=>{latest.current=attempt.answers;setAnswers(attempt.answers);dirty.current=false;setState('saved')},[attempt]);
+  useEffect(()=>{clockOffset.current=Date.parse(attempt.server_now)-Date.now()},[attempt.server_now]);
 
   const save=async():Promise<boolean>=>{
     if(running.current)return running.current;
@@ -144,22 +153,29 @@ function Taking({offering,attempt,url,back}:{offering:OfferingSummary;attempt:At
     const sent=latest.current;
     const attemptSave=(async()=>{
       try{
-        await send('PUT',`${url}/answers`,{answers:sent});
+        if(active)await send('PUT',`${url}/answers`,{answers:{[active.key]:sent[active.key]}});
         if(latest.current===sent)dirty.current=false;
         setState(dirty.current?'unsaved':'saved');
         if(dirty.current){clearTimeout(timer.current);timer.current=setTimeout(()=>void save(),300)}   // typed while saving
         return !dirty.current;
       }
       catch(e){
+        if(e instanceof ApiError&&['question_locked','question_not_active'].includes(e.code)){
+          dirty.current=false;
+          setState('saved');
+          void refresh();
+          return true;
+        }
         if(e instanceof ApiError&&['attempt_closed','term_closed','closed'].includes(e.code)){setMessage(e.message);setState('failed');dirty.current=false;return true}
         setState('failed');return false;
       }finally{running.current=null}
     })();
     running.current=attemptSave;return attemptSave;
   };
+  saveRef.current=save;
   const change=(key:string,value:unknown)=>{
     const next={...latest.current,[key]:value};latest.current=next;dirty.current=true;setAnswers(next);setState('unsaved');
-    clearTimeout(timer.current);timer.current=setTimeout(()=>void save(),1200);
+    clearTimeout(timer.current);timer.current=setTimeout(()=>void save(),80);
   };
   useEffect(()=>{
     const warn=(e:BeforeUnloadEvent)=>{if(dirty.current)e.preventDefault()};
@@ -167,32 +183,58 @@ function Taking({offering,attempt,url,back}:{offering:OfferingSummary;attempt:At
     return()=>{removeEventListener('beforeunload',warn);clearTimeout(timer.current)};
   },[]);
 
-  async function submit(){
-    if(!await ask({title:'Submit your answers?',message:'You cannot change them afterwards.',yes:'Submit answers'}))return;
-    setSubmitting(true);setMessage('');clearTimeout(timer.current);
-    if(running.current)await running.current;
+  useEffect(()=>{
+    if(!active?.expires_at)return;
+    let refreshing=false;
+    const update=()=>{
+      const seconds=Math.max(0,Math.ceil((Date.parse(active.expires_at!)-(Date.now()+clockOffset.current))/1000));
+      setRemaining(seconds);
+      if(seconds===0&&!refreshing&&!syncing.current){
+        refreshing=true;syncing.current=true;
+        void (async()=>{await saveRef.current();await refresh()})().finally(()=>{syncing.current=false});
+      }
+    };
+    update();
+    const interval=setInterval(update,250);
+    return()=>clearInterval(interval);
+  },[active?.expires_at,active?.key,refresh]);
+
+  async function submitEarly(){
+    if(!await ask({title:'Submit your quiz now?',message:'Your saved answers will be scored and cannot be changed afterwards.',yes:'Submit quiz'}))return;
+    setSubmitting(true);setMessage('');
     try{
+      if(!await save()){setMessage('Your latest answer could not be saved. Retry saving before submitting.');return}
       const result=await post<AttemptView>(`${url}/submit`,{idempotency_key:submitKey.current,answers:latest.current});
-      dirty.current=false;queryClient.setQueryData(['attempt',attempt.id],result);queryClient.invalidateQueries({queryKey:['learn-work',offering.id]});queryClient.invalidateQueries({queryKey:['learn-results',offering.id]});setDone(result);celebrate();toast('Quiz submitted.');
+      dirty.current=false;setDone(result);celebrate();toast('Quiz submitted.');
+      queryClient.invalidateQueries({queryKey:['learn-work',offeringId]});
+      queryClient.invalidateQueries({queryKey:['learn-results',offeringId]});
     }catch(e){
-      setMessage(e instanceof ApiError&&['term_closed','closed','attempt_closed'].includes(e.code)?`${e.message} Your saved answers were kept.`:`${errorText(e)} Your answers are still here. Try submitting again.`);
+      setMessage(e instanceof ApiError&&['term_closed','closed','attempt_closed','question_locked'].includes(e.code)
+        ?e.message:errorText(e));
+      if(e instanceof ApiError&&['attempt_closed','question_locked'].includes(e.code))void refresh();
     }finally{setSubmitting(false)}
   }
+
   if(done)return <Finished attempt={done} back={back}/>;
   const saveText={saved:'All answers saved',saving:'Saving…',unsaved:'Saving soon…',failed:'Could not save. Check your connection; your answers are still on this page.'}[state];
+  const clock=`${Math.floor(remaining/60).toString().padStart(2,'0')}:${(remaining%60).toString().padStart(2,'0')}`;
   return <>
     <p className="back"><Link to={back} state={carriedState}>← Back to the quiz</Link></p>
     <div className="page-heading"><h2>Attempt {attempt.attempt_number}</h2><span className={`badge save-${state==='saved'?'saved':state==='failed'?'failed':'dirty'}`} role="status" aria-live="polite">{saveText}</span></div>
     {message&&<p className="warn" role="alert">{message}</p>}
     {state==='failed'&&<button onClick={()=>void save()}>Retry saving</button>}
-    <form onSubmit={e=>{e.preventDefault();void submit()}}>
-      {attempt.questions.map((q,i)=><fieldset className="panel" key={q.key}>
-        <legend>Question {i+1} · {q.points} point{q.points===1?'':'s'}</legend>
-        <p className="pre">{q.prompt}</p>
-        {q.type==='multiple_choice'&&q.choices.map(c=><label className="inline" key={c.id}><input className="quiz-answer-radio" type="radio" name={q.key} checked={answers[q.key]===c.id} onChange={()=>change(q.key,c.id)}/> {c.text}</label>)}
-        {q.type==='true_false'&&[true,false].map(v=><label className="inline" key={String(v)}><input className="quiz-answer-radio" type="radio" name={q.key} checked={answers[q.key]===v} onChange={()=>change(q.key,v)}/> {v?'True':'False'}</label>)}
-        {q.type==='short_answer'&&<label>Your answer<input value={typeof answers[q.key]==='string'?String(answers[q.key]):''} maxLength={1000} onChange={e=>change(q.key,e.target.value)}/></label>}
-      </fieldset>)}
-      <div className="actions"><button className="primary" disabled={submitting}>{submitting?'Submitting…':'Submit answers'}</button></div></form>
+    {active?<form onSubmit={e=>{e.preventDefault();void save()}}>
+      <fieldset className="panel">
+        <legend>Question {activeIndex+1} of {attempt.question_count} · {active.points} point{active.points===1?'':'s'}</legend>
+        <p className="badge" role="timer" aria-label={`Time remaining ${clock}`}>Time remaining: {clock}</p>
+        <p className="muted">This question locks when its timer ends. Your saved answer will be kept and the next question will open automatically.</p>
+        <p className="pre">{active.prompt}</p>
+        {active.type==='multiple_choice'&&active.choices.map(c=><label className="inline" key={c.id}><input className="quiz-answer-radio" type="radio" name={active.key} checked={answers[active.key]===c.id} onChange={()=>change(active.key,c.id)}/> {c.text}</label>)}
+        {active.type==='true_false'&&[true,false].map(v=><label className="inline" key={String(v)}><input className="quiz-answer-radio" type="radio" name={active.key} checked={answers[active.key]===v} onChange={()=>change(active.key,v)}/> {v?'True':'False'}</label>)}
+        {active.type==='short_answer'&&<label>Your answer<input value={typeof answers[active.key]==='string'?String(answers[active.key]):''} maxLength={1000} onChange={e=>change(active.key,e.target.value)}/></label>}
+      </fieldset>
+      <p className="muted">Question timers use the server clock. Reloading will resume this question with its remaining time.</p>
+      <div className="actions"><button type="button" className="primary" disabled={submitting} onClick={()=>void submitEarly()}>{submitting?'Submitting…':'Submit quiz now'}</button></div>
+    </form>:<section className="panel" role="status"><h2>Finishing your quiz…</h2><p>Your saved answers are being submitted.</p></section>}
   </>;
 }

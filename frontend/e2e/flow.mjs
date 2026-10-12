@@ -184,7 +184,10 @@ try{
   await stud.getByLabel('A real customer problem').check();
   await stud.waitForTimeout(1500);
   await shot(stud,'flow-3-student-quiz');
-  await stud.getByRole('button',{name:'Submit answers'}).click();
+  const attemptId=new URL(stud.url()).pathname.match(/\/attempts\/([^/]+)/)?.[1];
+  const current=await call(stud,'GET',`/learn/offerings/${O}/attempts/${attemptId}`);
+  check('the answer is saved against the active timed question',current.status===200&&current.data.answers[current.data.active_question_key]);
+  await stud.getByRole('button',{name:'Submit quiz now'}).click();
   await stud.getByRole('heading',{name:'Quiz submitted'}).waitFor();
   check('the quiz was scored without revealing the answers',(await text(stud)).includes('1.00 / 1.00')&&(await text(stud)).includes('correct answers are not shown'));
   await stud.goto(`/student/offerings/${O}/progress`);

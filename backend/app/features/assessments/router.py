@@ -302,7 +302,7 @@ def start_attempt(offering_id: UUID, assessment_id: UUID, actor=Depends(student)
 def get_own_attempt(offering_id: UUID, attempt_id: UUID, actor=Depends(student),
                     db: Session = Depends(get_db)):
     record_offering(db, offering_id, actor)
-    return attempts.student_view(db, attempts.own_attempt(db, actor, attempt_id, offering_id))
+    return attempts.own_attempt_view(db, actor, attempt_id, offering_id)
 
 
 @router.put(L + "/attempts/{attempt_id}/answers")

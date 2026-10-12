@@ -629,7 +629,7 @@ Faculty coverage and student completion are separate records and labels.
 | `assessment` | `id`, `offering_id`, kind (`online_quiz/offline_quiz/activity/exam/manual`), current published revision, archive state |
 | `assessment_revision` | assessment FK, version/state/revision counter, title, instructions, grading period/category, maximum points, availability/deadline, late policy, attempt policy, grading inclusion flag, author/publication metadata |
 | `assessment_section` | assessment and target section; no rows means all offering sections |
-| `quiz_question` | assessment revision FK, stable question key, type, prompt, choices JSON, private accepted answers, private explanation, points, order |
+| `quiz_question` | assessment revision FK, stable question key, type, prompt, choices JSON, private accepted answers, private explanation, points, per-question duration in minutes, order |
 | `quiz_attempt` | assessment revision FK, student FK, attempt number, state, start/submission times, total score/max score, submission idempotency key |
 | `quiz_answer` | attempt FK, question FK, student response, awarded points; unique attempt/question |
 | `activity_submission` | assessment revision FK, student FK, submission version, file FK, optional note, submitted time, late flag |
@@ -666,7 +666,7 @@ Defaults:
 - Make submit idempotent and enforce attempt limits transactionally.
 - Post-submission screens show totals and attempt metadata, not solutions or a reusable answer-review screen.
 
-Do not add an unrequested quiz timer initially. Availability/deadline enforcement is sufficient.
+Latest approved decision: every online-quiz question has a 1–180 minute time limit (default 5 minutes). The server starts each question clock in order, persists it with the attempt, locks saved answers when time expires, and starts the next question. The final timeout submits the saved answers automatically. Reload resumes the server's current question and expiry; late answer changes are rejected. This approved per-question timer supersedes the original decision below.
 
 #### Activity behavior
 

@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from app.features.assessments.models import (
     AssessmentRevision,
     QuizAttempt,
+    QuizQuestionClock,
     ResultPublication,
 )
 from app.main import app
@@ -180,6 +181,59 @@ def test_published_quiz_total_and_student_never_sees_keys(graded):
     assert all(set(ch) == {"id", "text"} for ch in attempt["questions"][0]["choices"])
 
 
+def test_question_timer_expires_locks_saves_and_advances_on_server(db, graded):
+    questions = [mc(), tf()]
+    quiz = make_quiz(graded, questions=questions)
+    student = graded["st1"]
+    attempt = start(student, graded, quiz["aid"]).json()
+    first = attempt["questions"][0]
+    second_key = questions[1]["key"]
+    assert first["duration_minutes"] == 5
+    assert attempt["active_question_key"] == first["key"]
+    assert attempt["question_count"] == 2 and len(attempt["questions"]) == 1
+    assert first["expires_at"]
+    early_future_answer = student.put(la(graded, f"/attempts/{attempt['id']}/answers"),
+                                      {"answers": {second_key: True}})
+    assert early_future_answer.status_code == 409
+    assert early_future_answer.json()["error"]["code"] == "question_not_active"
+
+    saved = student.put(la(graded, f"/attempts/{attempt['id']}/answers"),
+                        {"answers": {first["key"]: questions[0]["correct"]}})
+    assert saved.status_code == 200
+
+    first_clock = db.scalar(select(QuizQuestionClock).where(
+        QuizQuestionClock.attempt_id == uuid.UUID(attempt["id"]),
+        QuizQuestionClock.question_key == first["key"]))
+    first_clock.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db.commit()
+    late = student.put(la(graded, f"/attempts/{attempt['id']}/answers"),
+                       {"answers": {first["key"]: questions[0]["choices"][0]["id"]}})
+    assert late.status_code == 409 and late.json()["error"]["code"] == "question_locked"
+
+    resumed = student.get(la(graded, f"/attempts/{attempt['id']}")).json()
+    assert resumed["active_question_key"] == second_key
+    assert len(resumed["questions"]) == 2
+    assert resumed["questions"][0]["locked_at"]
+    assert resumed["questions"][0]["expires_at"] == first_clock.expires_at.isoformat()
+    assert resumed["questions"][1]["started_at"] == first_clock.expires_at.isoformat()
+    reloaded = student.get(la(graded, f"/attempts/{attempt['id']}")).json()
+    assert reloaded["questions"][1]["expires_at"] == resumed["questions"][1]["expires_at"]
+
+    assert student.put(la(graded, f"/attempts/{attempt['id']}/answers"),
+                       {"answers": {second_key: True}}).status_code == 200
+    second_clock = db.scalar(select(QuizQuestionClock).where(
+        QuizQuestionClock.attempt_id == uuid.UUID(attempt["id"]),
+        QuizQuestionClock.question_key == second_key))
+    second_clock.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db.commit()
+    finished = student.get(la(graded, f"/attempts/{attempt['id']}")).json()
+    assert finished["state"] == "submitted"
+    assert finished["score"] == 3.0
+    late_after_submit = student.put(la(graded, f"/attempts/{attempt['id']}/answers"),
+                                    {"answers": {second_key: False}})
+    assert late_after_submit.status_code == 409
+
+
 def test_drafts_are_invisible_and_tabs_cannot_overwrite_each_other(graded):
     aid = create(graded, "online_quiz", "Quiz")["id"]
     assert graded["st1"].get(la(graded, "/assessments")).json() == []
@@ -328,6 +382,9 @@ def test_answer_keys_lock_after_attempts_but_wording_does_not(graded):
     # ...as is changing points or the attempt limit
     pts = [{**q, "points": "9"} if i == 0 else q for i, q in enumerate(published["questions"])]
     assert publish(graded, aid, questions=pts, max_attempts=2).status_code == 409
+    timers = [{**q, "duration_minutes": q["duration_minutes"] + 1}
+              if i == 0 else q for i, q in enumerate(published["questions"])]
+    assert publish(graded, aid, questions=timers, max_attempts=2).status_code == 409
     assert publish(graded, aid, questions=published["questions"], max_attempts=3).status_code == 409
     # fixing wording and the deadline is fine, and keeps question identities
     typo = [{**q, "prompt": q["prompt"] + " (reworded)"} for q in published["questions"]]

@@ -102,6 +102,7 @@ class QuizQuestion(Base):
         UniqueConstraint("revision_id", "key", name="question_key_unique"),
         CheckConstraint("type IN ('multiple_choice','true_false','short_answer')",
                         name="question_type"),
+        CheckConstraint("duration_minutes BETWEEN 1 AND 180", name="question_duration"),
     )
     id: Mapped[uuid.UUID] = uid()
     revision_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assessment_revision.id"),
@@ -115,6 +116,19 @@ class QuizQuestion(Base):
     explanation: Mapped[str] = mapped_column(Text, default="")        # private
     source: Mapped[dict | None] = mapped_column(JSONB)                # AI drafts: where it came from
     points: Mapped[Decimal] = mapped_column(POINTS, default=Decimal(1))
+    duration_minutes: Mapped[int] = mapped_column(Integer, default=5)
+
+
+class QuizQuestionClock(Base):
+    """Server-authoritative timer and lock state for one question in one attempt."""
+    __tablename__ = "quiz_question_clock"
+    __table_args__ = (UniqueConstraint("attempt_id", "question_key", name="question_clock_unique"),)
+    id: Mapped[uuid.UUID] = uid()
+    attempt_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("quiz_attempt.id"), index=True)
+    question_key: Mapped[str] = mapped_column(String(36))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class QuizAttempt(Base):

@@ -28,6 +28,7 @@ def test_the_three_question_types_are_read_with_points_and_explanations():
     mc, tf, short = parsed["questions"]
     assert mc["type"] == "multiple_choice" and len(mc["choices"]) == 4 and mc["points"] == "2"
     assert mc["correct"] == mc["choices"][0]["id"] and mc["explanation"].startswith("A sole proprietorship")
+    assert mc["duration_minutes"] == tf["duration_minutes"] == short["duration_minutes"] == 5
     assert tf["type"] == "true_false" and tf["correct"] is True and tf["points"] == "1" and tf["choices"] == []
     assert short["type"] == "short_answer" and short["correct"] == ["Sole proprietorship", "one-person firm"]
     assert len({q["key"] for q in parsed["questions"]}) == 3                       # every question gets its own identity
@@ -90,6 +91,12 @@ def test_parsed_questions_can_be_saved_into_a_quiz_draft(graded):
         "questions": parsed.json()["questions"]})
     assert saved.status_code == 200, saved.text
     assert float(saved.json()["max_points"]) == 4.0                                 # 2 + 1 + 1
+    for invalid in (0, 181):
+        question = {**parsed.json()["questions"][0], "duration_minutes": invalid}
+        rejected = c["fac"].put(base + f"/assessments/{made['id']}/draft", {
+            "expected_counter": saved.json()["counter"], "title": "Pasted quiz",
+            "category_key": "quiz", "period": "midterm", "questions": [question]})
+        assert rejected.status_code == 422
 
 
 def test_the_parse_endpoint_is_for_the_teachers_own_subject_only(db, graded):
@@ -113,6 +120,8 @@ def test_duplicating_an_assessment_makes_a_hidden_draft_without_dates_or_records
     copy = c["fac"].get(base + f"/assessments/{made.json()['id']}").json()
     assert copy["published"] is None and copy["draft"]["title"] == "Copy of Quiz 1"
     assert len(copy["draft"]["questions"]) == 3 and copy["draft"]["category_key"] == "quiz"
+    assert [q["duration_minutes"] for q in copy["draft"]["questions"]] == [
+        q["duration_minutes"] for q in c["fac"].get(base + f"/assessments/{quiz['aid']}").json()["published"]["questions"]]
     assert copy["draft"]["deadline"] is None and copy["draft"]["available_from"] is None
     assert len(c["fac"].get(base + "/assessments").json()) == before + 1
     assert "Copy of Quiz 1" not in [w["title"] for w in home(c)["todo"]]               # students see nothing
