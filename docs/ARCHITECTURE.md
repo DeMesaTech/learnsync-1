@@ -10,6 +10,8 @@ Files remain outside webroot and are delivered by an authorized API. Drafts use 
 
 Approved schema/lifecycles: IMPLEMENTATION_PLAN.md sections 3-4. AI retrieval restrictions: section 6.
 
+Section deletion is admin-only and limited to an open term. The command locks the section and refuses deletion while any roster history, enrollment, offering, targeted content or announcement, teaching coverage, assessment assignment, or attendance record references it.
+
 
 ### Additions: learning order, paging and chat deletion
 - `learning_item.position` orders items inside a chapter/topic; students read them in syllabus order, then position (`teaching/items.ordered_published`, the single source for the lesson list, the dashboard next step and the Next link). `PUT /api/teach/offerings/{id}/items-order` reorders one group. Learner payloads add `completed`, `up_next`, `next_lesson`; work payloads add `bucket` and `late_allowed` (`assessments/learner.bucket_of`, shared with the dashboard).

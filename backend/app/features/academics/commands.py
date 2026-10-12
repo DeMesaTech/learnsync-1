@@ -6,6 +6,12 @@ from sqlalchemy import delete, select
 from app.errors import fail
 from app.features.accounts.commands import audit
 from app.features.accounts.models import Account, now
+from app.features.assessments.models import AssessmentSection, AttendanceSession
+from app.features.teaching.models import (
+    AnnouncementSection,
+    LearningItemSection,
+    TeachingCoverage,
+)
 
 from .models import (
     AcademicTerm,
@@ -209,6 +215,30 @@ def create_section_batch(db, actor, term_id, data):
         audit(db, actor, "section.created", "section", section.id, {"name": section.name})
     db.commit()
     return created
+
+
+def delete_section(db, actor, section_id):
+    section = db.scalar(select(Section).where(Section.id == section_id).with_for_update())
+    if not section:
+        fail(404, "not_found", "Section not found.")
+    open_term(db, section.term_id)
+    references = (
+        select(SectionMember.id).where(SectionMember.section_id == section.id),
+        select(OfferingSection.section_id).where(OfferingSection.section_id == section.id),
+        select(Enrollment.id).where(Enrollment.section_id == section.id),
+        select(EnrollmentException.id).where(EnrollmentException.section_id == section.id),
+        select(LearningItemSection.item_id).where(LearningItemSection.section_id == section.id),
+        select(TeachingCoverage.id).where(TeachingCoverage.section_id == section.id),
+        select(AnnouncementSection.announcement_id).where(AnnouncementSection.section_id == section.id),
+        select(AssessmentSection.assessment_id).where(AssessmentSection.section_id == section.id),
+        select(AttendanceSession.id).where(AttendanceSession.section_id == section.id),
+    )
+    if any(db.scalar(query.limit(1)) is not None for query in references):
+        fail(409, "section_in_use",
+             "This section has students or academic records. It cannot be deleted.")
+    audit(db, actor, "section.deleted", "section", section.id, {"name": section.name})
+    db.delete(section)
+    db.commit()
 
 
 def place_in_section(db, section, student_id):

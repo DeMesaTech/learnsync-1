@@ -116,6 +116,12 @@ def create_section_batch(term_id: UUID, data: SectionBatchInput, actor=Depends(a
                          for section in sections]}
 
 
+@router.delete("/sections/{section_id}", status_code=204)
+def delete_section(section_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):
+    commands.delete_section(db, actor, section_id)
+    return Response(status_code=204)
+
+
 @router.get("/sections/{section_id}/members")
 def section_members(section_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):
     return queries.section_members(db, section_id)
