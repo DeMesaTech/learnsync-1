@@ -2,6 +2,18 @@
 
 Implementation started 2026-10-06. No milestone is yet accepted.
 
+### 2026-10-13 (Prospectus data cleanup command)
+- Added a read-only-by-default maintenance command that can remove uncommitted prospectus previews, delete never-used subjects, archive subjects referenced by offerings, preserve committed import records, and remove only preview upload files with no remaining references. Apply requires the exact configured database name and refuses `_test` databases; each applied cleanup is audited.
+- Added a regression covering dry-run non-mutation, preview and unused-subject deletion, referenced-subject archival, committed-import preservation, and safe orphan upload removal.
+- Passed: backend Ruff, CLI help/argument registration, Python compile check, and `git diff --check`.
+- Blocked: database-backed cleanup regression could not run because local Postgres is unavailable (127.0.0.1:5432); Docker is not installed in this environment. Hostinger cleanup has not been run; it must be performed by the operator after deploying the command, taking a verified backup, and reviewing the dry run.
+
+### 2026-10-13 (Prospectus table placement review)
+- DOCX subject tables now require a clear year and semester heading for that table; an unheaded table does not inherit placement from the preceding table. Its subject placement remains blank, with both an overall warning and a row-level review notice. Labeled extraction remains limited to Subject Code, Descriptive Title, and Units.
+- Added a parser regression for an unheaded table following a correctly headed table. The supplied EVSU curriculum was directly rechecked after the change: 47 subjects, all six expected year/semester groupings, and no warnings.
+- Passed: backend Ruff, frontend ESLint, frontend production build/type-check, direct parser verification, and `git diff --check`.
+- Blocked: pytest could not initialize because Postgres at `127.0.0.1:15432` timed out during fixture setup. The production build completed with the existing large-JavaScript-chunk warning.
+
 ### 2026-10-13 (Delete unused sections)
 - Added an admin-only delete action with confirmation to the open-term sections list. The API locks the section and permits hard deletion only when it has no student history, offering or enrollment links, targeted teaching content, announcements, coverage, assessments, or attendance records; a 409 explains when historical use protects it.
 - Added regression coverage for successful deletion of an unused section and blocked deletion of assigned and withdrawn-history sections.

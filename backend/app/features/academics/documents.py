@@ -178,6 +178,7 @@ CODE = r"[A-Z]{1,6}(?:[ \-][A-Z]{1,6}){0,2}[ \-]?\d{1,4}[A-Z]?"
 ROW_RE = re.compile(rf"^\s*(?P<code>{CODE})\s+(?P<title>.+?)\s+(?P<units>\d{{1,2}}(?:\.\d)?)"
                     r"(?:\s+\d{1,3}(?:\.\d)?){0,3}\s*$", re.IGNORECASE)
 LOOKS_LIKE_ROW = re.compile(rf"^\s*{CODE}\s+\S", re.IGNORECASE)
+TABLE_BOUNDARY = "\x00PROSPECTUS_TABLE_BOUNDARY\x00"
 
 
 def read_lines(path, ext):
@@ -191,6 +192,7 @@ def read_lines(path, ext):
             if isinstance(child, CT_P):
                 lines.append(Paragraph(child, doc).text)
             elif isinstance(child, CT_Tbl):
+                lines.append(TABLE_BOUNDARY)
                 rows = Table(child, doc).rows
                 header = [_norm(cell.text) for cell in rows[0].cells] if rows else []
                 columns = {name: header.index(name) for name in
@@ -217,11 +219,19 @@ def read_lines(path, ext):
 def parse_prospectus(lines):
     """Best-effort subject draft: [{code,title,units,year_level,semester}], plus warnings."""
     draft, warnings, year, sem = [], [], None, None
+    table_year_seen = table_semester_seen = False
     for line in lines:
+        if line == TABLE_BOUNDARY:
+            if not (table_year_seen and table_semester_seen):
+                year = sem = None
+            table_year_seen = table_semester_seen = False
+            continue
         if m := YEAR_RE.search(line):
             year = YEAR_WORDS[m.group(1).lower()]
+            table_year_seen = True
         if m := SEM_RE.search(line):
             sem = SEM_WORDS.get((m.group(1) or "").lower()) or int(m.group(2))
+            table_semester_seen = True
         if m := ROW_RE.match(line):
             draft.append({"code": re.sub(r"\s+", " ", m["code"]).upper(), "title": m["title"],
                           "units": m["units"], "year_level": year, "semester": sem})

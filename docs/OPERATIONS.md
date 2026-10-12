@@ -8,6 +8,21 @@ Run Alembic before starting the API. Never initialize from old learnsync.sql. Bo
 
 Detailed configuration and backup rules: IMPLEMENTATION_PLAN.md section 7. Verified runnable commands will be added as each milestone passes.
 
+## Clearing old prospectus imports and catalog entries
+
+The maintenance command defaults to a read-only preview. It removes only uncommitted prospectus previews; committed import records remain. It deletes catalog subjects that have never been used by an offering and archives referenced subjects, preserving their offering and academic history. It removes a preview's private upload only when no other database record refers to that file. Every applied run is recorded in the audit log.
+
+Before applying, stop the API so no concurrent writes are in progress and make a verified database/uploads backup using the backup procedure below. Run from `backend/` in PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.cli clean-prospectus
+.\.venv\Scripts\python.exe -m app.cli clean-prospectus --apply --confirm-database learnsync_v2
+```
+
+Review the dry-run counts first. Replace `learnsync_v2` with the exact database name printed by the preview. The command refuses `_test` databases and any apply request whose confirmation does not match the configured database.
+
+For Hostinger, stop the production API, take and verify a backup, configure `DATABASE_URL` and `UPLOAD_ROOT` for the production database and private upload directory in the server environment, then upload/deploy this code. Run the same dry-run over SSH; after reviewing it, use `--apply --confirm-database <exact-database-name>`. Never paste database credentials into chat or put them directly in a command that will be saved in shell history.
+
 ## AI (Milestone 5)
 
 Settings (`.env`): `GROQ_API_KEY`, `GROQ_CHAT_MODEL`, `GROQ_QUIZ_MODEL`, `AI_TIMEOUT_SECONDS`, `AI_MESSAGES_PER_MINUTE` (per student, default 10) and `AI_PROVIDER_MODE`.

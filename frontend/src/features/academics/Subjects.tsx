@@ -148,6 +148,7 @@ export function ProspectusReview() {
         {!locked && <button type="button" aria-label={`Remove ${r.code || 'row'}`} onClick={() => { setRows(list.filter((_, j) => j !== i)); setDirty(true) }}>Remove</button>}
         <div className="edit-notes">
           {r.exists && <span className="badge">Already in catalog; will be skipped</span>}
+          {(r.year_level === null || r.semester === null) && <span className="warn">Year or semester was not detected from a clear heading. Confirm placement before saving.</span>}
           {r.errors?.map(e => <span className="error" role="alert" key={e}>{e}</span>)}
         </div>
       </div>)}

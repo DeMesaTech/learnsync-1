@@ -311,6 +311,32 @@ def test_docx_subject_rows_keep_their_year_and_semester_heading(tmp_path):
     assert warnings == []
 
 
+def test_docx_table_without_a_clear_year_and_semester_heading_is_unplaced(tmp_path):
+    doc = Document()
+    doc.add_paragraph("1st YEAR — 1st Semester")
+    for code, title in (("ENT 101", "Recognized Subject"),):
+        table = doc.add_table(rows=1, cols=3)
+        for cell, value in zip(table.rows[0].cells,
+                               ("Subject Code", "Descriptive Title", "Units")):
+            cell.text = value
+        for cell, value in zip(table.add_row().cells, (code, title, "3")):
+            cell.text = value
+    table = doc.add_table(rows=1, cols=3)
+    for cell, value in zip(table.rows[0].cells,
+                           ("Subject Code", "Descriptive Title", "Units")):
+        cell.text = value
+    for cell, value in zip(table.add_row().cells, ("ENT 102", "Unplaced Subject", "4")):
+        cell.text = value
+
+    path = tmp_path / "missing-heading.docx"
+    doc.save(path)
+    draft, warnings = documents.parse_prospectus(documents.read_lines(path, ".docx"))
+
+    assert [(row["code"], row["year_level"], row["semester"]) for row in draft] == [
+        ("ENT 101", 1, 1), ("ENT 102", None, None)]
+    assert any("no year level/semester" in warning for warning in warnings)
+
+
 def docx_bytes(lines):
     doc = Document()
     for line in lines:

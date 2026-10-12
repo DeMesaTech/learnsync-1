@@ -45,7 +45,7 @@ Earlier requirements are superseded where they conflict with later decisions. Sp
 Keep or implement:
 
 - School years and semesters.
-- Initial prospectus upload and reviewed subject extraction.
+- Initial prospectus upload and reviewed subject extraction. For labeled DOCX curriculum tables, extract only the Subject Code, Descriptive Title, and Units columns. Associate each whole table with the year and semester in its heading (`1st year` → `1`, `2nd semester` → `2`). If either heading is unclear for a table, keep both placement fields blank and flag the subject rows for review rather than inheriting placement from a prior table.
 - Subject catalog management.
 - Sections and student rosters. Admins can create a chosen number of sections at once; names use the next available alphabetical labels for that year level (for example, `BSE 1A`, `BSE 1B`), without duplicating existing section letters. An unused section may be deleted; sections referenced by current or historical academic records are protected.
 - Regular student enrollment through section membership.

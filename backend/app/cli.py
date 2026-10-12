@@ -4,6 +4,7 @@ import json
 import os
 
 from sqlalchemy import select
+from sqlalchemy.engine import make_url
 
 from .config import settings
 from .db import SessionLocal
@@ -23,6 +24,11 @@ def main():
     sub.add_parser("seed-demo")
     sub.add_parser("reindex-chunks")
     sub.add_parser("ai-check")
+    cleanup = sub.add_parser("clean-prospectus",
+                             help="preview or safely clear old prospectus data")
+    cleanup.add_argument("--apply", action="store_true", help="apply the cleanup")
+    cleanup.add_argument("--confirm-database",
+                         help="required with --apply; must exactly match the configured database name")
     manifest = sub.add_parser("backup-manifest", help="describe the database and uploads for a backup")
     manifest.add_argument("--uploads", required=True)
     manifest.add_argument("--out", required=True)
@@ -34,7 +40,8 @@ def main():
     revoke = sub.add_parser("revoke-restored", help="end sessions and emailed links in a restored COPY")
     revoke.add_argument("--database-url", required=True)
     args = parser.parse_args()
-    if args.command in ("backup-manifest", "verify-restore", "revoke-restored"):
+    if args.command in ("backup-manifest", "verify-restore", "revoke-restored",
+                        "clean-prospectus"):
         return maintenance(args)
     with SessionLocal() as db:
         if args.command == "bootstrap-admin":
@@ -82,6 +89,41 @@ def maintenance(args):
     from pathlib import Path
 
     from . import backup
+    if args.command == "clean-prospectus":
+        database = make_url(settings().database_url)
+        if not database.database:
+            raise SystemExit("Cleanup refused: the configured database name is unavailable.")
+        if args.apply:
+            if database.database.endswith("_test"):
+                raise SystemExit("Cleanup refused: test databases cannot be cleaned by this command.")
+            if args.confirm_database != database.database:
+                raise SystemExit(
+                    "Cleanup refused: pass --confirm-database with the exact configured database name.")
+
+        host = database.host or "local"
+        port = database.port or "default"
+        print(f"Database target: {host}:{port}/{database.database}")
+        from . import main as _app  # noqa: F401 - register every model and stored-file reference
+        from .db import SessionLocal
+        from .prospectus_cleanup import clean_prospectus_data
+
+        with SessionLocal() as db:
+            report = clean_prospectus_data(db, args.apply, settings().upload_root)
+        print(f"Uncommitted prospectus previews to delete: {report['drafts_deleted']}")
+        print(f"Committed prospectus imports preserved: {report['committed_imports_preserved']}")
+        print(f"Unused subjects to delete: {report['subjects_deleted']} "
+              f"{report['subject_codes_deleted']}")
+        print(f"Referenced subjects to archive: {report['subjects_archived']} "
+              f"{report['subject_codes_archived']}")
+        print(f"Old preview uploads removed: {report['upload_files_deleted']}")
+        for warning in report["upload_file_cleanup_warnings"]:
+            print(f"WARNING: {warning}")
+        if not args.apply:
+            print("Dry run only. Stop the API, make a verified backup, then rerun with "
+                  f"--apply --confirm-database {database.database} to apply.")
+        else:
+            print("Prospectus cleanup applied.")
+        return
     if args.command == "backup-manifest":
         try:
             data = backup.snapshot(args.database_url or settings().database_url, args.uploads)
