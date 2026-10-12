@@ -1,3 +1,5 @@
+import re
+
 from fastapi import HTTPException
 from sqlalchemy import delete, select
 
@@ -165,6 +167,48 @@ def create_section(db, actor, term_id, data):
     audit(db, actor, "section.created", "section", section.id, {"name": data.name})
     db.commit()
     return section
+
+
+def create_section_batch(db, actor, term_id, data):
+    term = open_term(db, term_id)
+    existing = list(db.scalars(select(Section).where(Section.term_id == term.id)))
+    used_names = {section.name.casefold() for section in existing}
+    used_suffixes = set()
+    suffix_pattern = re.compile(
+        rf"^(?:BSE\s*)?{data.year_level}\s*[- ]?\s*([A-Z]+)$", re.IGNORECASE)
+    for section in existing:
+        if section.year_level != data.year_level:
+            continue
+        match = suffix_pattern.fullmatch(section.name.strip())
+        if match:
+            used_suffixes.add(match.group(1).upper())
+
+    def suffix(index):
+        result = ""
+        while index:
+            index, remainder = divmod(index - 1, 26)
+            result = chr(ord("A") + remainder) + result
+        return result
+
+    created = []
+    index = 1
+    while len(created) < data.count:
+        label = suffix(index)
+        name = f"BSE {data.year_level}{label}"
+        index += 1
+        if label in used_suffixes or name.casefold() in used_names:
+            continue
+        section = Section(term_id=term.id, name=name, year_level=data.year_level)
+        db.add(section)
+        created.append(section)
+        used_suffixes.add(label)
+        used_names.add(name.casefold())
+
+    db.flush()
+    for section in created:
+        audit(db, actor, "section.created", "section", section.id, {"name": section.name})
+    db.commit()
+    return created
 
 
 def place_in_section(db, section, student_id):

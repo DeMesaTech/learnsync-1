@@ -47,7 +47,7 @@ Keep or implement:
 - School years and semesters.
 - Initial prospectus upload and reviewed subject extraction.
 - Subject catalog management.
-- Sections and student rosters.
+- Sections and student rosters. Admins can create a chosen number of sections at once; names use the next available alphabetical labels for that year level (for example, `BSE 1A`, `BSE 1B`), without duplicating existing section letters.
 - Regular student enrollment through section membership.
 - Explicit subject enrollment exceptions for irregular students.
 - Teacher assignments and teaching-section associations.

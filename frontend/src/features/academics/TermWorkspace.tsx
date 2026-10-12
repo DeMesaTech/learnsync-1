@@ -92,7 +92,7 @@ export function TermWorkspace(){
       </section>
     }
 
-    {dialog==='section'&&<SectionDialog termId={term.id} yearLevels={programYears} onClose={()=>setDialog(null)} onDone={()=>{setDialog(null);refresh()}}/>}
+    {dialog==='section'&&<SectionDialog termId={term.id} yearLevels={programYears} sections={sections.data??[]} onClose={()=>setDialog(null)} onDone={()=>{setDialog(null);refresh()}}/>}
     {dialog==='offering'&&<BulkAssignDialog termId={term.id} termSequence={term.sequence} sections={sections.data??[]} existing={offerings.data??[]}
       onClose={()=>setDialog(null)} onDone={()=>{setDialog(null);refresh()}}/>}
     {editing&&<OfferingDialog sections={sections.data??[]} offering={editing}
@@ -100,19 +100,42 @@ export function TermWorkspace(){
   </>;
 }
 
-function SectionDialog({termId,yearLevels,onClose,onDone}:{termId:string;yearLevels:number[];onClose:()=>void;onDone:()=>void}){
+function SectionDialog({termId,yearLevels,sections,onClose,onDone}:{termId:string;yearLevels:number[];sections:Section[];onClose:()=>void;onDone:()=>void}){
   const [error,setError]=useState('');
-  async function submit(e:FormEvent<HTMLFormElement>){
-    e.preventDefault();const f=new FormData(e.currentTarget);
-    try{await post(`/terms/${termId}/sections`,{name:f.get('name'),year_level:Number(f.get('year_level'))});onDone()}
-    catch(err){setError(errorText(err))}
+  const [yearLevel,setYearLevel]=useState(yearLevels[0]??1);
+  const [count,setCount]=useState(1);
+  const [busy,setBusy]=useState(false);
+  const matchingSections=sections.filter(section=>section.year_level===yearLevel);
+  const existingSuffixes=new Set(matchingSections.flatMap(section=>{
+    const match=section.name.trim().match(new RegExp(`^(?:BSE\\s*)?${yearLevel}\\s*[- ]?\\s*([A-Z]+)$`,'i'));
+    return match?[match[1].toUpperCase()]:[];
+  }));
+  const generatedNames:string[]=[];
+  if(Number.isInteger(count)&&count>=1&&count<=26){
+    for(let index=1;generatedNames.length<count;index++){
+      let value=index;
+      let suffix='';
+      while(value){value--;suffix=String.fromCharCode(65+value%26)+suffix;value=Math.floor(value/26)}
+      const name=`BSE ${yearLevel}${suffix}`;
+      if(!existingSuffixes.has(suffix)&&!sections.some(section=>section.name.toLocaleLowerCase()===name.toLocaleLowerCase())){
+        generatedNames.push(name);
+        existingSuffixes.add(suffix);
+      }
+    }
   }
-  return <Dialog title="Add section" onClose={onClose}><form onSubmit={submit}>
-    <label>Section name<input name="name" required maxLength={60} placeholder="BSE 1-A"/></label>
-    <label>Year level<select name="year_level" defaultValue={String(yearLevels[0])}>{yearLevels.map(n=><option key={n} value={n}>{yearLabel(n)}</option>)}</select></label>
+  async function submit(e:FormEvent<HTMLFormElement>){
+    e.preventDefault();setBusy(true);setError('');
+    try{await post(`/terms/${termId}/sections/bulk`,{year_level:yearLevel,count});onDone()}
+    catch(err){setError(errorText(err))}finally{setBusy(false)}
+  }
+  return <Dialog title="Add sections" onClose={()=>busy?false:onClose()}><form onSubmit={submit}>
+    <label>Year level<select value={yearLevel} onChange={e=>setYearLevel(Number(e.target.value))}>{yearLevels.map(n=><option key={n} value={n}>{yearLabel(n)}</option>)}</select></label>
+    <label>Number of sections<input type="number" min={1} max={26} step={1} value={count} onChange={e=>setCount(Number(e.target.value))} required/></label>
+    <p className="muted">Section names are generated alphabetically for this year level. Existing section letters are skipped.</p>
+    {generatedNames.length>0&&<p><strong>Will create:</strong> {generatedNames.join(', ')}</p>}
     <p className="muted">The available years follow the program length detected from prospectus subject placements.</p>
     {error&&<p role="alert">{error}</p>}
-    <div className="actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary">Add section</button></div>
+    <div className="actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button><button className="primary" disabled={busy||!Number.isInteger(count)||count<1||count>26||generatedNames.length!==count}>{busy?'Creating…':`Create ${count} section${count===1?'':'s'}`}</button></div>
   </form></Dialog>;
 }
 

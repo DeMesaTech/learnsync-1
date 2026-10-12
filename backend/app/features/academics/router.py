@@ -18,6 +18,7 @@ from .schemas import (
     Reason,
     Revision,
     SchoolYearInput,
+    SectionBatchInput,
     SectionInput,
     SubjectInput,
     SubjectUpdate,
@@ -104,6 +105,15 @@ def create_section(term_id: UUID, data: SectionInput, actor=Depends(admin),
     section = commands.create_section(db, actor, term_id, data)
     return {"id": section.id, "term_id": section.term_id, "name": section.name,
             "year_level": section.year_level, "member_count": 0}
+
+
+@router.post("/terms/{term_id}/sections/bulk", status_code=201)
+def create_section_batch(term_id: UUID, data: SectionBatchInput, actor=Depends(admin),
+                         db: Session = Depends(get_db)):
+    sections = commands.create_section_batch(db, actor, term_id, data)
+    return {"sections": [{"id": section.id, "term_id": section.term_id, "name": section.name,
+                          "year_level": section.year_level, "member_count": 0}
+                         for section in sections]}
 
 
 @router.get("/sections/{section_id}/members")

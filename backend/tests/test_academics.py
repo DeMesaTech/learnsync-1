@@ -86,6 +86,26 @@ def test_placement_mismatch_is_rejected(world):
     assert response.json()["error"]["code"] == "placement_mismatch"
 
 
+def test_bulk_section_create_generates_alphabetical_names_per_year(world):
+    admin, term_id = world["admin"], world["term"]["id"]
+
+    created = admin.post(f"/api/terms/{term_id}/sections/bulk",
+                         {"year_level": 1, "count": 3})
+
+    assert created.status_code == 201, created.text
+    assert [section["name"] for section in created.json()["sections"]] == [
+        "BSE 1C", "BSE 1D", "BSE 1E"]
+    next_batch = admin.post(f"/api/terms/{term_id}/sections/bulk",
+                            {"year_level": 1, "count": 2})
+    assert [section["name"] for section in next_batch.json()["sections"]] == ["BSE 1F", "BSE 1G"]
+    other_year = admin.post(f"/api/terms/{term_id}/sections/bulk",
+                            {"year_level": 2, "count": 2})
+    assert [section["name"] for section in other_year.json()["sections"]] == [
+        "BSE 2A", "BSE 2B"]
+    assert admin.post(f"/api/terms/{term_id}/sections/bulk",
+                      {"year_level": 1, "count": 27}).status_code == 422
+
+
 def test_one_active_section_per_term_and_withdrawal_history(db, world):
     s1 = world["students"][0]
     a, b = world["sections"]

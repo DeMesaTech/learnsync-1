@@ -67,6 +67,11 @@ class SectionInput(BaseModel):
     year_level: int = Field(ge=1, le=6)
 
 
+class SectionBatchInput(BaseModel):
+    year_level: int = Field(ge=1, le=6)
+    count: int = Field(ge=1, le=26)
+
+
 class MemberInput(BaseModel):
     student_id: uuid.UUID
 
