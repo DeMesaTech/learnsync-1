@@ -1,5 +1,34 @@
 # Acceptance status
 
+### 2026-10-15 (Prospectus college confirmation)
+- Added a college confirmation dialog to the reviewed prospectus page. **Create subjects** opens the dialog; the admin must choose an active college and confirm before commit. New subjects receive that college; existing catalog subjects are left unchanged.
+- The commit API requires the selected college, validates that it is active while locking its row against concurrent changes, and records the college in the audit event.
+- Passed: `pytest tests\test_imports.py -q -k prospectus` (3 passed), backend Ruff, frontend ESLint, TypeScript build, production build, editor diagnostics, and `git diff --check`. Browser smoke confirmed the dialog and the empty-college guidance on the current review page; no college was added to the local database.
+- The browser’s existing review draft had many rows and required dispatching the click event to activate the bottom button in the smoke check; regular pointer automation was intercepted by the tall review form.
+
+### 2026-10-15 (Local database reset and administrator bootstrap)
+- Confirmed the configured target was local `learnsync_v2` on `localhost`; created and verified a pre-reset custom-format database dump in the private session files folder.
+- When the guarded reset was about to run, the database was already empty: no accounts and no rows in application tables. The guarded truncate therefore did not run. Bootstrapped the previous admin identity (`admin.bse@gmvcc.edu`) as the sole active account using the supported CLI; the database contains only the bootstrap audit event outside that account.
+- Verified no rows remain in any other application table, the Alembic revision remains `b9e4bfe1a9c0`, and the restarted API returned `{"status":"ok","application":"learnsync-v2"}`.
+- A one-time password was generated for the administrator; it is provided to the user in the task response and is not recorded here.
+
+### 2026-10-15 (Fresh database schema restored)
+- Applied the backend Alembic migrations against the local `learnsync_v2` database so the missing `college` table and related app schema were created before the admin subject page was reloaded.
+- Revalidated the working admin subject screen at `http://127.0.0.1:5173/admin/subjects`: after refresh it loaded the page shell and stopped returning the previous 500 `relation "college" does not exist` error.
+- Validation completed: `cd backend; .\.venv\Scripts\python -m alembic upgrade head` succeeded, and `cd backend; .\.venv\Scripts\python -m pytest tests/test_academics.py -q` passed (`20 passed` in 13.29s).
+- Notes: database setup was restored in the local project environment; no production or non-test database content was altered beyond applying the existing migration chain for this repo.
+
+### 2026-10-15 (College grouping and Sections tab refresh)
+- Added a database `college` table, nullable `subject.college_id`, and admin CRUD routes for colleges while keeping the existing `subject` catalog intact.
+- Updated the prospectus subject editor to assign subjects to a college, filter the subject list by college, and keep unassigned subjects valid.
+- Refreshed the term Sections workspace with year-level tabs, a section selector, and a real roster table showing student number, name, email, and account status. Existing section creation, import, full student management, deletion, and offering flows remain in place; adding a section defaults to the selected year.
+- Aligned `OfferingSection` ORM constraints and all create/update/copy write paths with the existing migration's required `subject_id`. The admin section-roster response includes account status for the roster table.
+- Validation completed: `pytest tests\test_academics.py -q` passed (20); backend Ruff passed; frontend ESLint and production build/type-check passed; `node --check e2e\admin-lists.mjs` and `git diff --check` passed.
+- Manual browser smoke passed against a fresh isolated database with real seeded records: admin sign-in, four year tabs, student number/name/email/account status rendering, and Add sections defaulting to the selected year. Axe reported 0 WCAG A/AA violations; the 375px viewport had no horizontal overflow. The updated automated admin-list scenario was syntax-checked but not run because Mailpit is unavailable for its invitation-email setup. The temporary UI-test database and its two local servers were removed after the check.
+- The full backend suite run against the isolated test database reported 299 passed and 10 failures in other feature areas; details are captured in the run output.
+- Database follow-up: authenticated to `127.0.0.1:5432` as `postgres` with the user-provided password and confirmed `learnsync_v2_test` exists. Tests used only this `_test` database; `.env` was unchanged and no non-test database was touched.
+
+
 Implementation started 2026-10-06. No milestone is yet accepted.
 
 ### 2026-10-13 (Year-level sections in subject assignment)

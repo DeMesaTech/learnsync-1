@@ -44,6 +44,20 @@ class Reason(BaseModel):
     reason: str = Field(min_length=3, max_length=1000)
 
 
+class CollegeInput(BaseModel):
+    code: str = Field(min_length=1, max_length=30)
+    name: str = Field(min_length=1, max_length=150)
+    description: str = Field(default="", max_length=5000)
+    status: Literal["active", "inactive"] = "active"
+
+
+class CollegeUpdate(BaseModel):
+    code: str | None = Field(default=None, min_length=1, max_length=30)
+    name: str | None = Field(default=None, min_length=1, max_length=150)
+    description: str | None = Field(default=None, max_length=5000)
+    status: Literal["active", "inactive"] | None = None
+
+
 class SubjectInput(BaseModel):
     code: str = Field(min_length=1, max_length=30)
     title: str = Field(min_length=1, max_length=200)
@@ -51,6 +65,7 @@ class SubjectInput(BaseModel):
     year_level: int | None = Field(default=None, ge=1, le=6)
     semester: int | None = Field(default=None, ge=1, le=4)
     description: str = Field(default="", max_length=5000)
+    college_id: uuid.UUID | None = None
 
 
 class SubjectUpdate(BaseModel):
@@ -59,6 +74,7 @@ class SubjectUpdate(BaseModel):
     year_level: int | None = Field(default=None, ge=1, le=6)
     semester: int | None = Field(default=None, ge=1, le=4)
     description: str | None = Field(default=None, max_length=5000)
+    college_id: uuid.UUID | None = None
     status: Literal["active", "archived"] | None = None
 
 
@@ -129,3 +145,4 @@ class DraftSave(BaseModel):
 
 class Revision(BaseModel):
     expected_revision: int
+    college_id: uuid.UUID

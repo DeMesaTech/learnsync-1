@@ -15,6 +15,7 @@ from app.features.teaching.models import (
 
 from .models import (
     AcademicTerm,
+    College,
     Enrollment,
     EnrollmentException,
     Offering,
@@ -90,7 +91,8 @@ def copy_structure(db, actor, source, target, offerings):
             db.flush()
             for link in db.scalars(select(OfferingSection)
                                    .where(OfferingSection.offering_id == offering.id)):
-                db.add(OfferingSection(offering_id=new.id, section_id=mapping[link.section_id]))
+                db.add(OfferingSection(offering_id=new.id, section_id=mapping[link.section_id],
+                                       subject_id=new.subject_id))
     audit(db, actor, "term.structure_copied", "term", target.id,
           {"source_term_id": str(source.id), "offerings": offerings})
 
@@ -136,16 +138,56 @@ def reopen_term(db, actor, term_id, reason):
     return term
 
 
+# ---------- college catalog ----------
+
+def create_college(db, actor, data):
+    code = data.code.strip().upper()
+    if db.scalar(select(College.id).where(College.code == code)):
+        fail(409, "college_exists", "A college with this code already exists.")
+    college = College(**{**data.model_dump(), "code": code})
+    db.add(college)
+    db.flush()
+    audit(db, actor, "college.created", "college", college.id, {"code": code})
+    db.commit()
+    return college
+
+
+def update_college(db, actor, college_id, data):
+    college = get_or_404(db, College, college_id, "College")
+    changes = data.model_dump(exclude_unset=True)
+    if "code" in changes:
+        changes["code"] = changes["code"].strip().upper()
+        if db.scalar(select(College.id).where(College.code == changes["code"], College.id != college.id)):
+            fail(409, "college_exists", "A college with this code already exists.")
+    for field, value in changes.items():
+        setattr(college, field, value)
+    audit(db, actor, "college.updated", "college", college.id,
+          data.model_dump(mode="json", exclude_unset=True))
+    db.commit()
+    return college
+
+
+def delete_college(db, actor, college_id):
+    college = get_or_404(db, College, college_id, "College")
+    if db.scalar(select(Subject.id).where(Subject.college_id == college_id).limit(1)):
+        fail(409, "college_in_use", "This college still has subjects assigned to it.")
+    audit(db, actor, "college.deleted", "college", college.id, {"code": college.code})
+    db.delete(college)
+    db.commit()
+
+
 # ---------- subject catalog ----------
 
 def create_subject(db, actor, data):
     code = data.code.strip().upper()
     if db.scalar(select(Subject.id).where(Subject.code == code)):
         fail(409, "subject_exists", "A subject with this code already exists.")
+    if data.college_id is not None and not db.get(College, data.college_id):
+        fail(404, "college_not_found", "College not found.")
     subject = Subject(**{**data.model_dump(), "code": code})
     db.add(subject)
     db.flush()
-    audit(db, actor, "subject.created", "subject", subject.id, {"code": code})
+    audit(db, actor, "subject.created", "subject", subject.id, {"code": code, "college_id": str(subject.college_id) if subject.college_id else None})
     db.commit()
     return subject
 
@@ -153,6 +195,8 @@ def create_subject(db, actor, data):
 def update_subject(db, actor, subject_id, data):
     subject = get_or_404(db, Subject, subject_id, "Subject")
     changes = data.model_dump(exclude_unset=True)
+    if data.college_id is not None and not db.get(College, data.college_id):
+        fail(404, "college_not_found", "College not found.")
     for field, value in changes.items():
         setattr(subject, field, value)
     audit(db, actor, "subject.updated", "subject", subject.id,
@@ -331,7 +375,8 @@ def add_offering(db, actor, term, faculty_id, subject_id, section_ids, override_
     db.add(offering)
     db.flush()
     for section_id in section_ids:
-        db.add(OfferingSection(offering_id=offering.id, section_id=section_id))
+        db.add(OfferingSection(offering_id=offering.id, section_id=section_id,
+                               subject_id=offering.subject_id))
     db.flush()
     recompute_offering(db, offering)
     details = {"subject": subject.code, "faculty_id": str(faculty_id)}
@@ -393,7 +438,8 @@ def update_offering(db, actor, offering_id, data):
                                              "reason": data.placement_override_reason}
         db.execute(delete(OfferingSection).where(OfferingSection.offering_id == offering.id))
         for section_id in section_ids:
-            db.add(OfferingSection(offering_id=offering.id, section_id=section_id))
+            db.add(OfferingSection(offering_id=offering.id, section_id=section_id,
+                                   subject_id=offering.subject_id))
         details["section_ids"] = [str(s) for s in section_ids]
     db.flush()
     recompute_offering(db, offering)

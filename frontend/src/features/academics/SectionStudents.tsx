@@ -40,7 +40,7 @@ export function SectionStudents(){
     :`/sections/${sectionId}/candidates?page=${page}&page_size=${size}&account=${account}&search=${encodeURIComponent(search)}`;
   const list=useQuery({queryKey:['section-students',sectionId,tab,page,size,status,account,search],queryFn:()=>api<Page>(query),placeholderData:keepPreviousData,enabled:!!sectionId&&(tab==='current'||!closed)});
   const reset=(fn:()=>void)=>{fn();setPage(1)};
-  const refresh=()=>{queryClient.invalidateQueries({queryKey:['section-students',sectionId]});queryClient.invalidateQueries({queryKey:['sections',termId]});queryClient.invalidateQueries({queryKey:['offerings',termId]})};
+  const refresh=()=>{queryClient.invalidateQueries({queryKey:['section-students',sectionId]});queryClient.invalidateQueries({queryKey:['sections',termId]});queryClient.invalidateQueries({queryKey:['offerings',termId]});queryClient.invalidateQueries({queryKey:['section-roster']})};
 
   const rows=list.data?.items??[];
   const pickedIds=new Set(picked.map(p=>p.student_id));

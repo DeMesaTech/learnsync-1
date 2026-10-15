@@ -8,6 +8,8 @@ Opaque hashed server sessions, HttpOnly cookies and session CSRF tokens; Argon2 
 
 Files remain outside webroot and are delivered by an authorized API. Drafts use compare-and-swap revisions; published documents and grade snapshots are immutable.
 
+When committing a reviewed prospectus, the admin confirms an active college. Newly created subjects inherit that college; existing catalog subjects are not overwritten. The API validates the college at commit time.
+
 Approved schema/lifecycles: IMPLEMENTATION_PLAN.md sections 3-4. AI retrieval restrictions: section 6.
 
 Section deletion is admin-only and limited to an open term. The command locks the section and refuses deletion while any roster history, enrollment, offering, targeted content or announcement, teaching coverage, assessment assignment, or attendance record references it.

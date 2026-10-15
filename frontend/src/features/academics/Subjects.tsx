@@ -4,24 +4,29 @@ import { useQuery } from '@tanstack/react-query';
 import { api, post, send, upload, errorText } from '../../app/api';
 import { queryClient } from '../../app/providers';
 import { Dialog } from '../../components/Dialog';
-import { yearLabel, type DraftRow, type ProspectusDraft, type Subject } from './types';
+import { yearLabel, type College, type DraftRow, type ProspectusDraft, type Subject } from './types';
 
 const intOrNull = (v: FormDataEntryValue | null) => v ? Number(v) : null;
 const semesterLabel = (n: number | null) => n ? `${['1st', '2nd', '3rd', '4th', '5th', '6th'][n - 1] ?? `${n}th`} semester` : 'No semester';
 
 export function Subjects() {
   const [archived, setArchived] = useState(false);
+  const [collegeFilter, setCollegeFilter] = useState<string>('all');
   const [editing, setEditing] = useState<Subject | 'new' | null>(null);
+  const [collegeEditor, setCollegeEditor] = useState<College | 'new' | null>(null);
   const [message, setMessage] = useState(''); const [search, setSearch] = useState('');
   const [activeYear, setActiveYear] = useState<number | null>(null);
-  const query = useQuery({ queryKey: ['subjects', archived], queryFn: () => api<Subject[]>('/subjects?include_archived=' + archived) });
+  const query = useQuery({ queryKey: ['subjects', archived, collegeFilter], queryFn: () => api<Subject[]>(`/subjects?include_archived=${archived}${collegeFilter === 'all' ? '' : `&college_id=${collegeFilter}`}`) });
+  const colleges = useQuery({ queryKey: ['colleges'], queryFn: () => api<College[]>('/colleges') });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['subjects'] });
+  const refreshColleges = () => queryClient.invalidateQueries({ queryKey: ['colleges'] });
   const yearTabs = Array.from(new Set((query.data ?? []).map(s => s.year_level).filter((n): n is number => n !== null))).sort((a, b) => a - b);
   useEffect(() => { if (!query.data) return; if (!yearTabs.length) { setActiveYear(null); return; } if (activeYear === null || !yearTabs.includes(activeYear)) setActiveYear(yearTabs[0]); }, [query.data, activeYear, yearTabs]);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); const f = new FormData(e.currentTarget);
-    const body = { title: f.get('title'), units: f.get('units'), year_level: intOrNull(f.get('year_level')), semester: intOrNull(f.get('semester')), description: f.get('description') || '' };
+    const collegeId = f.get('college_id');
+    const body = { title: f.get('title'), units: f.get('units'), year_level: intOrNull(f.get('year_level')), semester: intOrNull(f.get('semester')), description: f.get('description') || '', college_id: collegeId ? String(collegeId) : null };
     try {
       if (editing === 'new') await post('/subjects', { ...body, code: f.get('code') });
       else if (editing) await send('PATCH', `/subjects/${editing.id}`, body);
@@ -29,7 +34,11 @@ export function Subjects() {
     } catch (err) { setMessage(errorText(err)) }
   }
   const grouped = new Map<string, Subject[]>();
-  const filtered = query.data?.filter(s => `${s.code} ${s.title}`.toLowerCase().includes(search.trim().toLowerCase())) ?? [];
+  const filtered = (query.data ?? []).filter(s => {
+    const matchesSearch = `${s.code} ${s.title}`.toLowerCase().includes(search.trim().toLowerCase());
+    const matchesCollege = collegeFilter === 'all' || s.college_id === collegeFilter;
+    return matchesSearch && matchesCollege;
+  });
   const visibleYear = activeYear === null && yearTabs.length ? yearTabs[0] : activeYear;
   filtered.filter(s => visibleYear === null ? s.year_level === null : s.year_level === visibleYear).forEach(s => {
     const k = semesterLabel(s.semester);
@@ -41,10 +50,17 @@ export function Subjects() {
       <div><p className="eyebrow">Administration</p><h1>Prospectus</h1>
         <p className="muted">Subjects are placed by year level and semester. Teaching assignments use these.</p></div>
       <div className="actions"><Link className="button" to="/admin/subjects/import">Import prospectus</Link>
+        <button type="button" onClick={() => setCollegeEditor('new')}>Add college</button>
         <button className="primary" onClick={() => { setMessage(''); setEditing('new') }}>Add subject</button></div>
     </div>
-    <div className="actions"><label>Search subjects<input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Code or title" /></label>
-      <label className="inline"><input type="checkbox" checked={archived} onChange={e => setArchived(e.target.checked)} /> Show archived subjects</label></div>
+    <div className="actions" style={{ alignItems: 'end' }}>
+      <label>Search subjects<input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Code or title" /></label>
+      <label>College<select value={collegeFilter} onChange={e => setCollegeFilter(e.target.value)}>
+        <option value="all">All colleges</option>
+        {(colleges.data ?? []).filter(c => c.status === 'active').map(college => <option key={college.id} value={college.id}>{college.name}</option>)}
+      </select></label>
+      <label className="inline"><input type="checkbox" checked={archived} onChange={e => setArchived(e.target.checked)} /> Show archived subjects</label>
+    </div>
     {message && <p role="status">{message}</p>}
     {query.isPending ? <p>Loading…</p> : query.error ? <p role="alert">{query.error.message}</p> :
       query.data.length === 0 ? <section className="panel"><h2>No subjects yet</h2><p>Import the prospectus or add subjects manually.</p></section> :
@@ -52,10 +68,10 @@ export function Subjects() {
         {yearTabs.length > 0 && <nav className="tabs" role="tablist" aria-label="Year levels">
           {yearTabs.map(year => <button key={year} type="button" className={activeYear === year ? 'active' : ''} aria-pressed={activeYear === year} onClick={() => setActiveYear(year)}>{yearLabel(year)}</button>)}
         </nav>}
-        {grouped.size === 0 ? <section className="panel"><h2>No subjects match</h2><p>Change the search.</p></section> :
+        {grouped.size === 0 ? <section className="panel"><h2>No subjects match</h2><p>Change the search or college filter.</p></section> :
           [...grouped].map(([group, items]) => <section className="panel" key={group}><h2>{group}</h2>
-            <div className="table-wrap" tabIndex={0} role="region" aria-label="Subjects"><table><thead><tr><th>Code</th><th>Title</th><th>Units</th><th><span className="sr-only">Actions</span></th></tr></thead>
-              <tbody>{items.map(s => <tr key={s.id}><td>{s.code}</td><td>{s.title}{s.status === 'archived' && <span className="badge"> archived</span>}</td><td>{s.units}</td>
+            <div className="table-wrap" tabIndex={0} role="region" aria-label="Subjects"><table><thead><tr><th>Code</th><th>Title</th><th>College</th><th>Units</th><th><span className="sr-only">Actions</span></th></tr></thead>
+              <tbody>{items.map(s => <tr key={s.id}><td>{s.code}</td><td>{s.title}{s.status === 'archived' && <span className="badge"> archived</span>}</td><td>{s.college ? s.college.name : 'Unassigned'}</td><td>{s.units}</td>
                 <td><button onClick={() => { setMessage(''); setEditing(s) }}>Edit</button></td></tr>)}</tbody></table></div></section>)}
       </>}
     {editing && <Dialog title={editing === 'new' ? 'Add subject' : `Edit ${editing.code}`} onClose={() => setEditing(null)}>
@@ -67,12 +83,44 @@ export function Subjects() {
           <label>Year level<select name="year_level" defaultValue={editing === 'new' ? '' : editing.year_level ?? ''}><option value="">Unplaced</option>{[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{yearLabel(n)}</option>)}</select></label>
           <label>Semester<select name="semester" defaultValue={editing === 'new' ? '' : editing.semester ?? ''}><option value="">None</option>{[1, 2, 3].map(n => <option key={n} value={n}>{semesterLabel(n)}</option>)}</select></label>
         </div>
+        <label>College<select name="college_id" defaultValue={editing === 'new' ? '' : editing.college_id ?? ''}><option value="">Unassigned</option>{(colleges.data ?? []).filter(c => c.status === 'active').map(college => <option key={college.id} value={college.id}>{college.name}</option>)}</select></label>
         {editing !== 'new' && <button type="button" onClick={async () => { try { await send('PATCH', `/subjects/${editing.id}`, { status: editing.status === 'active' ? 'archived' : 'active' }); setEditing(null); refresh() } catch (err) { setMessage(errorText(err)) } }}>{editing.status === 'active' ? 'Archive subject' : 'Restore subject'}</button>}
         {message && <p role="alert">{message}</p>}
         <div className="actions"><button type="button" onClick={() => setEditing(null)}>Cancel</button><button className="primary">Save subject</button></div>
       </form>
     </Dialog>}
+    {collegeEditor && <CollegeDialog college={collegeEditor} onClose={() => setCollegeEditor(null)} onSaved={() => { refreshColleges(); setCollegeEditor(null); setMessage('College saved.'); }} />}
   </>;
+}
+
+function CollegeDialog({ college, onClose, onSaved }: { college: College | 'new'; onClose: () => void; onSaved: () => void }) {
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const payload = { code: String(f.get('code') ?? '').trim(), name: String(f.get('name') ?? '').trim(), description: String(f.get('description') ?? '').trim(), status: f.get('status') || 'active' };
+    setBusy(true); setError('');
+    try {
+      if (college === 'new') await post('/colleges', payload);
+      else await send('PATCH', `/colleges/${college.id}`, payload);
+      onSaved();
+    } catch (err) { setError(errorText(err)); } finally { setBusy(false); }
+  }
+  return <Dialog title={college === 'new' ? 'Add college' : `Edit ${college.name}`} onClose={onClose}>
+    <form onSubmit={submit}>
+      <label>Code<input name="code" required maxLength={30} defaultValue={college === 'new' ? '' : college.code} /></label>
+      <label>Name<input name="name" required maxLength={150} defaultValue={college === 'new' ? '' : college.name} /></label>
+      <label>Description<textarea name="description" maxLength={5000} defaultValue={college === 'new' ? '' : college.description} /></label>
+      <label>Status<select name="status" defaultValue={college === 'new' ? 'active' : college.status}><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+      {error && <p role="alert">{error}</p>}
+      <div className="actions">
+        {college !== 'new' && <button type="button" className="danger" disabled={busy} onClick={async () => { try { await send('DELETE', `/colleges/${college.id}`); onSaved(); } catch (err) { setError(errorText(err)); } }}>Delete college</button>}
+        <button type="button" disabled={busy} onClick={onClose}>Cancel</button>
+        <button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save college'}</button>
+      </div>
+    </form>
+  </Dialog>;
 }
 
 export function ProspectusStart() {
@@ -104,9 +152,13 @@ export function ProspectusReview() {
   const { importId } = useParams();
   const navigate = useNavigate();
   const query = useQuery({ queryKey: ['prospectus', importId], queryFn: () => api<ProspectusDraft>(`/prospectus-imports/${importId}`) });
+  const colleges = useQuery({ queryKey: ['colleges'], queryFn: () => api<College[]>('/colleges') });
   const [rows, setRows] = useState<DraftRow[] | null>(null);
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState('');
+  const [confirming, setConfirming] = useState(false);
+  const [collegeId, setCollegeId] = useState('');
+  const [committing, setCommitting] = useState(false);
   useEffect(() => { if (query.data && !dirty) setRows(query.data.subjects) }, [query.data, dirty]);
   useEffect(() => {
     if (!dirty) return; const warn = (e: BeforeUnloadEvent) => e.preventDefault();
@@ -124,13 +176,17 @@ export function ProspectusReview() {
     catch (err) { setMessage(errorText(err)) }
   }
   async function commit() {
+    if (!collegeId) return;
+    setCommitting(true);
+    setMessage('');
     try {
       if (dirty) { await send('PUT', `/prospectus-imports/${draft.id}`, payload()); setDirty(false) }
       const fresh = await api<ProspectusDraft>(`/prospectus-imports/${draft.id}`);
-      const done = await post<{ created: number; skipped_existing: number }>(`/prospectus-imports/${draft.id}/commit`, { expected_revision: fresh.revision });
+      const done = await post<{ created: number; skipped_existing: number }>(`/prospectus-imports/${draft.id}/commit`, { expected_revision: fresh.revision, college_id: collegeId });
       setDirty(false); queryClient.invalidateQueries({ queryKey: ['subjects'] });
       navigate('/admin/subjects', { state: { created: done.created } });
     } catch (err) { setMessage(errorText(err)); await query.refetch() }
+    finally { setCommitting(false) }
   }
   return <>
     <p className="back"><Link to="/admin/subjects">← Prospectus</Link></p>
@@ -157,8 +213,26 @@ export function ProspectusReview() {
     {message && <p role="status">{message}</p>}
     {!locked && <div className="actions">
       <button onClick={save} disabled={!dirty}>Save draft</button>
-      <button className="primary" onClick={commit} disabled={list.length === 0}>Create subjects</button>
+      <button className="primary" onClick={() => { setCollegeId(''); setMessage(''); setConfirming(true) }} disabled={list.length === 0}>Create subjects</button>
       {dirty && <span className="muted">Unsaved changes</span>}
     </div>}
+    {confirming && <Dialog title="Confirm prospectus college" onClose={() => setConfirming(false)} confirmOnClose={false}>
+      <p>Select the college that these prospectus subjects will belong to.</p>
+      {colleges.isPending ? <p>Loading colleges…</p> : colleges.error ? <p role="alert">{colleges.error.message}</p> :
+        <label>College<select value={collegeId} onChange={e => setCollegeId(e.target.value)} disabled={committing} required>
+          <option value="">Select a college</option>
+          {(colleges.data ?? []).filter(c => c.status === 'active').map(college =>
+            <option key={college.id} value={college.id}>{college.name} ({college.code})</option>)}
+        </select></label>}
+      {colleges.data?.every(c => c.status !== 'active') && <p role="alert">Add an active college before creating subjects.</p>}
+      {message && <p role="alert">{message}</p>}
+      <div className="actions">
+        <button type="button" onClick={() => setConfirming(false)} disabled={committing}>Cancel</button>
+        <button type="button" className="primary" onClick={commit}
+          disabled={committing || colleges.isPending || !!colleges.error || !collegeId}>
+          {committing ? 'Creating…' : 'Confirm college and create subjects'}
+        </button>
+      </div>
+    </Dialog>}
   </>;
 }

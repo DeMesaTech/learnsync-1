@@ -22,10 +22,11 @@ try{
   const codes=['LST 101','LST 102','LST 201','LST 202'];
   for(const [i,code] of codes.entries())await call(p,'POST','/subjects',{code,title:`List ${code}`,units:'3',year_level:i>=2?2:1,semester:i===3?2:1});
 
-  // ---- sections as a table, the page for their students
+  // ---- year-level sections and their student roster
   await p.goto(`/admin/terms/${term.id}`);await p.waitForLoadState('networkidle');
-  check('sections are a table, not cards',await p.locator('table:has(caption:text("Sections of this term")) tbody tr').count()===1&&await p.locator('.cards .subpanel').count()===0);
-  await p.locator('table:has(caption:text("Sections of this term")) a',{hasText:'Manage students'}).click();
+  check('Sections has year tabs and a section selector',await p.getByRole('button',{name:'1st year',exact:true}).count()===1&&await p.getByLabel('Select section').count()===1);
+  await p.getByLabel('Select section').selectOption({label:'1A'});
+  await p.getByRole('link',{name:'Manage students'}).click();
   await p.waitForURL(/\/sections\/.+\/students$/);await p.getByRole('heading',{name:'1A: students'}).waitFor();
   check('Manage students opens its own page with a way back to the term',await p.getByRole('link',{name:/First Semester/}).count()===1);
   await p.getByRole('button',{name:'Add students'}).click();await p.locator('tbody tr').first().waitFor();
@@ -48,6 +49,13 @@ try{
   check('Add selected adds them all and says so',(await p.locator('.toast').innerText()).includes('20 students added'));
   await p.getByRole('button',{name:'In this section'}).click();await p.waitForTimeout(600);
   check('they now appear in the section list',(await p.locator('nav.pager [role=status]').innerText()).includes('of 20'));
+  await p.getByRole('link',{name:/First Semester/}).click();await p.waitForURL(`/admin/terms/${term.id}`);
+  await p.locator('table:has(caption:text("Students in 1A")) tbody tr').first().waitFor();
+  check('the year-level view shows student number, name, email and account status',
+    await p.locator('table:has(caption:text("Students in 1A")) tbody tr').count()===20&&
+    (await p.locator('table:has(caption:text("Students in 1A")) thead').innerText()).includes('Account status'));
+  await p.getByRole('link',{name:'Manage students'}).click();await p.waitForURL(/\/sections\/.+\/students$/);
+  await p.getByRole('button',{name:'In this section'}).waitFor();
   await p.getByLabel('Search',{exact:true}).fill('List Student 05');await p.waitForTimeout(600);
   await p.locator('tbody tr').first().getByRole('button',{name:'Withdraw'}).click();
   const wd=p.locator('dialog');

@@ -13,7 +13,7 @@ from app.features.accounts.models import Account, now
 from app.features.files.storage import path_of, save_upload
 
 from . import commands, documents
-from .models import ProspectusImport, Section, SectionMember, StudentImport, Subject
+from .models import College, ProspectusImport, Section, SectionMember, StudentImport, Subject
 
 EMAIL = TypeAdapter(EmailStr)
 STUDENT_TYPES = {".csv", ".xlsx"}
@@ -238,8 +238,13 @@ def save_prospectus_draft(db, actor, import_id, expected_revision, subjects):
     return imp
 
 
-def commit_prospectus(db, actor, import_id, expected_revision):
+def commit_prospectus(db, actor, import_id, expected_revision, college_id):
     imp = locked_draft(db, import_id, expected_revision)
+    college = db.scalar(select(College).where(College.id == college_id).with_for_update())
+    if not college:
+        fail(404, "college_not_found", "College not found.")
+    if college.status != "active":
+        fail(409, "college_inactive", "Choose an active college for this prospectus.")
     rows = validate_draft(db, imp.draft)
     if not rows:
         fail(422, "draft_empty", "Add at least one subject before committing.")
@@ -250,10 +255,12 @@ def commit_prospectus(db, actor, import_id, expected_revision):
         if r["exists"]:
             continue   # existing catalog entries are never overwritten by an import
         db.add(Subject(code=r["code"], title=r["title"], units=Decimal(r["units"]),
-                       year_level=r["year_level"], semester=r["semester"]))
+                       year_level=r["year_level"], semester=r["semester"],
+                       college_id=college.id))
         created += 1
     imp.status, imp.committed_at = "committed", now()
     audit(db, actor, "prospectus.committed", "prospectus_import", imp.id,
-          {"created": created, "skipped_existing": len(rows) - created})
+          {"created": created, "skipped_existing": len(rows) - created,
+           "college_id": str(college.id)})
     db.commit()
     return {"created": created, "skipped_existing": len(rows) - created}

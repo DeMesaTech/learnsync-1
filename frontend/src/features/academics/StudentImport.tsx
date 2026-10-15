@@ -22,6 +22,7 @@ export function StudentImport(){
     try{
       setResult(await post<{created:number;existing:number;skipped:number;email_failed:string[]}>(`/student-imports/${preview.id}/commit`,{}));setPreview(null);
       queryClient.invalidateQueries({queryKey:['sections',termId]});queryClient.invalidateQueries({queryKey:['offerings',termId]});
+      queryClient.invalidateQueries({queryKey:['section-roster']});
     }catch(err){setError(errorText(err))}finally{setBusy(false)}
   }
   return <>

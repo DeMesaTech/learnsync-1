@@ -238,6 +238,34 @@ p {
   font-size: .8rem
 }
 
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 0 0 20px
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  display: grid;
+  gap: 6px
+}
+
+.stat-card span {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-size: .72rem;
+  font-weight: 700
+}
+
+.stat-card strong {
+  font-size: clamp(1.5rem, 3vw, 2rem)
+}
+
 .auth {
   max-width: 1000px;
   margin: 0 auto;
@@ -802,6 +830,25 @@ code {
   border-bottom-color: var(--action);
   font-weight: 700;
   background: var(--surface-alt)
+}
+
+.section-roster-tools {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  margin: 8px 0 16px
+}
+
+.section-roster-tools label {
+  min-width: min(100%, 240px);
+  margin: 0
+}
+
+.section-roster-tools .actions {
+  align-items: center;
+  margin: 0
 }
 
 .save-indicator {

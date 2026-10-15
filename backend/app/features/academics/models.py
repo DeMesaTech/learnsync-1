@@ -7,6 +7,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
@@ -17,7 +18,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 from app.features.accounts.models import now
@@ -55,6 +56,19 @@ class AcademicTerm(Base):
     reopened_reason: Mapped[str | None] = mapped_column(Text)
 
 
+class College(Base):
+    __tablename__ = "college"
+    __table_args__ = (CheckConstraint("status IN ('active','inactive')", name="college_status"),)
+    id: Mapped[uuid.UUID] = uid()
+    code: Mapped[str] = mapped_column(String(30), unique=True)
+    name: Mapped[str] = mapped_column(String(150))
+    description: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(10), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+    subjects: Mapped[list["Subject"]] = relationship(back_populates="college")
+
+
 class Subject(Base):
     __tablename__ = "subject"
     __table_args__ = (CheckConstraint("status IN ('active','archived')", name="subject_status"),)
@@ -66,6 +80,8 @@ class Subject(Base):
     semester: Mapped[int | None] = mapped_column(Integer)
     description: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(10), default="active")
+    college_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("college.id"), index=True)
+    college: Mapped["College | None"] = relationship(back_populates="subjects")
 
 
 class Section(Base):
@@ -97,6 +113,7 @@ class SectionMember(Base):
 class Offering(Base):
     __tablename__ = "offering"
     __table_args__ = (
+        UniqueConstraint("id", "subject_id", name="offering_id_subject_unique"),
         UniqueConstraint("subject_id", "term_id", "faculty_id", name="offering_unique"),
         CheckConstraint("status IN ('active','archived')", name="offering_status"),
     )
@@ -112,8 +129,17 @@ class Offering(Base):
 
 class OfferingSection(Base):
     __tablename__ = "offering_section"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["offering_id", "subject_id"],
+            ["offering.id", "offering.subject_id"],
+            name="offering_section_subject_matches",
+        ),
+        UniqueConstraint("section_id", "subject_id", name="section_subject_unique"),
+    )
     offering_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("offering.id"), primary_key=True)
     section_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("section.id"), primary_key=True)
+    subject_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
 
 
 class Enrollment(Base):

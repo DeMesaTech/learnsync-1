@@ -224,6 +224,19 @@ CREATE TABLE IF NOT EXISTS public.auth_session
     CONSTRAINT auth_session_token_hash_key UNIQUE (token_hash)
 );
 
+CREATE TABLE IF NOT EXISTS public.college
+(
+    id uuid NOT NULL,
+    code character varying(30) COLLATE pg_catalog."default" NOT NULL,
+    name character varying(150) COLLATE pg_catalog."default" NOT NULL,
+    description text COLLATE pg_catalog."default" NOT NULL,
+    status character varying(10) COLLATE pg_catalog."default" NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT college_pkey PRIMARY KEY (id),
+    CONSTRAINT college_code_key UNIQUE (code)
+);
+
 CREATE TABLE IF NOT EXISTS public.content_chunk
 (
     id uuid NOT NULL,
@@ -403,6 +416,7 @@ CREATE TABLE IF NOT EXISTS public.offering
     created_at timestamp with time zone NOT NULL,
     meeting_days smallint NOT NULL DEFAULT '0'::smallint,
     CONSTRAINT offering_pkey PRIMARY KEY (id),
+    CONSTRAINT offering_id_subject_unique UNIQUE (id, subject_id),
     CONSTRAINT offering_unique UNIQUE (subject_id, term_id, faculty_id)
 );
 
@@ -410,7 +424,9 @@ CREATE TABLE IF NOT EXISTS public.offering_section
 (
     offering_id uuid NOT NULL,
     section_id uuid NOT NULL,
-    CONSTRAINT offering_section_pkey PRIMARY KEY (offering_id, section_id)
+    subject_id uuid NOT NULL,
+    CONSTRAINT offering_section_pkey PRIMARY KEY (offering_id, section_id),
+    CONSTRAINT section_subject_unique UNIQUE (section_id, subject_id)
 );
 
 CREATE TABLE IF NOT EXISTS public.prospectus_import
@@ -471,8 +487,21 @@ CREATE TABLE IF NOT EXISTS public.quiz_question
     explanation text COLLATE pg_catalog."default" NOT NULL,
     points numeric(8, 2) NOT NULL,
     source jsonb,
+    duration_minutes integer NOT NULL DEFAULT 5,
     CONSTRAINT quiz_question_pkey PRIMARY KEY (id),
     CONSTRAINT question_key_unique UNIQUE (revision_id, key)
+);
+
+CREATE TABLE IF NOT EXISTS public.quiz_question_clock
+(
+    id uuid NOT NULL,
+    attempt_id uuid NOT NULL,
+    question_key character varying(36) COLLATE pg_catalog."default" NOT NULL,
+    started_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    locked_at timestamp with time zone,
+    CONSTRAINT quiz_question_clock_pkey PRIMARY KEY (id),
+    CONSTRAINT question_clock_unique UNIQUE (attempt_id, question_key)
 );
 
 CREATE TABLE IF NOT EXISTS public.reference_snapshot
@@ -605,6 +634,7 @@ CREATE TABLE IF NOT EXISTS public.subject
     semester integer,
     description text COLLATE pg_catalog."default" NOT NULL,
     status character varying(10) COLLATE pg_catalog."default" NOT NULL,
+    college_id uuid,
     CONSTRAINT subject_pkey PRIMARY KEY (id),
     CONSTRAINT subject_code_key UNIQUE (code)
 );
@@ -1224,6 +1254,13 @@ ALTER TABLE IF EXISTS public.offering_section
     ON DELETE NO ACTION;
 
 
+ALTER TABLE IF EXISTS public.offering_section
+    ADD CONSTRAINT offering_section_subject_matches FOREIGN KEY (offering_id, subject_id)
+    REFERENCES public.offering (id, subject_id) MATCH SIMPLE
+    ON UPDATE NO ACTION
+    ON DELETE NO ACTION;
+
+
 ALTER TABLE IF EXISTS public.prospectus_import
     ADD CONSTRAINT prospectus_import_created_by_fkey FOREIGN KEY (created_by)
     REFERENCES public.account (id) MATCH SIMPLE
@@ -1286,6 +1323,15 @@ ALTER TABLE IF EXISTS public.quiz_question
     ON DELETE NO ACTION;
 CREATE INDEX IF NOT EXISTS ix_quiz_question_revision_id
     ON public.quiz_question(revision_id);
+
+
+ALTER TABLE IF EXISTS public.quiz_question_clock
+    ADD CONSTRAINT quiz_question_clock_attempt_id_fkey FOREIGN KEY (attempt_id)
+    REFERENCES public.quiz_attempt (id) MATCH SIMPLE
+    ON UPDATE NO ACTION
+    ON DELETE NO ACTION;
+CREATE INDEX IF NOT EXISTS ix_quiz_question_clock_attempt_id
+    ON public.quiz_question_clock(attempt_id);
 
 
 ALTER TABLE IF EXISTS public.reference_snapshot
@@ -1432,6 +1478,15 @@ ALTER TABLE IF EXISTS public.study_message
     ON DELETE NO ACTION;
 CREATE INDEX IF NOT EXISTS one_reply
     ON public.study_message(reply_to_id);
+
+
+ALTER TABLE IF EXISTS public.subject
+    ADD CONSTRAINT subject_college_fkey FOREIGN KEY (college_id)
+    REFERENCES public.college (id) MATCH SIMPLE
+    ON UPDATE NO ACTION
+    ON DELETE NO ACTION;
+CREATE INDEX IF NOT EXISTS ix_subject_college_id
+    ON public.subject(college_id);
 
 
 ALTER TABLE IF EXISTS public.submission_permission

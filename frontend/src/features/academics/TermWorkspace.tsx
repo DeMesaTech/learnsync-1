@@ -1,13 +1,17 @@
 import {useToast} from '../../components/undo';
-import {useState,type FormEvent} from 'react';
+import {useEffect,useMemo,useState,type FormEvent} from 'react';
 import {Link,useParams} from 'react-router-dom';
 import {useHere} from '../../components/origin';
 import {useQuery} from '@tanstack/react-query';
 import {api,post,send,errorText,ApiError,type Account} from '../../app/api';
 import {queryClient} from '../../app/providers';
 import {Dialog} from '../../components/Dialog';
+import {Pager} from '../../components/Pager';
 import {useConfirm} from '../../components/confirm';
 import {yearLabel,type OfferingSummary,type SchoolYear,type Section,type Subject} from './types';
+
+interface SectionRosterRow{student_id:string;display_name:string;email:string;student_number:string;account_status:'active'|'invited'|'inactive';status:'active'|'withdrawn'}
+interface SectionRosterPage{items:SectionRosterRow[];total:number;page:number;page_size:number}
 
 export function TermWorkspace(){
   const {termId}=useParams();
@@ -24,12 +28,31 @@ export function TermWorkspace(){
   const [teacherFilter,setTeacherFilter]=useState('');
   const [sectionError,setSectionError]=useState('');
   const [deletingSection,setDeletingSection]=useState<string|null>(null);
+  const [activeYear,setActiveYear]=useState<number|null>(null);
+  const [selectedSectionId,setSelectedSectionId]=useState('');
+  const [rosterPage,setRosterPage]=useState(1);
+  const [rosterPageSize,setRosterPageSize]=useState(25);
   const year=years.data?.find(y=>y.terms.some(t=>t.id===termId));
   const term=year?.terms.find(t=>t.id===termId);
   const closed=term?.status==='closed';
   const highestProgramYear=Math.max(0,...(subjects.data??[]).map(subject=>subject.year_level??0));
   const programYears=Array.from({length:highestProgramYear},(_,index)=>index+1);
-  const refresh=()=>{queryClient.invalidateQueries({queryKey:['sections',termId]});queryClient.invalidateQueries({queryKey:['offerings',termId]})};
+  const visibleYear=activeYear??programYears[0]??null;
+  const yearSections=useMemo(()=>sections.data?.filter(section=>section.year_level===visibleYear)??[],
+    [sections.data,visibleYear]);
+  const selectedSection=yearSections.find(section=>section.id===selectedSectionId)??yearSections[0];
+  const roster=useQuery({
+    queryKey:['section-roster',selectedSection?.id,rosterPage,rosterPageSize],
+    queryFn:()=>api<SectionRosterPage>(`/sections/${selectedSection!.id}/roster?page=${rosterPage}&page_size=${rosterPageSize}&status=active`),
+    enabled:!!selectedSection,
+  });
+  useEffect(()=>{
+    if(!yearSections.some(section=>section.id===selectedSectionId)){
+      setSelectedSectionId(yearSections[0]?.id??'');
+      setRosterPage(1);
+    }
+  },[yearSections,selectedSectionId]);
+  const refresh=()=>{queryClient.invalidateQueries({queryKey:['sections',termId]});queryClient.invalidateQueries({queryKey:['offerings',termId]});queryClient.invalidateQueries({queryKey:['section-roster']})};
   async function removeSection(section:Section){
     if(!await ask({title:`Delete ${section.name}?`,message:'Only an unused section can be deleted. Sections with students, assignments, or academic records are protected.',yes:'Delete section',danger:true}))return;
     setDeletingSection(section.id);setSectionError('');
@@ -45,6 +68,9 @@ export function TermWorkspace(){
     return groups;
   },[]).sort((a,b)=>a.name.localeCompare(b.name));
   const visibleTeacherGroups=teacherGroups?.filter(group=>!teacherFilter||group.id===teacherFilter);
+  const totalSections=sections.data?.length ?? 0;
+  const totalStudents=sections.data?.reduce((sum, section) => sum + section.member_count, 0) ?? 0;
+  const activeOfferings=offerings.data?.filter(offering => offering.status === 'active').length ?? 0;
 
   if(years.isPending)return <p>Loading…</p>;
   if(!term)return <section className="panel"><h1>Term not found</h1><Link to="/admin/academics">Back to school years</Link></section>;
@@ -55,6 +81,11 @@ export function TermWorkspace(){
         <span className={`badge ${term.status}`}>{term.status}</span></div>
     </div>
     {closed&&<p className="warn" role="status">This term is closed. Reopen it from School years to make changes.</p>}
+    <div className="stats-grid">
+      <div className="stat-card"><span>Sections</span><strong>{totalSections}</strong></div>
+      <div className="stat-card"><span>Students</span><strong>{totalStudents}</strong></div>
+      <div className="stat-card"><span>Offerings</span><strong>{activeOfferings}</strong></div>
+    </div>
     <nav className="tabs" aria-label="Term workspace tabs">
       <button type="button" className={tab==='sections'?'active':''} aria-pressed={tab==='sections'} onClick={()=>setTab('sections')}>Sections</button>
       <button type="button" className={tab==='offerings'?'active':''} aria-pressed={tab==='offerings'} onClick={()=>setTab('offerings')}>Offerings</button>
@@ -62,21 +93,45 @@ export function TermWorkspace(){
 
     {tab==='sections'?
       <section className="panel">
-        <div className="page-heading"><h2>Sections</h2><div className="actions">
+        <div className="page-heading"><div><h2>Sections</h2>
+          {!subjects.isError&&subjects.isSuccess&&programYears.length>0&&<p className="muted">Program duration: {highestProgramYear} year{highestProgramYear===1?'':'s'}, based on the active prospectus subjects.</p>}
+        </div><div className="actions">
           <Link className="button" to={`/admin/terms/${termId}/import-students`}>Import students</Link>
-          <button className={sections.data?.length===0?'primary':''} disabled={closed||subjects.isPending||subjects.isError||programYears.length===0} onClick={()=>setDialog('section')}>Add section</button>
+          <button className={sections.data?.length===0?'primary':''} aria-label="Add section" disabled={closed||subjects.isPending||subjects.isError||programYears.length===0} onClick={()=>setDialog('section')}><span aria-hidden="true">＋</span> Add section</button>
         </div></div>
         {subjects.isError&&<p role="alert">Could not load the prospectus year levels: {subjects.error.message}</p>}
         {!subjects.isError&&subjects.isSuccess&&programYears.length===0&&<p className="muted">No year levels are assigned in the prospectus yet. <Link to="/admin/subjects">Add or place subjects in the prospectus</Link> before creating sections.</p>}
-        {!subjects.isError&&programYears.length>0&&<p className="muted">Program duration: {highestProgramYear} year{highestProgramYear===1?'':'s'}, based on the active prospectus subjects.</p>}
         {sectionError&&<p role="alert">{sectionError}</p>}
+        {programYears.length>0&&<nav className="tabs year-tabs" aria-label="Year levels">
+          {programYears.map(yearLevel=><button key={yearLevel} type="button" className={visibleYear===yearLevel?'active':''} aria-pressed={visibleYear===yearLevel}
+            onClick={()=>{setActiveYear(yearLevel);setSelectedSectionId('');setRosterPage(1)}}>{yearLabel(yearLevel)}</button>)}
+        </nav>}
         {sections.isPending?<p>Loading…</p>:sections.error?<p role="alert">{sections.error.message}</p>:
-          sections.data.length===0?<p className="muted">No sections yet. Add one, or copy structure when creating the school year.</p>:
-          <div className="table-wrap"><table><caption className="sr-only">Sections of this term</caption>
-            <thead><tr><th scope="col">Section</th><th scope="col">Year level</th><th scope="col">Students</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
-            <tbody>{sections.data.map(s=><tr key={s.id}><th scope="row">{s.name}</th><td>{yearLabel(s.year_level)}</td><td>{s.member_count}</td>
-              <td><div className="actions"><Link className="button" state={here} to={`/admin/terms/${termId}/sections/${s.id}/students`}>{closed?'View students':'Manage students'}</Link>
-                {!closed&&<button className="danger" disabled={deletingSection!==null} onClick={()=>removeSection(s)}>{deletingSection===s.id?'Deleting…':'Delete section'}</button>}</div></td></tr>)}</tbody></table></div>}
+          yearSections.length===0?<p className="muted">No sections for {visibleYear?yearLabel(visibleYear):'this year level'} yet. Add a section to get started.</p>:
+          <>
+            <div className="section-roster-tools">
+              <label>Section<select aria-label="Select section" value={selectedSection?.id??''} onChange={event=>{setSelectedSectionId(event.target.value);setRosterPage(1)}}>
+                {yearSections.map(section=><option key={section.id} value={section.id}>{section.name}</option>)}
+              </select></label>
+              {selectedSection&&<div className="actions">
+                <span className="muted">{selectedSection.member_count} active student{selectedSection.member_count===1?'':'s'}</span>
+                <Link className="button" state={here} to={`/admin/terms/${termId}/sections/${selectedSection.id}/students`}>{closed?'View students':'Manage students'}</Link>
+                {!closed&&<button className="danger" disabled={deletingSection!==null} onClick={()=>removeSection(selectedSection)}>{deletingSection===selectedSection.id?'Deleting…':'Delete section'}</button>}
+              </div>}
+            </div>
+            {roster.isPending?<p>Loading students…</p>:roster.error?<p role="alert">{roster.error.message}</p>:
+              roster.data.items.length===0?<p className="muted">No students are enrolled in {selectedSection.name} yet.</p>:
+              <div className="table-wrap" tabIndex={0} role="region" aria-label={`Students in ${selectedSection.name}`}>
+                <table><caption className="sr-only">Students in {selectedSection.name}</caption>
+                  <thead><tr><th scope="col">ID number</th><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Account status</th></tr></thead>
+                  <tbody>{roster.data.items.map(student=><tr key={student.student_id}>
+                    <td>{student.student_number||'—'}</td><th scope="row">{student.display_name}</th><td>{student.email}</td>
+                    <td><span className={`badge ${student.account_status==='active'?'done':''}`}>{student.account_status==='invited'?'Email sent (invited)':student.account_status}</span></td>
+                  </tr>)}</tbody>
+                </table>
+              </div>}
+            {roster.data&&<Pager page={rosterPage} pageSize={rosterPageSize} total={roster.data.total} onPage={setRosterPage} onSize={size=>{setRosterPageSize(size);setRosterPage(1)}}/>}
+          </>}
       </section>
       :
       <section className="panel">
@@ -106,7 +161,7 @@ export function TermWorkspace(){
       </section>
     }
 
-    {dialog==='section'&&<SectionDialog termId={term.id} yearLevels={programYears} sections={sections.data??[]} onClose={()=>setDialog(null)} onDone={()=>{setDialog(null);refresh()}}/>}
+    {dialog==='section'&&<SectionDialog termId={term.id} yearLevels={programYears} initialYear={visibleYear??programYears[0]??1} sections={sections.data??[]} onClose={()=>setDialog(null)} onDone={()=>{setDialog(null);refresh()}}/>}
     {dialog==='offering'&&<BulkAssignDialog termId={term.id} termSequence={term.sequence} sections={sections.data??[]} existing={offerings.data??[]}
       onClose={()=>setDialog(null)} onDone={()=>{setDialog(null);refresh()}}/>}
     {editing&&<OfferingDialog sections={sections.data??[]} offering={editing}
@@ -114,9 +169,9 @@ export function TermWorkspace(){
   </>;
 }
 
-function SectionDialog({termId,yearLevels,sections,onClose,onDone}:{termId:string;yearLevels:number[];sections:Section[];onClose:()=>void;onDone:()=>void}){
+function SectionDialog({termId,yearLevels,initialYear,sections,onClose,onDone}:{termId:string;yearLevels:number[];initialYear:number;sections:Section[];onClose:()=>void;onDone:()=>void}){
   const [error,setError]=useState('');
-  const [yearLevel,setYearLevel]=useState(yearLevels[0]??1);
+  const [yearLevel,setYearLevel]=useState(initialYear);
   const [count,setCount]=useState(1);
   const [busy,setBusy]=useState(false);
   const matchingSections=sections.filter(section=>section.year_level===yearLevel);

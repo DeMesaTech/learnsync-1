@@ -10,6 +10,8 @@ from app.security import current_account, require_role
 from . import commands, imports, queries
 from .schemas import (
     BulkOfferingInput,
+    CollegeInput,
+    CollegeUpdate,
     DraftSave,
     ExceptionInput,
     MemberInput,
@@ -74,11 +76,39 @@ def copy_structure(term_id: UUID, source_term_id: UUID, offerings: bool = False,
     return Response(status_code=204)
 
 
-# ---- subject catalog (admin) ----
+# ---- colleges and subject catalog (admin) ----
+
+@router.get("/colleges")
+def colleges(actor=Depends(admin), db: Session = Depends(get_db)):
+    return queries.colleges(db)
+
+
+@router.get("/colleges/{college_id}")
+def college(college_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):
+    return queries.college(db, college_id)
+
+
+@router.post("/colleges", status_code=201)
+def create_college(data: CollegeInput, actor=Depends(admin), db: Session = Depends(get_db)):
+    return queries.college_view(commands.create_college(db, actor, data))
+
+
+@router.patch("/colleges/{college_id}")
+def update_college(college_id: UUID, data: CollegeUpdate, actor=Depends(admin),
+                  db: Session = Depends(get_db)):
+    return queries.college_view(commands.update_college(db, actor, college_id, data))
+
+
+@router.delete("/colleges/{college_id}", status_code=204)
+def delete_college(college_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):
+    commands.delete_college(db, actor, college_id)
+    return Response(status_code=204)
+
 
 @router.get("/subjects")
-def subjects(include_archived: bool = False, actor=Depends(admin), db: Session = Depends(get_db)):
-    return queries.subjects(db, include_archived)
+def subjects(include_archived: bool = False, college_id: UUID | None = None,
+             actor=Depends(admin), db: Session = Depends(get_db)):
+    return queries.subjects(db, include_archived, college_id)
 
 
 @router.post("/subjects", status_code=201)
@@ -264,4 +294,5 @@ def save_prospectus_draft(import_id: UUID, data: DraftSave, actor=Depends(admin)
 @router.post("/prospectus-imports/{import_id}/commit")
 def commit_prospectus(import_id: UUID, data: Revision, actor=Depends(admin),
                       db: Session = Depends(get_db)):
-    return imports.commit_prospectus(db, actor, import_id, data.expected_revision)
+    return imports.commit_prospectus(
+        db, actor, import_id, data.expected_revision, data.college_id)

@@ -1,9 +1,10 @@
 export interface Term{id:string;school_year_id:string;name:string;sequence:number;status:'open'|'closed';start_date:string;end_date:string;reopened_reason:string|null}
 export interface SchoolYear{id:string;label:string;start_date:string;end_date:string;terms:Term[]}
-export interface Subject{id:string;code:string;title:string;units:string;year_level:number|null;semester:number|null;description:string;status:'active'|'archived'}
+export interface College{id:string;code:string;name:string;description:string;status:'active'|'inactive';created_at:string;updated_at:string}
+export interface Subject{id:string;code:string;title:string;units:string;year_level:number|null;semester:number|null;description:string;status:'active'|'archived';college_id:string|null;college?:{id:string;code:string;name:string;status:'active'|'inactive'}|null}
 export interface Section{id:string;term_id:string;name:string;year_level:number;member_count:number}
 export interface Member{student_id:string;display_name:string;email:string;student_number:string}
-export interface OfferingSummary{meeting_days?:number;id:string;term_id:string;term:string;term_status:'open'|'closed';subject:{id:string;code:string;title:string;units:string};faculty:{id:string;display_name:string};sections:{id:string;name:string;enrolled:number}[];enrolled:number}
+export interface OfferingSummary{status:'active'|'archived';meeting_days?:number;id:string;term_id:string;term:string;term_status:'open'|'closed';subject:{id:string;code:string;title:string;units:string};faculty:{id:string;display_name:string};sections:{id:string;name:string;enrolled:number}[];enrolled:number}
 export interface RosterRow{student_id:string;display_name:string;student_number:string;section_id?:string|null;section:string|null;source:'regular'|'exception';status:'enrolled'|'withdrawn'|'excluded';exception_reason?:string}
 export interface MySubject{offering_id:string;term:string;term_status:string;subject:{id:string;code:string;title:string;units:string};faculty:{display_name:string};enrollment_status:string}
 export interface ImportRow{row:number;source_sheet?:string;source_row?:number;student_number:string;email:string;display_name:string;section:string;status:'new'|'existing'|'error';errors:string[]}

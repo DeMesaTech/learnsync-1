@@ -5,6 +5,7 @@ from app.features.accounts.models import Account
 
 from .models import (
     AcademicTerm,
+    College,
     Enrollment,
     EnrollmentException,
     Offering,
@@ -36,15 +37,38 @@ def school_years(db):
             for y in years]
 
 
+def college_view(college):
+    return {"id": college.id, "code": college.code, "name": college.name,
+            "description": college.description, "status": college.status,
+            "created_at": college.created_at, "updated_at": college.updated_at}
+
+
+def colleges(db):
+    return [college_view(c) for c in db.scalars(select(College).order_by(College.name))]
+
+
+def college(db, college_id):
+    item = db.get(College, college_id)
+    if not item:
+        fail(404, "not_found", "College not found.")
+    return college_view(item)
+
+
 def subject_view(subject):
-    return {"id": subject.id, "code": subject.code, "title": subject.title,
+    data = {"id": subject.id, "code": subject.code, "title": subject.title,
             "units": subject.units, "year_level": subject.year_level,
             "semester": subject.semester, "description": subject.description,
-            "status": subject.status}
+            "status": subject.status, "college_id": subject.college_id}
+    if subject.college is not None:
+        data["college"] = {"id": subject.college.id, "code": subject.college.code,
+                           "name": subject.college.name, "status": subject.college.status}
+    return data
 
 
-def subjects(db, include_archived):
+def subjects(db, include_archived, college_id=None):
     query = select(Subject).order_by(Subject.year_level, Subject.semester, Subject.code)
+    if college_id is not None:
+        query = query.where(Subject.college_id == college_id)
     if not include_archived:
         query = query.where(Subject.status == "active")
     return [subject_view(s) for s in db.scalars(query)]
@@ -77,7 +101,9 @@ def section_roster_page(db, section_id, page, page_size, search, status):
     """Students of a section, a page at a time, with search and a status filter (active, withdrawn, all)."""
     if not db.get(Section, section_id):
         fail(404, "not_found", "Section not found.")
-    query = (select(Account.id, Account.display_name, Account.email, Account.student_number, SectionMember.status)
+    query = (select(Account.id, Account.display_name, Account.email, Account.student_number,
+                    Account.status.label("account_status"),
+                    SectionMember.status.label("membership_status"))
              .join(SectionMember, SectionMember.student_id == Account.id)
              .where(SectionMember.section_id == section_id))
     if status in ("active", "withdrawn"):
@@ -88,7 +114,8 @@ def section_roster_page(db, section_id, page, page_size, search, status):
                       .limit(page_size).offset((page - 1) * page_size))
     return {"total": total, "page": page, "page_size": page_size,
             "items": [{"student_id": r.id, "display_name": r.display_name, "email": r.email,
-                       "student_number": r.student_number, "status": r.status} for r in rows]}
+                       "student_number": r.student_number, "account_status": r.account_status,
+                       "status": r.membership_status} for r in rows]}
 
 
 def section_candidates(db, section_id, page, page_size, search, account="all"):

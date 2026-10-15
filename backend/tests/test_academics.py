@@ -326,6 +326,8 @@ def test_the_section_roster_pages_searches_and_filters_and_candidates_exclude_pl
     base = f"/api/sections/{sec_a['id']}/roster"
     page1 = admin.get(base + "?page_size=2").json()
     assert page1["total"] == 4 and len(page1["items"]) == 2 and page1["page"] == 1           # active only by default
+    assert page1["items"][0]["email"].endswith("@example.com")
+    assert page1["items"][0]["account_status"] == "active"
     assert len(admin.get(base + "?page_size=2&page=2").json()["items"]) == 2
     assert admin.get(base + "?page_size=2&page=3").json()["items"] == []
     withdrawn = admin.get(base + "?status=withdrawn").json()
@@ -340,6 +342,33 @@ def test_the_section_roster_pages_searches_and_filters_and_candidates_exclude_pl
     assert admin.get(f"/api/sections/{sec_a['id']}/candidates?search=roster6").json()["total"] == 1
     assert Api("faculty@example.com").get(base).status_code == 403
     assert admin.get(f"/api/sections/{uuid_zero()}/roster").status_code == 404
+
+
+def test_colleges_can_group_subjects_and_reject_usage(world):
+    admin = world["admin"]
+    college = admin.post("/api/colleges", {
+        "code": "bse",
+        "name": "School of Business and Entrepreneurship",
+        "description": "Business and entrepreneurship programs."}).json()
+    assert college["code"] == "BSE"
+    assert admin.get(f"/api/colleges/{college['id']}").json()["name"] == college["name"]
+    assert admin.get(f"/api/colleges/{uuid_zero()}").status_code == 404
+
+    updated = admin.patch(f"/api/colleges/{college['id']}", {"name": "School of Entrepreneurship"})
+    assert updated.status_code == 200 and updated.json()["name"] == "School of Entrepreneurship"
+
+    assigned = admin.patch(f"/api/subjects/{world['subject']['id']}", {"college_id": college["id"]})
+    assert assigned.status_code == 200
+    subject = assigned.json()
+    assert subject["college_id"] == college["id"]
+    assert admin.get("/api/subjects?college_id=" + college["id"]).json()[0]["id"] == world["subject"]["id"]
+
+    blocked = admin.delete(f"/api/colleges/{college['id']}")
+    assert blocked.status_code == 409 and blocked.json()["error"]["code"] == "college_in_use"
+
+    unassigned = admin.patch(f"/api/subjects/{world['subject']['id']}", {"college_id": None})
+    assert unassigned.status_code == 200 and unassigned.json()["college_id"] is None
+    assert admin.delete(f"/api/colleges/{college['id']}").status_code == 204
 
 
 def uuid_zero():

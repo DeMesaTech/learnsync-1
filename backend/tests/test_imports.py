@@ -21,6 +21,8 @@ def stage(db, actors, tmp_path, monkeypatch):
     monkeypatch.setattr(imports, "send_link", lambda account, token, purpose: sent.append(account.email))
     monkeypatch.setattr(faculty_imports, "send_link", lambda account, token, purpose: sent.append(account.email))
     admin = Api("admin@example.com")
+    college = admin.post("/api/colleges", {
+        "code": "BSE", "name": "College of Business and Entrepreneurship"}).json()
     year = admin.post("/api/school-years", {
         "label": "2026-2027", "start_date": "2026-06-01", "end_date": "2027-04-30",
         "terms": [{"name": "First Semester", "sequence": 1, "start_date": "2026-06-01",
@@ -28,7 +30,7 @@ def stage(db, actors, tmp_path, monkeypatch):
     term = year["terms"][0]
     sections = {n: admin.post(f"/api/terms/{term['id']}/sections",
                               {"name": n, "year_level": 1}).json() for n in ("1A", "1B")}
-    return {"admin": admin, "term": term, "sections": sections, "sent": sent,
+    return {"admin": admin, "college": college, "term": term, "sections": sections, "sent": sent,
             "root": tmp_path / "uploads"}
 
 
@@ -45,6 +47,11 @@ def upload(stage, content=CSV, name="students.csv", term=True):
 
 def account_count(db):
     return db.scalar(select(func.count()).select_from(Account))
+
+
+def prospectus_commit(stage, expected_revision, college_id=None):
+    return {"expected_revision": expected_revision,
+            "college_id": college_id or stage["college"]["id"]}
 
 
 def test_student_import_preview_then_commit(db, stage):
@@ -377,14 +384,38 @@ def test_prospectus_extraction_review_and_commit(db, stage):
                       {"expected_revision": 1, "subjects": edited})
     assert stale.status_code == 409 and stale.json()["error"]["code"] == "draft_revision_conflict"
 
-    done = admin.post(f"/api/prospectus-imports/{draft['id']}/commit", {"expected_revision": 2})
+    done = admin.post(f"/api/prospectus-imports/{draft['id']}/commit",
+                      prospectus_commit(stage, 2))
     assert done.status_code == 200 and done.json() == {"created": 2, "skipped_existing": 1}
     subject = db.scalar(select(Subject).where(Subject.code == "ENT 101"))
     assert subject.title == "Intro to Entrepreneurship (reviewed)"
+    assert str(subject.college_id) == stage["college"]["id"]
     existing = db.scalar(select(Subject).where(Subject.code == "GE 101"))
     assert existing.title == "Existing"                                   # never overwritten
-    again = admin.post(f"/api/prospectus-imports/{draft['id']}/commit", {"expected_revision": 2})
+    assert existing.college_id is None
+    again = admin.post(f"/api/prospectus-imports/{draft['id']}/commit",
+                       prospectus_commit(stage, 2))
     assert again.status_code == 409
+
+
+def test_prospectus_commit_requires_an_active_college(db, stage):
+    admin = stage["admin"]
+    draft = admin.upload("/api/prospectus-imports", "prospectus.docx",
+                         docx_bytes(PROSPECTUS)).json()
+    inactive = admin.post("/api/colleges", {
+        "code": "OLD", "name": "Inactive College", "status": "inactive"}).json()
+
+    refused = admin.post(f"/api/prospectus-imports/{draft['id']}/commit",
+                         prospectus_commit(stage, draft["revision"], inactive["id"]))
+    assert refused.status_code == 409
+    assert refused.json()["error"]["code"] == "college_inactive"
+    assert db.scalar(select(func.count()).select_from(Subject)) == 0
+
+    committed = admin.post(f"/api/prospectus-imports/{draft['id']}/commit",
+                           prospectus_commit(stage, draft["revision"]))
+    assert committed.status_code == 200
+    assert all(str(subject.college_id) == stage["college"]["id"]
+               for subject in db.scalars(select(Subject)).all())
 
 
 def test_invalid_draft_cannot_commit_and_manual_entry_works(db, stage):
@@ -393,11 +424,12 @@ def test_invalid_draft_cannot_commit_and_manual_entry_works(db, stage):
     assert manual.status_code == 201 and manual.json()["subjects"] == []
     pid = manual.json()["id"]
     assert admin.post(f"/api/prospectus-imports/{pid}/commit",
-                      {"expected_revision": 1}).status_code == 422
+                      prospectus_commit(stage, 1)).status_code == 422
     admin.put(f"/api/prospectus-imports/{pid}", {"expected_revision": 1, "subjects": [
         {"code": "ENT 201", "title": "Marketing", "units": "3", "year_level": 2, "semester": 1},
         {"code": "", "title": "No code", "units": "abc"}]})
-    refused = admin.post(f"/api/prospectus-imports/{pid}/commit", {"expected_revision": 2})
+    refused = admin.post(f"/api/prospectus-imports/{pid}/commit",
+                         prospectus_commit(stage, 2))
     assert refused.status_code == 409 and refused.json()["error"]["code"] == "draft_has_errors"
     assert db.scalar(select(func.count()).select_from(Subject)) == 0     # no partial commit
 
