@@ -44,6 +44,13 @@ export function Subjects() {
     const k = semesterLabel(s.semester);
     grouped.set(k, [...(grouped.get(k) ?? []), s]);
   });
+  const semesterOrder = (label: string) => {
+    if (label === 'No semester') return Number.MAX_SAFE_INTEGER;
+    const match = /^(\d+)(?:st|nd|rd|th) semester$/.exec(label);
+    return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER - 1;
+  };
+  const semesterGroups = [...grouped]
+    .sort(([a], [b]) => semesterOrder(a) - semesterOrder(b));
 
   return <>
     <div className="page-heading">
@@ -69,10 +76,10 @@ export function Subjects() {
           {yearTabs.map(year => <button key={year} type="button" className={activeYear === year ? 'active' : ''} aria-pressed={activeYear === year} onClick={() => setActiveYear(year)}>{yearLabel(year)}</button>)}
         </nav>}
         {grouped.size === 0 ? <section className="panel"><h2>No subjects match</h2><p>Change the search or college filter.</p></section> :
-          [...grouped].map(([group, items]) => <section className="panel" key={group}><h2>{group}</h2>
-            <div className="table-wrap" tabIndex={0} role="region" aria-label="Subjects"><table><thead><tr><th>Code</th><th>Title</th><th>College</th><th>Units</th><th><span className="sr-only">Actions</span></th></tr></thead>
+          <div className="prospectus-semesters">{semesterGroups.map(([group, items]) => <section className="panel" key={group}><h2>{group}</h2>
+            <div className="table-wrap" tabIndex={0} role="region" aria-label={`${group} subjects`}><table><thead><tr><th>Code</th><th>Title</th><th>College</th><th>Units</th><th><span className="sr-only">Actions</span></th></tr></thead>
               <tbody>{items.map(s => <tr key={s.id}><td>{s.code}</td><td>{s.title}{s.status === 'archived' && <span className="badge"> archived</span>}</td><td>{s.college ? s.college.name : 'Unassigned'}</td><td>{s.units}</td>
-                <td><button onClick={() => { setMessage(''); setEditing(s) }}>Edit</button></td></tr>)}</tbody></table></div></section>)}
+                <td><button onClick={() => { setMessage(''); setEditing(s) }}>Edit</button></td></tr>)}</tbody></table></div></section>)}</div>}
       </>}
     {editing && <Dialog title={editing === 'new' ? 'Add subject' : `Edit ${editing.code}`} onClose={() => setEditing(null)}>
       <form onSubmit={submit}>

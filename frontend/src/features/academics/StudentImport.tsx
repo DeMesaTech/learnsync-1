@@ -26,7 +26,7 @@ export function StudentImport(){
     }catch(err){setError(errorText(err))}finally{setBusy(false)}
   }
   return <>
-    <p className="back"><Link to={`/admin/terms/${termId}`}>← Term workspace</Link></p>
+    <p className="back"><Link to="/admin/students">← Student management</Link></p>
     <h1>Import students</h1>
     <p className="muted">Upload a CSV or Excel file with <code>student_number</code> and <code>email</code>, plus either <code>display_name</code> or <code>firstName</code>, <code>Middle Initial</code> and <code>lastName</code>. Split names are combined as first, middle, last; the middle part is optional. Excel imports read each worksheet with student columns; CSV imports read the file as one table. You may also include <code>section</code> (an existing section name in this term). Review the result before anything is created. New students receive an invitation email.</p>
     <section className="panel"><form onSubmit={submit}>
@@ -36,8 +36,8 @@ export function StudentImport(){
     {error&&<p role="alert">{error}</p>}
     {result&&<section className="panel" role="status"><h2>Import complete</h2>
       <p>{result.created} student{result.created===1?'':'s'} invited, {result.existing} already existed, {result.skipped} error row{result.skipped===1?'':'s'} skipped.</p>
-      {result.email_failed.length>0&&<p className="warn">Invitation emails could not be sent to: {result.email_failed.join(', ')}. Use “Resend invitation” in User accounts.</p>}
-      <Link className="button primary" to={`/admin/terms/${termId}`}>Back to the term</Link></section>}
+      {result.email_failed.length>0&&<p className="warn">Invitation emails could not be sent to: {result.email_failed.join(', ')}. Use the resend action in the related account list.</p>}
+      <Link className="button primary" to="/admin/students">Back to student management</Link></section>}
     {preview&&<section className="panel">
       <h2>Preview</h2>
       <p>{preview.summary.new} new · {preview.summary.existing} existing · <span className={preview.summary.errors?'error':''}>{preview.summary.errors} with errors</span></p>

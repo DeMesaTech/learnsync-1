@@ -1,5 +1,14 @@
 # Acceptance status
 
+### 2026-10-15 (Prospectus semester columns)
+- Prospectus semester panels now render in a two-column grid, sorted so 1st semester is on the left and 2nd semester is on the right. The grid stacks on narrow screens; any other semester groups remain ordered after the first two.
+- Passed: `cd frontend; npm run build`, `npm run lint`, and `git diff --check`. Vite emitted the existing large-chunk warning.
+
+### 2026-10-15 (Admin revision updates)
+- Updated the admin sidebar and route structure to match the revision brief: Student and Teacher groupings are kept, User Accounts is no longer advertised, Prospectus sits in Oversight, and Settings holds the school-year setup page.
+- Student management now opens from the revised student route and routes the legacy admin academic URL to the settings page; the school-year settings heading now reads “School-year settings.”
+- Passed: `cd frontend && npm run build` completed successfully (exit code 0). Vite still emits the project’s existing large-chunk warning, but the build passes without TypeScript or bundling errors.
+
 ### 2026-10-15 (Section invitations and student action icons)
 - Added a section-level action to resend invitation links to every invited student in that section, including students on later roster pages. The API scopes recipients to active student memberships, returns per-recipient send results, and the UI surfaces failed email addresses/messages.
 - The roster includes the total pending-invitation count for the section. Student row actions and section-level manage/invite/delete actions use icon buttons with accessible names and titles.
@@ -900,3 +909,9 @@ Note: another process (started from Codex's Python runtime) was already serving 
 - Regression coverage added: backend timer expiry, locked late writes, future-question rejection, progression, reload persistence, final auto-scoring, timer immutability after attempts, default/import/duplicate durations and invalid bounds; browser E2E checks teacher defaults/custom times, total duration display, the single-current-question timer and expiry persistence on reload. Existing browser flows verify the active question autosaved and preserve the explicit early-submit option.
 - Executed: targeted backend pytest was attempted but blocked before test setup: Postgres at `127.0.0.1:15432` is unreachable and Docker is unavailable. Backend Ruff passed; Python compileall passed; Alembic reports one merged head (`9f6d2a4c18b1`); frontend `npm run build` and `npm run lint` passed (existing Vite large-chunk warning); `node --check frontend\\e2e\\quiz-stepper.mjs` passed.
 - Not run: migration upgrade against a live test database, browser E2E, or self-provisioning scenarios (Postgres/Docker and a disposable database are unavailable); no claim of integration test success.
+
+### Independent admin student and course-offering pages (2026-10-15)
+- Defect confirmed from the supplied browser context and source: `/admin/offerings` rendered the student panel after navigating from `/admin/students` because both routes reuse `TermWorkspace`, whose tab state only read `initialTab` on first mount. The page heading followed the new route prop while the content retained the prior tab state.
+- Fixed standalone rendering to select its panel directly from the route's `initialTab`; the tab state remains in use for the term workspace only.
+- Playwright attempted both URLs after starting Vite. The frontend rendered “Cannot reach the server” on each route because the API/backend is unavailable, so authenticated page content could not be verified in-browser. This is a validation blocker, not a successful UI smoke test.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; Vite emitted the existing large-chunk warning), `npm run lint`, and `git diff --check`.

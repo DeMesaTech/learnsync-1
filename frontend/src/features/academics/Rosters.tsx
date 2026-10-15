@@ -23,7 +23,7 @@ export function OfferingRoster({embedded=false}:{embedded?:boolean}){
   const [dialog,setDialog]=useState(false);
   const [message,setMessage]=useState('');
   const refresh=()=>queryClient.invalidateQueries({queryKey:['roster',offeringId]});
-  const parent=useOrigin(isAdmin?'/admin/academics':'/faculty/subjects',isAdmin?'School years':'My Classes');
+  const parent=useOrigin(isAdmin?'/admin/settings':'/faculty/subjects',isAdmin?'School-year settings':'My Classes');
   const back=parent.to;
   const selectedSection=offering.data?.sections.find(s=>s.id===sectionId);
   const belongsToSection=(r:RosterRow,s:{id:string;name:string})=>

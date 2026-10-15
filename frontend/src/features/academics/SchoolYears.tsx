@@ -21,22 +21,21 @@ export function SchoolYears(){
     catch(e){setMessage(errorText(e))}
   }
   return <>
-    <div className="page-heading">
-      <div><p className="eyebrow">Administration</p><h1>School years and terms</h1>
-        <p className="muted">Open a term to set up sections, offerings and enrollment. A term marked “open” can be edited; its dates show the academic period, so you can prepare the next semester ahead.</p></div>
+    <div className="page-heading settings-header">
+      <div><p className="eyebrow">Administration</p><h1>School-year settings</h1>
+        <p className="muted">Manage the active academic calendar, term status, and the yearly setup for sections and enrollment. A term marked “open” can be edited; its dates show the academic period, so you can prepare the next semester ahead.</p></div>
       <button className="primary" onClick={()=>{setMessage('');setCreating(true)}}>New school year</button>
     </div>
     {message&&<p role="status">{message}</p>}
     {years.isPending?<p>Loading…</p>:years.error?<p role="alert">{years.error.message}</p>:
-      years.data.length===0?<section className="panel"><h2>No school year yet</h2><p>Create the first school year to begin.</p></section>:
-      years.data.map(year=><section className="panel" key={year.id}>
-        <h2>{year.label}</h2><p className="muted">{year.start_date} to {year.end_date}</p>
-        <div className="cards">{year.terms.map(term=><article className="subpanel" key={term.id}>
-          <div><h3>{term.name}</h3>
-            <p className="muted">{term.start_date} to {term.end_date}</p>
-            <span className={`badge ${term.status}`}>{term.status}</span></div>
-          <div className="actions">
-            <Link className="button primary" to={`/admin/terms/${term.id}`}>Open workspace</Link>
+      years.data.length===0?<section className="panel settings-panel"><h2>No school year yet</h2><p>Create the first school year to begin.</p></section>:
+      years.data.map(year=><section className="panel settings-panel" key={year.id}>
+        <div className="settings-panel-header"><div><h2>{year.label}</h2><p className="muted">{year.start_date} to {year.end_date}</p></div></div>
+        <div className="settings-grid">{year.terms.map(term=><article className="settings-card" key={term.id}>
+          <div className="settings-card-header"><div><h3>{term.name}</h3><p className="muted">{term.start_date} to {term.end_date}</p></div><span className={`badge ${term.status}`}>{term.status}</span></div>
+          <div className="settings-card-actions">
+            <Link className="button primary" to="/admin/students">Student management</Link>
+            <Link className="button" to="/admin/offerings">Course offerings</Link>
             {term.status==='open'
               ?<button onClick={()=>close(term)}>Close term</button>
               :<button onClick={()=>{setMessage('');setReopening(term)}}>Reopen</button>}

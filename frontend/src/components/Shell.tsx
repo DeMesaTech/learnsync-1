@@ -19,12 +19,11 @@ function navigation(role:'admin'|'faculty'|'student', schoolYears?:SchoolYear[],
   const home='/'+role;
   const account={label:'Account & help',items:[{to:'/account',label:'Account & theme',icon:'○'}]};
   if(role==='admin'){
-    const terms=(schoolYears??[]).flatMap(year=>year.terms.map(term=>({to:`${home}/terms/${term.id}`,label:`${year.label} · ${term.name}`,icon:'↳'})));
     return [
-      {label:'Your workspace',items:[{to:home,label:'Dashboard',icon:'⌂',end:true},{to:`${home}/accounts`,label:'User accounts',icon:'♙'}]},
-      {label:'Academic management',items:[{to:`${home}/academics`,label:'School years',icon:'☰',children:terms.length?terms:undefined},{to:`${home}/subjects`,label:'Prospectus',icon:'▤'}]},
-      {label:'Oversight',items:[{to:`${home}/issues`,label:'Reports',icon:'?'},{to:`${home}/audit`,label:'Audit history',icon:'◷'}]},
-      account];
+      {label:'Management',items:[{to:`${home}/students`,label:'Student management',icon:'◫'},{to:`${home}/offerings`,label:'Course offerings',icon:'☰'}]},
+      {label:'Oversight',items:[{to:`${home}/subjects`,label:'Prospectus',icon:'▤'},{to:`${home}/issues`,label:'Reports',icon:'?'},{to:`${home}/audit`,label:'Audit history',icon:'◷'}]},
+      {label:'Settings',items:[{to:`${home}/settings`,label:'School-year settings',icon:'⚙'}]}
+    ];
   }
   const student=role==='student';
   const review=role==='faculty'?[{to:`${home}/review`,label:'To review',icon:'✎'}]:[];

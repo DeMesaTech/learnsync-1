@@ -29,5 +29,6 @@
 - Dashboard
 - Student Management
     - the page is in the teakworkspace.tsx:166-235: transfer this into a whole separate page
--  Offerings
+-  Offerings(rename this into user friendly label)
     - the page is in the teamworkspace.tsx:237-261: transfer this into a whole separate page
+- settings.

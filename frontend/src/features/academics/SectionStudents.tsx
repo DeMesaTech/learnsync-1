@@ -60,9 +60,9 @@ export function SectionStudents(){
   }
 
   if(years.isPending||sections.isPending)return <p>Loading…</p>;
-  if(!section||!term)return <section className="panel"><h1>Section not found</h1><Link to={`/admin/terms/${termId}`}>Back to the term</Link></section>;
+  if(!section||!term)return <section className="panel"><h1>Section not found</h1><Link to="/admin/students">Back to student management</Link></section>;
   return <>
-    <p className="back"><Link to={`/admin/terms/${termId}`}>← {term.name}</Link></p>
+    <p className="back"><Link to="/admin/students">← Student management</Link></p>
     <div className="page-heading"><div><p className="eyebrow">{yearLabel(section.year_level)}</p><h1>{section.name}: students</h1>
       <p className="muted">{section.member_count} active student{section.member_count===1?'':'s'}{closed?' · this term is closed, so the list is read-only':''}</p></div></div>
     <div className="type-tabs" role="group" aria-label="Students view">{([['current','In this section'],['add','Add students']] as const).filter(([k])=>k==='current'||!closed).map(([k,l])=>

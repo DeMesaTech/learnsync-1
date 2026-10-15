@@ -15,19 +15,25 @@ interface SectionRosterPage{items:SectionRosterRow[];total:number;page:number;pa
 interface BulkInvitationResult{sent:number;failed:number;results:{id:string;email:string;status:'sent'|'failed';message:string}[]}
 interface StudentDraft{display_name:string;email:string;student_number:string}
 
-export function TermWorkspace(){
-  const {termId}=useParams();
+export function TermWorkspace({initialTab='sections',standalone=false}:{initialTab?:'sections'|'offerings';standalone?:boolean}={}){
+  const {termId:routeTermId}=useParams();
   const here=useHere();
   const ask=useConfirm();
   const toast=useToast();
   const years=useQuery({queryKey:['school-years'],queryFn:()=>api<SchoolYear[]>('/school-years')});
-  const sections=useQuery({queryKey:['sections',termId],queryFn:()=>api<Section[]>(`/terms/${termId}/sections`)});
-  const offerings=useQuery({queryKey:['offerings',termId],queryFn:()=>api<OfferingSummary[]>(`/terms/${termId}/offerings`)});
+  const fallbackTermId=useMemo(()=>{
+    const openTerm=years.data?.find(y=>y.terms.some(t=>t.status==='open'))?.terms.find(t=>t.status==='open') ?? years.data?.[0]?.terms[0];
+    return openTerm?.id ?? '';
+  },[years.data]);
+  const termId=routeTermId ?? fallbackTermId;
+  const sections=useQuery({queryKey:['sections',termId],enabled:!!termId,queryFn:()=>api<Section[]>(`/terms/${termId}/sections`)});
+  const offerings=useQuery({queryKey:['offerings',termId],enabled:!!termId,queryFn:()=>api<OfferingSummary[]>(`/terms/${termId}/offerings`)});
   const subjects=useQuery({queryKey:['subjects',false],queryFn:()=>api<Subject[]>('/subjects')});
   const colleges=useQuery({queryKey:['colleges'],queryFn:()=>api<College[]>('/colleges')});
   const [dialog,setDialog]=useState<'section'|'offering'|null>(null);
   const [editing,setEditing]=useState<OfferingSummary|null>(null);
-  const [tab,setTab]=useState<'sections'|'offerings'>('sections');
+  const [tab,setTab]=useState<'sections'|'offerings'>(initialTab);
+  const activeTab=standalone?initialTab:tab;
   const [teacherFilter,setTeacherFilter]=useState('');
   const [sectionError,setSectionError]=useState('');
   const [deletingSection,setDeletingSection]=useState<string|null>(null);
@@ -145,29 +151,31 @@ export function TermWorkspace(){
   const invitationCount=roster.data?.invitation_count??0;
 
   if(years.isPending)return <p>Loading…</p>;
-  if(!term)return <section className="panel"><h1>Term not found</h1><Link to="/admin/academics">Back to school years</Link></section>;
+  if(!term)return <section className="panel"><h1>Term not found</h1><Link to="/admin/settings">Back to School-year settings</Link></section>;
+  const standaloneHeading=initialTab==='sections'?'Student management':'Course offerings';
+  const headingLabel=standalone ? standaloneHeading : term.name;
   return <>
-    <p className="back"><Link to="/admin/academics">← School years</Link></p>
+    {!standalone&&<p className="back"><Link to="/admin/settings">← School-year settings</Link></p>}
     <div className="page-heading">
-      <div><p className="eyebrow">{year?.label}</p><h1>{term.name}</h1>
-        <span className={`badge ${term.status}`}>{term.status}</span></div>
+      <div><p className="eyebrow">{standalone ? 'Administration' : year?.label}</p><h1>{headingLabel}</h1>
+        {!standalone&&<span className={`badge ${term.status}`}>{term.status}</span>}</div>
     </div>
-    {closed&&<p className="warn" role="status">This term is closed. Reopen it from School years to make changes.</p>}
-    <div className="stats-grid">
+    {!standalone&&closed&&<p className="warn" role="status">This term is closed. Reopen it from School-year settings to make changes.</p>}
+    {!standalone&&<div className="stats-grid">
       <div className="stat-card"><span>Sections</span><strong>{totalSections}</strong></div>
       <div className="stat-card"><span>Students</span><strong>{totalStudents}</strong></div>
       <div className="stat-card"><span>Offerings</span><strong>{activeOfferings}</strong></div>
-    </div>
-    <nav className="tabs" aria-label="Term workspace tabs">
+    </div>}
+    {!standalone&&<nav className="tabs" aria-label="Term workspace tabs">
       <button type="button" className={tab==='sections'?'active':''} aria-pressed={tab==='sections'} onClick={()=>setTab('sections')}>Students</button>
-      <button type="button" className={tab==='offerings'?'active':''} aria-pressed={tab==='offerings'} onClick={()=>setTab('offerings')}>Offerings</button>
-    </nav>
+      <button type="button" className={tab==='offerings'?'active':''} aria-pressed={tab==='offerings'} onClick={()=>setTab('offerings')}>Course offerings</button>
+    </nav>}
 
-    {tab==='sections'?
-      <section className="panel">
+    {activeTab==='sections'?
+      <section className="panel panel-settings">
         <div className="page-heading"><div><h2>Student management</h2>
           {!subjects.isError&&subjects.isSuccess&&programYears.length>0&&<p className="muted">Manage students by year level and section. Program duration: {highestProgramYear} year{highestProgramYear===1?'':'s'}.</p>}
-        </div><button className={sections.data?.length===0?'primary':''} aria-label="Add section" disabled={closed||subjects.isPending||subjects.isError||colleges.isPending||colleges.isError||programYears.length===0} onClick={()=>setDialog('section')}><span aria-hidden="true">＋</span> Add section</button></div>
+        </div></div>
         {subjects.isError&&<p role="alert">Could not load the prospectus year levels: {subjects.error.message}</p>}
         {offerings.isError&&<p role="alert">Could not load course offerings: {offerings.error.message}</p>}
         {colleges.isError&&<p role="alert">Could not load colleges: {colleges.error.message}</p>}
@@ -180,26 +188,32 @@ export function TermWorkspace(){
             {colleges.data?.filter(college=>college.status==='active').map(college=><option key={college.id} value={college.id}>{college.name}</option>)}
           </select></label>
         </div>
-        {programYears.length>0&&<nav className="tabs year-tabs" aria-label="Year levels">
-          {programYears.map(yearLevel=><button key={yearLevel} type="button" className={visibleYear===yearLevel?'active':''} aria-pressed={visibleYear===yearLevel}
-            onClick={()=>{setActiveYear(yearLevel);setSelectedSectionId('');setRosterPage(1);setEmailError('')}}>{yearLabel(yearLevel)}</button>)}
-        </nav>}
-        <div className="actions student-year-actions">
-          <Link className="button" to={`/admin/terms/${termId}/import-students`}>Import students</Link>
-        </div>
-        {sections.isPending?<p>Loading…</p>:sections.error?<p role="alert">{sections.error.message}</p>:
-          filteredYearSections.length===0?<p className="muted">{courseFilter?`No sections for the selected college/program are assigned to ${visibleYear?yearLabel(visibleYear):'this year level'}.`:`No sections for ${visibleYear?yearLabel(visibleYear):'this year level'} yet. Add a section to start managing students.`}</p>:
-          <>
+        {programYears.length>0&&<>
+          <nav className="tabs year-tabs" aria-label="Year levels">
+            {programYears.map(yearLevel=><button key={yearLevel} type="button" className={visibleYear===yearLevel?'active':''} aria-pressed={visibleYear===yearLevel}
+              onMouseEnter={()=>{setActiveYear(yearLevel);setSelectedSectionId('');setRosterPage(1);setEmailError('')}}
+              onFocus={()=>{setActiveYear(yearLevel);setSelectedSectionId('');setRosterPage(1);setEmailError('')}}
+              onClick={()=>{setActiveYear(yearLevel);setSelectedSectionId('');setRosterPage(1);setEmailError('')}}>{yearLabel(yearLevel)}</button>)}
+          </nav>
+          <div className="student-section-panel">
             <div className="student-section-filter">
               <label>Section<select aria-label="Filter by section" value={selectedSection?.id??''} onChange={event=>{setSelectedSectionId(event.target.value);setRosterPage(1);setEmailError('')}}>
                 {filteredYearSections.map(section=><option key={section.id} value={section.id}>{section.name} ({section.member_count} students)</option>)}
               </select></label>
               {selectedSection&&<div className="actions">
-                <Link className="button icon-button" state={here} to={`/admin/terms/${termId}/sections/${selectedSection.id}/students`} aria-label={`Manage roster for ${selectedSection.name}`} title="Manage roster"><StudentManagementIcon name="roster"/></Link>
                 {!closed&&invitationCount>0&&<button type="button" className="icon-button" aria-label={`Invite all ${invitationCount} students awaiting invitation`} title={`Invite all ${invitationCount} students awaiting invitation`} disabled={sendingSectionInvitations} onClick={sendSectionInvitations}><StudentManagementIcon name="mail"/></button>}
                 {!closed&&<button type="button" className="danger icon-button" aria-label={`Delete ${selectedSection.name}`} title="Delete section" disabled={deletingSection!==null} onClick={()=>removeSection(selectedSection)}>{deletingSection===selectedSection.id?'…':<StudentManagementIcon name="delete"/>}</button>}
               </div>}
             </div>
+            <div className="actions student-year-actions">
+              <button className={sections.data?.length===0?'primary':''} aria-label="Add section" disabled={closed||subjects.isPending||subjects.isError||colleges.isPending||colleges.isError||programYears.length===0} onClick={()=>setDialog('section')}><span aria-hidden="true">＋</span> Add section</button>
+              <Link className="button" to="/admin/students">Import students</Link>
+            </div>
+          </div>
+        </>}
+        {sections.isPending?<p>Loading…</p>:sections.error?<p role="alert">{sections.error.message}</p>:
+          filteredYearSections.length===0?<p className="muted">{courseFilter?`No sections for the selected college/program are assigned to ${visibleYear?yearLabel(visibleYear):'this year level'}.`:`No sections for ${visibleYear?yearLabel(visibleYear):'this year level'} yet. Add a section to start managing students.`}</p>:
+          <>
             {emailError&&<p role="alert">{emailError}</p>}
             {roster.isPending?<p>Loading students…</p>:roster.error?<p role="alert">{roster.error.message}</p>:
               roster.data.items.length===0?<p className="muted">{courseFilter?'This section belongs to the selected college/program but has no students yet.':`No students are enrolled in ${selectedSection.name} yet.`}</p>:
@@ -229,8 +243,8 @@ export function TermWorkspace(){
           </>}
       </section>
       :
-      <section className="panel">
-        <div className="page-heading"><h2>Offerings</h2><div className="actions">
+      <section className="panel panel-settings">
+        <div className="page-heading"><h2>Course offerings</h2><div className="actions">
           <Link className="button" to="/admin/teachers/import">Import teachers</Link>
           <button className={sections.data?.length&&offerings.data?.length===0?'primary':''} disabled={closed||!sections.data} onClick={()=>setDialog('offering')}>Assign subjects</button>
         </div></div>
