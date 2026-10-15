@@ -1,8 +1,10 @@
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from helpers import Api, make_account
 from sqlalchemy import select
 
-from app.features.accounts.models import AuditEvent
+from app.features.accounts.commands import issue_token
+from app.features.accounts.models import AccountToken, AuditEvent
 from app.main import app
 
 
@@ -36,6 +38,13 @@ def test_assigned_faculty_and_enrolled_students_see_offering(db, world):
     assert add_member(world, world["sections"][0], s1).status_code == 204
     assert add_member(world, world["sections"][1], s2).status_code == 204
     oid = world["offering"]["id"]
+    section_roster = world["admin"].get(
+        f"/api/sections/{world['sections'][0]['id']}/roster?offering_id={oid}")
+    assert section_roster.status_code == 200, section_roster.text
+    assert [row["student_id"] for row in section_roster.json()["items"]] == [str(s1.id)]
+    not_assigned = world["admin"].get(
+        f"/api/sections/{world['sections'][1]['id']}/roster?offering_id={oid}")
+    assert not_assigned.status_code == 404
 
     faculty = Api("faculty@example.com")
     mine = faculty.get("/api/me/offerings").json()
@@ -57,6 +66,173 @@ def test_assigned_faculty_and_enrolled_students_see_offering(db, world):
     # Faculty and students cannot use the enrolment management endpoints.
     assert faculty.put(f"/api/offerings/{oid}/exceptions/{s2.id}",
                        {"action": "exclude", "reason": "nope"}).status_code == 403
+
+
+def test_section_roster_college_filter_scopes_by_section_college(world):
+    admin = world["admin"]
+    college_a = admin.post("/api/colleges", {"code": "COLA", "name": "College A"}).json()
+    college_b = admin.post("/api/colleges", {"code": "COLB", "name": "College B"}).json()
+    term_id = world["term"]["id"]
+    section_a = admin.post(f"/api/terms/{term_id}/sections/bulk", {
+        "college_id": college_a["id"], "year_level": 1, "count": 1}).json()["sections"][0]
+    section_b = admin.post(f"/api/terms/{term_id}/sections/bulk", {
+        "college_id": college_b["id"], "year_level": 1, "count": 1}).json()["sections"][0]
+    student_a, student_b = world["students"]
+    assert add_member(world, section_a, student_a).status_code == 204
+    assert add_member(world, section_b, student_b).status_code == 204
+
+    roster_a = admin.get(
+        f"/api/sections/{section_a['id']}/roster?college_id={college_a['id']}")
+    assert roster_a.status_code == 200, roster_a.text
+    assert [row["student_id"] for row in roster_a.json()["items"]] == [str(student_a.id)]
+    wrong_college = admin.get(
+        f"/api/sections/{section_b['id']}/roster?college_id={college_a['id']}")
+    assert wrong_college.status_code == 404
+    roster_b = admin.get(
+        f"/api/sections/{section_b['id']}/roster?college_id={college_b['id']}")
+    assert roster_b.status_code == 200, roster_b.text
+    assert [row["student_id"] for row in roster_b.json()["items"]] == [str(student_b.id)]
+
+    conflict = admin.get(
+        f"/api/sections/{section_a['id']}/roster?college_id={college_a['id']}"
+        f"&offering_id={world['offering']['id']}")
+    assert conflict.status_code == 422
+
+
+def test_invite_all_sends_links_to_invited_students_in_selected_section(db, world, monkeypatch):
+    admin = world["admin"]
+    section_a, section_b = world["sections"]
+    first = make_account(db, "invite-a@example.com", "student", "INV-A")
+    second = make_account(db, "invite-b@example.com", "student", "INV-B")
+    elsewhere = make_account(db, "invite-other@example.com", "student", "INV-OTHER")
+    for student in (first, second, elsewhere):
+        student.status = "invited"
+        student.email_verified_at = None
+    db.commit()
+    assert add_member(world, section_a, first).status_code == 204
+    assert add_member(world, section_a, second).status_code == 204
+    assert add_member(world, section_b, elsewhere).status_code == 204
+    sent = []
+    monkeypatch.setattr(
+        "app.features.accounts.commands.send_link",
+        lambda account, token, purpose: sent.append((account.email, purpose)))
+
+    roster_response = admin.get(f"/api/sections/{section_a['id']}/roster?page_size=1")
+    assert roster_response.status_code == 200, roster_response.text
+    assert roster_response.json()["invitation_count"] == 2
+    response = admin.post(f"/api/sections/{section_a['id']}/send-invitations", {})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["sent"] == 2
+    assert response.json()["failed"] == 0
+    assert {email for email, purpose in sent} == {first.email, second.email}
+    assert {purpose for _, purpose in sent} == {"invite"}
+
+
+def test_college_sections_use_college_codes_without_creating_offerings(world):
+    admin = world["admin"]
+    college_a = admin.post("/api/colleges", {"code": "BSE", "name": "Business"}).json()
+    college_b = admin.post("/api/colleges", {"code": "BSIS", "name": "Information Systems"}).json()
+    term_id = world["term"]["id"]
+    before = admin.get(f"/api/terms/{term_id}/offerings").json()
+
+    sections_a = admin.post(f"/api/terms/{term_id}/sections/bulk", {
+        "college_id": college_a["id"], "year_level": 1, "count": 2})
+    sections_b = admin.post(f"/api/terms/{term_id}/sections/bulk", {
+        "college_id": college_b["id"], "year_level": 1, "count": 2})
+
+    assert sections_a.status_code == 201, sections_a.text
+    assert sections_b.status_code == 201, sections_b.text
+    assert [section["name"] for section in sections_a.json()["sections"]] == ["BSE 1A", "BSE 1B"]
+    assert [section["name"] for section in sections_b.json()["sections"]] == ["BSIS 1A", "BSIS 1B"]
+    assert all(section["college_id"] == college_a["id"]
+               for section in sections_a.json()["sections"])
+    assert all(section["college_id"] == college_b["id"]
+               for section in sections_b.json()["sections"])
+    assert admin.get(f"/api/terms/{term_id}/offerings").json() == before
+
+
+def test_college_cannot_be_deleted_while_assigned_to_section(world):
+    admin, term_id = world["admin"], world["term"]["id"]
+    college = admin.post("/api/colleges", {"code": "BSE", "name": "Business"}).json()
+    section = admin.post(f"/api/terms/{term_id}/sections/bulk", {
+        "college_id": college["id"], "year_level": 1, "count": 1}).json()["sections"][0]
+
+    blocked = admin.delete(f"/api/colleges/{college['id']}")
+    assert blocked.status_code == 409
+    assert blocked.json()["error"]["code"] == "college_in_use"
+
+    assert admin.delete(f"/api/sections/{section['id']}").status_code == 204
+    assert admin.delete(f"/api/colleges/{college['id']}").status_code == 204
+
+
+def test_section_student_profile_update_is_inline_scoped_and_reverifies_changed_email(
+        db, world, monkeypatch):
+    admin, section = world["admin"], world["sections"][0]
+    student = world["students"][0]
+    assert add_member(world, section, student).status_code == 204
+    reset_token = issue_token(db, student, "reset")
+    db.commit()
+    sent = []
+    monkeypatch.setattr(
+        "app.features.academics.commands.send_link",
+        lambda account, token, purpose: sent.append((account.email, token, purpose)))
+
+    response = admin.patch(
+        f"/api/sections/{section['id']}/students/{student.id}",
+        {"display_name": "Updated Student", "email": "updated@example.com",
+         "student_number": "S-UPDATED"})
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "student_id": str(student.id), "display_name": "Updated Student",
+        "email": "updated@example.com", "student_number": "S-UPDATED",
+        "account_status": "invited",
+    }
+    assert len(sent) == 1
+    assert sent[0][0::2] == ("updated@example.com", "invite")
+    db.expire_all()
+    tokens = db.scalars(select(AccountToken).where(
+        AccountToken.account_id == student.id)).all()
+    assert any(token.purpose == "reset" and token.consumed_at for token in tokens)
+    assert any(token.purpose == "invite" and token.consumed_at is None for token in tokens)
+    stale_link = admin.post("/api/auth/reset-password", {
+        "token": reset_token, "password": "a-new-test-password"})
+    assert stale_link.status_code == 422
+    roster = admin.get(f"/api/sections/{section['id']}/roster")
+    assert roster.status_code == 200
+    assert roster.json()["items"][0]["account_status"] == "invited"
+
+    outside_section = admin.patch(
+        f"/api/sections/{section['id']}/students/{world['students'][1].id}",
+        {"display_name": "Not a member", "email": "outside@example.com",
+         "student_number": "OUTSIDE"})
+    assert outside_section.status_code == 404
+    duplicate_id = admin.patch(
+        f"/api/sections/{section['id']}/students/{student.id}",
+        {"display_name": "Updated Student", "email": "updated@example.com",
+         "student_number": world["students"][1].student_number})
+    assert duplicate_id.status_code == 409
+
+
+def test_failed_student_email_update_does_not_partially_save(db, world, monkeypatch):
+    admin, section = world["admin"], world["sections"][0]
+    student = world["students"][0]
+    assert add_member(world, section, student).status_code == 204
+
+    def reject_email(*_args):
+        raise HTTPException(503, detail={"code": "email_unavailable",
+                                         "message": "Email could not be sent."})
+
+    monkeypatch.setattr("app.features.academics.commands.send_link", reject_email)
+    response = admin.patch(
+        f"/api/sections/{section['id']}/students/{student.id}",
+        {"display_name": "Updated Student", "email": "updated@example.com",
+         "student_number": "S-UPDATED"})
+    assert response.status_code == 503
+    db_account = world["students"][0]
+    db.refresh(db_account)
+    assert db_account.display_name == "s1"
+    assert db_account.email == "s1@example.com"
 
 
 def test_term_offering_summary_counts_enrollments_per_section(world):

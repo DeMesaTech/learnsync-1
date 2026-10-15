@@ -16,7 +16,9 @@ Several plan routes became tabs of one offering page; this is the actual map (so
 
 Public: `/login`, `/forgot-password`, `/reset-password`, `/accept-invitation`. Signed in: `/account`; each role's home `/admin`, `/faculty`, `/student`.
 
-Admin (`/admin/...`): `academics` (school years and terms), `terms/:termId` (Sections and Offerings tabs; student and teacher imports are launched from their matching tabs), `terms/:termId/import-students`, `teachers` (faculty account management), `teachers/import` (reviewed faculty import), `subjects`, `subjects/import`, `subjects/import/:importId`, `offerings/:offeringId` (roster), `accounts`, `issues` (reports), `audit`.
+Admin (`/admin/...`): `academics` (school years and terms), `terms/:termId` (Student management with college/program, year, and section filters and inline student profile editing, plus Offerings; imports are launched from their matching tabs), `terms/:termId/import-students`, `terms/:termId/sections/:sectionId/students` (searchable roster, candidates, and withdrawal history), `teachers` (faculty account management), `teachers/import` (reviewed faculty import), `subjects`, `subjects/import`, `subjects/import/:importId`, `offerings/:offeringId` (roster), `accounts`, `issues` (reports), `audit`.
+
+Student management retains the **Course** filter label for college/program selection. Sections are owned by one college/program and use its code in generated names (for example, `BSE 1A`); subject offerings are assigned later in the separate Offerings tab.
 
 Faculty (`/faculty/...`): `subjects`, `issues` (report a problem), and per offering `offerings/:offeringId` with tabs `` (students), `syllabus`, `content`, `content/:itemId/edit`, `assessments`, `assessments/:assessmentId/edit`, `assessments/:assessmentId/scores`, `attendance`, `gradebook` (publish grades and export), `progress`, `announcements`.
 

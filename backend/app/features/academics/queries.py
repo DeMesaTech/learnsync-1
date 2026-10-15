@@ -1,4 +1,4 @@
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
 
 from app.errors import fail
 from app.features.accounts.models import Account
@@ -82,7 +82,7 @@ def sections(db, term_id):
     rows = db.scalars(select(Section).where(Section.term_id == term_id)
                       .order_by(Section.year_level, Section.name))
     return [{"id": s.id, "term_id": s.term_id, "name": s.name, "year_level": s.year_level,
-             "member_count": counts.get(s.id, 0)} for s in rows]
+             "college_id": s.college_id, "member_count": counts.get(s.id, 0)} for s in rows]
 
 
 def section_members(db, section_id):
@@ -97,22 +97,50 @@ def section_members(db, section_id):
              "student_number": r.student_number} for r in rows]
 
 
-def section_roster_page(db, section_id, page, page_size, search, status):
+def section_roster_page(db, section_id, page, page_size, search, status, offering_id=None,
+                        college_id=None):
     """Students of a section, a page at a time, with search and a status filter (active, withdrawn, all)."""
-    if not db.get(Section, section_id):
+    section = db.get(Section, section_id)
+    if not section:
         fail(404, "not_found", "Section not found.")
+    if offering_id is not None and college_id is not None:
+        fail(422, "roster_filter_conflict",
+             "Choose either a course offering or a college filter, not both.")
+    if offering_id is not None and not db.scalar(select(OfferingSection.offering_id).where(
+            OfferingSection.offering_id == offering_id,
+            OfferingSection.section_id == section_id)):
+        fail(404, "not_found", "Course is not assigned to this section.")
+    if college_id is not None:
+        if not db.get(College, college_id):
+            fail(404, "not_found", "College not found.")
+        if section.college_id != college_id:
+            fail(404, "not_found", "Section is not assigned to this college/program.")
     query = (select(Account.id, Account.display_name, Account.email, Account.student_number,
                     Account.status.label("account_status"),
                     SectionMember.status.label("membership_status"))
              .join(SectionMember, SectionMember.student_id == Account.id)
              .where(SectionMember.section_id == section_id))
+    if offering_id is not None:
+        query = query.where(exists(select(1).where(
+            Enrollment.offering_id == offering_id,
+            Enrollment.student_id == SectionMember.student_id,
+            Enrollment.section_id == section_id,
+            Enrollment.status == "enrolled")))
     if status in ("active", "withdrawn"):
         query = query.where(SectionMember.status == status)
     query = _search(query, search)
     total = db.scalar(select(func.count()).select_from(query.subquery()))
+    invitation_count = db.scalar(
+        select(func.count()).select_from(SectionMember)
+        .join(Account, Account.id == SectionMember.student_id)
+        .where(SectionMember.section_id == section_id,
+               SectionMember.status == "active",
+               Account.role == "student",
+               Account.status == "invited"))
     rows = db.execute(query.order_by(Account.display_name, Account.id)
                       .limit(page_size).offset((page - 1) * page_size))
     return {"total": total, "page": page, "page_size": page_size,
+            "invitation_count": invitation_count,
             "items": [{"student_id": r.id, "display_name": r.display_name, "email": r.email,
                        "student_number": r.student_number, "account_status": r.account_status,
                        "status": r.membership_status} for r in rows]}

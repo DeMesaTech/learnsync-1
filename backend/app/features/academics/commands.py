@@ -1,11 +1,11 @@
 import re
 
 from fastapi import HTTPException
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from app.errors import fail
-from app.features.accounts.commands import audit
-from app.features.accounts.models import Account, now
+from app.features.accounts.commands import audit, issue_token, send_link, send_links
+from app.features.accounts.models import Account, AccountToken, AuthSession, now
 from app.features.assessments.models import AssessmentSection, AttendanceSession
 from app.features.teaching.models import (
     AnnouncementSection,
@@ -78,7 +78,8 @@ def copy_structure(db, actor, source, target, offerings):
         fail(422, "copy_same_term", "Choose a different source term.")
     mapping = {}
     for section in db.scalars(select(Section).where(Section.term_id == source.id)):
-        new = Section(term_id=target.id, name=section.name, year_level=section.year_level)
+        new = Section(term_id=target.id, name=section.name, year_level=section.year_level,
+                      college_id=section.college_id)
         db.add(new)
         db.flush()
         mapping[section.id] = new.id
@@ -169,8 +170,10 @@ def update_college(db, actor, college_id, data):
 
 def delete_college(db, actor, college_id):
     college = get_or_404(db, College, college_id, "College")
-    if db.scalar(select(Subject.id).where(Subject.college_id == college_id).limit(1)):
-        fail(409, "college_in_use", "This college still has subjects assigned to it.")
+    if (db.scalar(select(Subject.id).where(Subject.college_id == college_id).limit(1))
+            or db.scalar(select(Section.id).where(Section.college_id == college_id).limit(1))):
+        fail(409, "college_in_use",
+             "This college still has subjects or sections assigned to it.")
     audit(db, actor, "college.deleted", "college", college.id, {"code": college.code})
     db.delete(college)
     db.commit()
@@ -211,7 +214,11 @@ def create_section(db, actor, term_id, data):
     term = open_term(db, term_id)
     if db.scalar(select(Section.id).where(Section.term_id == term.id, Section.name == data.name)):
         fail(409, "section_exists", "This term already has a section with this name.")
-    section = Section(term_id=term.id, name=data.name, year_level=data.year_level)
+    college = get_or_404(db, College, data.college_id, "College") if data.college_id else None
+    if college and college.status != "active":
+        fail(422, "college_inactive", "Choose an active college/program.")
+    section = Section(term_id=term.id, name=data.name, year_level=data.year_level,
+                      college_id=college.id if college else None)
     db.add(section)
     db.flush()
     audit(db, actor, "section.created", "section", section.id, {"name": data.name})
@@ -221,13 +228,19 @@ def create_section(db, actor, term_id, data):
 
 def create_section_batch(db, actor, term_id, data):
     term = open_term(db, term_id)
+    college = get_or_404(db, College, data.college_id, "College") if data.college_id else None
+    if college and college.status != "active":
+        fail(422, "college_inactive", "Choose an active college/program.")
+    prefix = college.code.strip().upper() if college else "BSE"
     existing = list(db.scalars(select(Section).where(Section.term_id == term.id)))
     used_names = {section.name.casefold() for section in existing}
     used_suffixes = set()
     suffix_pattern = re.compile(
-        rf"^(?:BSE\s*)?{data.year_level}\s*[- ]?\s*([A-Z]+)$", re.IGNORECASE)
+        rf"^(?:{re.escape(prefix)}\s*)?{data.year_level}\s*[- ]?\s*([A-Z]+)$",
+        re.IGNORECASE)
     for section in existing:
-        if section.year_level != data.year_level:
+        if (section.year_level != data.year_level
+                or college and section.college_id != college.id):
             continue
         match = suffix_pattern.fullmatch(section.name.strip())
         if match:
@@ -244,11 +257,12 @@ def create_section_batch(db, actor, term_id, data):
     index = 1
     while len(created) < data.count:
         label = suffix(index)
-        name = f"BSE {data.year_level}{label}"
+        name = f"{prefix} {data.year_level}{label}"
         index += 1
         if label in used_suffixes or name.casefold() in used_names:
             continue
-        section = Section(term_id=term.id, name=name, year_level=data.year_level)
+        section = Section(term_id=term.id, name=name, year_level=data.year_level,
+                          college_id=college.id if college else None)
         db.add(section)
         created.append(section)
         used_suffixes.add(label)
@@ -256,7 +270,9 @@ def create_section_batch(db, actor, term_id, data):
 
     db.flush()
     for section in created:
-        audit(db, actor, "section.created", "section", section.id, {"name": section.name})
+        audit(db, actor, "section.created", "section", section.id,
+              {"name": section.name,
+               "college_id": str(college.id) if college else None})
     db.commit()
     return created
 
@@ -333,6 +349,76 @@ def withdraw_member(db, actor, section_id, student_id, reason):
     audit(db, actor, "section.member_withdrawn", "section", section.id,
           {"student_id": str(student_id), "reason": reason})
     db.commit()
+
+
+def update_section_student(db, actor, section_id, student_id, data):
+    section = get_or_404(db, Section, section_id, "Section")
+    open_term(db, section.term_id)
+    member = db.scalar(select(SectionMember).where(
+        SectionMember.section_id == section.id,
+        SectionMember.student_id == student_id,
+        SectionMember.status == "active").with_for_update())
+    if not member:
+        fail(404, "not_found", "Active student membership not found in this section.")
+    account = db.scalar(select(Account).where(
+        Account.id == student_id, Account.role == "student").with_for_update())
+    if not account:
+        fail(404, "not_found", "Student account not found.")
+
+    email = str(data.email).lower()
+    if db.scalar(select(Account.id).where(
+        Account.email == email, Account.id != account.id)):
+        fail(409, "email_exists", "Another account already uses this email.")
+    if db.scalar(select(Account.id).where(
+        Account.student_number == data.student_number, Account.id != account.id)):
+        fail(409, "student_number_exists", "Another account already uses this ID number.")
+
+    email_changed = account.email != email
+    changed = {
+        field for field, value in (
+            ("display_name", data.display_name),
+            ("email", email),
+            ("student_number", data.student_number),
+        ) if getattr(account, field) != value
+    }
+    if not changed:
+        return account
+    if email_changed and account.status == "inactive":
+        fail(409, "account_inactive", "Reactivate the account before changing its email.")
+
+    account.display_name = data.display_name
+    account.email = email
+    account.student_number = data.student_number
+    if email_changed:
+        account.email_verified_at = None
+        account.status = "invited"
+        db.execute(update(AuthSession).where(
+            AuthSession.account_id == account.id).values(revoked_at=now()))
+        db.execute(update(AccountToken).where(
+            AccountToken.account_id == account.id,
+            AccountToken.consumed_at.is_(None)).values(consumed_at=now()))
+        token = issue_token(db, account, "invite", actor)
+        send_link(account, token, "invite")
+    audit(db, actor, "student.profile_updated", "account", account.id,
+          {"fields": sorted(changed), "email_changed_requires_verification": email_changed})
+    db.commit()
+    return account
+
+
+def send_section_invitations(db, actor, section_id):
+    if not db.get(Section, section_id):
+        fail(404, "not_found", "Section not found.")
+    account_ids = list(db.scalars(
+        select(Account.id)
+        .join(SectionMember, SectionMember.student_id == Account.id)
+        .where(SectionMember.section_id == section_id,
+               SectionMember.status == "active",
+               Account.role == "student",
+               Account.status == "invited")
+        .order_by(Account.id)))
+    if not account_ids:
+        return {"sent": 0, "failed": 0, "results": []}
+    return send_links(db, actor, account_ids)
 
 
 # ---------- offerings ----------

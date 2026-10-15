@@ -89,6 +89,7 @@ class Section(Base):
     __table_args__ = (UniqueConstraint("term_id", "name", name="section_name_unique"),)
     id: Mapped[uuid.UUID] = uid()
     term_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("academic_term.id"), index=True)
+    college_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("college.id"), index=True)
     name: Mapped[str] = mapped_column(String(60))
     year_level: Mapped[int] = mapped_column(Integer)
 

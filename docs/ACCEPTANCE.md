@@ -1,5 +1,40 @@
 # Acceptance status
 
+### 2026-10-15 (Section invitations and student action icons)
+- Added a section-level action to resend invitation links to every invited student in that section, including students on later roster pages. The API scopes recipients to active student memberships, returns per-recipient send results, and the UI surfaces failed email addresses/messages.
+- The roster includes the total pending-invitation count for the section. Student row actions and section-level manage/invite/delete actions use icon buttons with accessible names and titles.
+- Student-management section filtering uses `section.college_id` directly; the Course filter shows sections belonging to the selected active college/program.
+- Passed: `pytest tests\test_academics.py -q` (26 passed), targeted bulk account-link regression test (1 passed), backend Ruff, frontend ESLint and production build, E2E syntax check, editor diagnostics, and `git diff --check`. The build retains its large-chunk advisory; backend tests emitted two dependency deprecation warnings.
+- The full account test file was also attempted: 10 passed, 1 failed because its existing post-logout sign-in helper received `session_expired`. The unrelated test was not changed.
+- Browser inspection confirmed college filtering and accessible icon action labels. Existing local sections currently have `college_id = NULL`, so they appear under **All courses** and are hidden when a specific college is selected; no local data was changed. The already-running API process also returns the old roster shape without `invitation_count`, so the bulk button will appear after that API process is restarted; running processes were left untouched.
+
+### 2026-10-15 (Sections are owned by colleges/programs)
+- Superseded the earlier enrollment-based meaning of the Student management **Course** filter: it now filters directly by each section's college/program. The Add sections dialog selects an active college/program and generates names from its code and year level (for example, `BSE 1A`, `BSE 1B`); subject offerings remain a separate workflow.
+- Added `section.college_id` with a migration that backfills sections only when all linked offerings resolve to one college. Deleting a college still assigned to a section is rejected. Tests cover code-based naming, separate offerings, college-scoped rosters, and deletion protection.
+- Passed against the isolated `*_test` database: `pytest tests\test_academics.py -q` (25 passed; the test fixture applied Alembic migrations through head), backend Ruff, frontend ESLint, TypeScript and production build, E2E syntax check, editor diagnostics, and `git diff --check`. Existing dependency deprecation warnings and the frontend large-chunk advisory remain.
+- The self-provisioning admin E2E was not run because `ADMIN_LISTS_E2E_DISPOSABLE=1` was not configured. The migration was not applied to the local development database.
+
+### 2026-10-15 (Student roster Course filter uses college/program)
+- Kept the visible **Course** filter label, but changed its options and behavior to select an active college/program. The year’s section filter now includes sections with active offerings in that college; the roster query includes students enrolled in any matching offering in the selected section.
+- Added server-side college roster filtering and coverage for matching and non-matching program enrollments, while preserving the existing single-offering filter for its other callers.
+- Passed: `pytest tests\test_academics.py -q` (25 passed), backend Ruff, frontend ESLint, TypeScript and production build, E2E syntax check, and `git diff --check`. The build reported its existing large-chunk advisory; the tests emitted two dependency deprecation warnings.
+- Browser smoke confirmed that the retained **Course** label now lists colleges/programs rather than subject codes. The disposable-database E2E was syntax-checked but not run because its required disposable-database confirmation was not configured.
+
+### 2026-10-15 (Student management filters, inline editing, and section setup)
+- Added a course filter above the year tabs, moved student import below the tabs, and added a section dropdown under the selected year. The roster now uses the requested ID number, name, email, account status, and action columns.
+- Added direct row editing for a student's name, email, and ID number; invitation/reset-link actions; and audited withdrawal without deleting student or academic history. Email changes revoke existing sessions and require accepting a new invitation at the changed address. Account status labels distinguish Active, Invitation pending, and Inactive.
+- Reworked Add section into a modal with course, teacher, year, and incrementally added section names. Section and course-offering creation/assignment are atomic, including the first offering for a course/teacher.
+- Extended backend and disposable-database E2E coverage.
+- Passed: `pytest tests\test_academics.py -q` (24 passed), backend Ruff, frontend ESLint, TypeScript and production build, E2E syntax check, editor diagnostics, and `git diff --check`. The frontend build retains its large-chunk advisory; the tests emitted two dependency deprecation warnings.
+- Read-only browser smoke confirmed course/year/import ordering and the Add sections modal's course, year, teacher, and section-entry controls. The current local database has no eligible faculty, so the modal correctly explains that a faculty member must be invited before submission. No database rows were changed. The self-provisioning admin E2E was not run because its disposable-database confirmation was not configured.
+
+### 2026-10-15 (Term student management layout)
+- Replaced the term workspace's Sections tab presentation with Student management: prospectus year tabs, selectable section list, optional course filter, student import and add-section actions, and a paged roster showing student number, name, email, account status, section, and a link to detailed roster management.
+- Added optional `offering_id` filtering to the admin section roster query; it returns only enrolled members of that course in the selected section and rejects courses not assigned to that section. Existing add-student, withdrawal, and history workflows remain on the detailed section-student page.
+- Updated the disposable-database admin E2E flow for the revised layout and section-specific course choices.
+- Passed: `pytest tests\test_academics.py -q` (20 passed), Ruff on the changed backend files, frontend ESLint, TypeScript and production build, E2E script syntax check, editor diagnostics, and `git diff --check`.
+- Read-only browser smoke on the existing admin term workspace confirmed the Student management heading, year tabs, actions, and no-sections empty state. The self-provisioning E2E flow was not run because its required disposable-database confirmation is not configured; no local database rows were created or changed for this UI check.
+
 ### 2026-10-15 (Prospectus college confirmation)
 - Added a college confirmation dialog to the reviewed prospectus page. **Create subjects** opens the dialog; the admin must choose an active college and confirm before commit. New subjects receive that college; existing catalog subjects are left unchanged.
 - The commit API requires the selected college, validates that it is active while locking its row against concurrent changes, and records the college in the audit event.

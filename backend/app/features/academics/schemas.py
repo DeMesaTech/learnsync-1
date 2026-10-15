@@ -3,7 +3,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 
 class TermInput(BaseModel):
@@ -81,11 +81,28 @@ class SubjectUpdate(BaseModel):
 class SectionInput(BaseModel):
     name: str = Field(min_length=1, max_length=60)
     year_level: int = Field(ge=1, le=6)
+    college_id: uuid.UUID | None = None
 
 
 class SectionBatchInput(BaseModel):
     year_level: int = Field(ge=1, le=6)
     count: int = Field(ge=1, le=26)
+    college_id: uuid.UUID | None = None
+
+
+class StudentProfileUpdate(BaseModel):
+    display_name: str = Field(min_length=1, max_length=150)
+    email: EmailStr = Field(max_length=254)
+    student_number: str = Field(min_length=1, max_length=50)
+
+    @model_validator(mode="after")
+    def clean_values(self):
+        self.display_name = self.display_name.strip()
+        self.email = str(self.email).strip().lower()
+        self.student_number = self.student_number.strip()
+        if not self.display_name or not self.student_number:
+            raise ValueError("Name and ID number are required.")
+        return self
 
 
 class MemberInput(BaseModel):

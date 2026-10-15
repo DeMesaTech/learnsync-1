@@ -22,6 +22,7 @@ from .schemas import (
     SchoolYearInput,
     SectionBatchInput,
     SectionInput,
+    StudentProfileUpdate,
     SubjectInput,
     SubjectUpdate,
     TermUpdate,
@@ -134,7 +135,8 @@ def create_section(term_id: UUID, data: SectionInput, actor=Depends(admin),
                    db: Session = Depends(get_db)):
     section = commands.create_section(db, actor, term_id, data)
     return {"id": section.id, "term_id": section.term_id, "name": section.name,
-            "year_level": section.year_level, "member_count": 0}
+            "year_level": section.year_level, "college_id": section.college_id,
+            "member_count": 0}
 
 
 @router.post("/terms/{term_id}/sections/bulk", status_code=201)
@@ -142,7 +144,8 @@ def create_section_batch(term_id: UUID, data: SectionBatchInput, actor=Depends(a
                          db: Session = Depends(get_db)):
     sections = commands.create_section_batch(db, actor, term_id, data)
     return {"sections": [{"id": section.id, "term_id": section.term_id, "name": section.name,
-                          "year_level": section.year_level, "member_count": 0}
+                          "year_level": section.year_level, "college_id": section.college_id,
+                          "member_count": 0}
                          for section in sections]}
 
 
@@ -164,11 +167,28 @@ def add_member(section_id: UUID, data: MemberInput, actor=Depends(admin),
     return Response(status_code=204)
 
 
+@router.patch("/sections/{section_id}/students/{student_id}")
+def update_section_student(section_id: UUID, student_id: UUID, data: StudentProfileUpdate,
+                           actor=Depends(admin), db: Session = Depends(get_db)):
+    account = commands.update_section_student(db, actor, section_id, student_id, data)
+    return {"student_id": account.id, "display_name": account.display_name,
+            "email": account.email, "student_number": account.student_number,
+            "account_status": account.status}
+
+
+@router.post("/sections/{section_id}/send-invitations")
+def send_section_invitations(section_id: UUID, actor=Depends(admin),
+                             db: Session = Depends(get_db)):
+    return commands.send_section_invitations(db, actor, section_id)
+
+
 @router.get("/sections/{section_id}/roster")
 def section_roster(section_id: UUID, page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100),
                    search: str = Query("", max_length=100), status: str = Query("active", pattern="^(active|withdrawn|all)$"),
+                   offering_id: UUID | None = None, college_id: UUID | None = None,
                    actor=Depends(admin), db: Session = Depends(get_db)):
-    return queries.section_roster_page(db, section_id, page, page_size, search, status)
+    return queries.section_roster_page(
+        db, section_id, page, page_size, search, status, offering_id, college_id)
 
 
 @router.get("/sections/{section_id}/candidates")

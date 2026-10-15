@@ -1,4 +1,5 @@
-// Admin term workspace: sections as a table, the section students page (pages, search, status filter, selection across
+// Admin term workspace: course/year/section filters, inline student editing and withdrawal, the section students page
+// (pages, search, status filter, selection across
 // pages, withdraw with a reason) and bulk assignment of several subjects to one teacher.
 // SELF-PROVISIONING: creates its own school year, section and students, so run it ONLY against a disposable database with the
 // development accounts (`python -m app.cli seed-demo`). Refuses unless ADMIN_LISTS_E2E_DISPOSABLE=1.
@@ -17,17 +18,25 @@ try{
   const p=await newPage(browser,{state:A,width:1280,height:1000});await p.goto('/admin');await p.waitForLoadState('networkidle');
   const year=(await call(p,'POST','/school-years',{label:'2026-2027',start_date:'2026-06-01',end_date:'2027-04-30',terms:[{name:'First Semester',sequence:1,start_date:'2026-06-01',end_date:'2027-03-31'}]})).data;
   const term=year.terms[0];
-  await call(p,'POST',`/terms/${term.id}/sections`,{name:'1A',year_level:1});
+  const college=(await call(p,'POST','/colleges',{code:'BSE',name:'College of Business and Entrepreneurship'})).data;
+  await call(p,'POST',`/terms/${term.id}/sections/bulk`,{college_id:college.id,year_level:1,count:1});
   for(let i=1;i<=27;i++)await call(p,'POST','/accounts',{email:`list${i}@example.com`,display_name:`List Student ${String(i).padStart(2,'0')}`,role:'student',student_number:`L-${i}`});
   const codes=['LST 101','LST 102','LST 201','LST 202'];
-  for(const [i,code] of codes.entries())await call(p,'POST','/subjects',{code,title:`List ${code}`,units:'3',year_level:i>=2?2:1,semester:i===3?2:1});
+  for(const [i,code] of codes.entries())await call(p,'POST','/subjects',{code,title:`List ${code}`,units:'3',year_level:i>=2?2:1,semester:i===3?2:1,college_id:college.id});
 
-  // ---- year-level sections and their student roster
+  // ---- student management by year, section and course
   await p.goto(`/admin/terms/${term.id}`);await p.waitForLoadState('networkidle');
-  check('Sections has year tabs and a section selector',await p.getByRole('button',{name:'1st year',exact:true}).count()===1&&await p.getByLabel('Select section').count()===1);
-  await p.getByLabel('Select section').selectOption({label:'1A'});
-  await p.getByRole('link',{name:'Manage students'}).click();
-  await p.waitForURL(/\/sections\/.+\/students$/);await p.getByRole('heading',{name:'1A: students'}).waitFor();
+  const courseFilterOptions=await p.getByLabel('Filter by course').locator('option').allInnerTexts();
+  check('Student management Course filter selects colleges/programs, not subjects',
+    await p.getByRole('heading',{name:'Student management'}).count()===1&&
+    await p.getByLabel('Filter by course').count()===1&&
+    courseFilterOptions.some(option=>option.includes('College of Business and Entrepreneurship'))&&
+    !courseFilterOptions.some(option=>option.startsWith('LST '))&&
+    await p.getByRole('button',{name:'1st year',exact:true}).count()===1&&
+    await p.getByLabel('Filter by section').count()===1);
+  await p.getByLabel('Filter by section').selectOption({index:0});
+  await p.getByRole('link',{name:'Manage roster'}).click();
+  await p.waitForURL(/\/sections\/.+\/students$/);  await p.getByRole('heading',{name:'BSE 1A: students'}).waitFor();
   check('Manage students opens its own page with a way back to the term',await p.getByRole('link',{name:/First Semester/}).count()===1);
   await p.getByRole('button',{name:'Add students'}).click();await p.locator('tbody tr').first().waitFor();
   check('Add students lists the people who can be added, 25 to a page',await p.locator('tbody tr').count()===25&&(await p.locator('nav.pager').innerText()).includes('of 30'));
@@ -50,11 +59,20 @@ try{
   await p.getByRole('button',{name:'In this section'}).click();await p.waitForTimeout(600);
   check('they now appear in the section list',(await p.locator('nav.pager [role=status]').innerText()).includes('of 20'));
   await p.getByRole('link',{name:/First Semester/}).click();await p.waitForURL(`/admin/terms/${term.id}`);
-  await p.locator('table:has(caption:text("Students in 1A")) tbody tr').first().waitFor();
+  await p.locator('table:has(caption:text("Students in BSE 1A")) tbody tr').first().waitFor();
   check('the year-level view shows student number, name, email and account status',
-    await p.locator('table:has(caption:text("Students in 1A")) tbody tr').count()===20&&
-    (await p.locator('table:has(caption:text("Students in 1A")) thead').innerText()).includes('Account status'));
-  await p.getByRole('link',{name:'Manage students'}).click();await p.waitForURL(/\/sections\/.+\/students$/);
+    await p.locator('table:has(caption:text("Students in BSE 1A")) tbody tr').count()===20&&
+    (await p.locator('table:has(caption:text("Students in BSE 1A")) thead').innerText()).includes('Status'));
+  check('pending section invitations have a bulk invite action',
+    await p.getByRole('button',{name:/Invite all 20 students awaiting invitation/}).isEnabled());
+  const editedRow=p.getByRole('row').filter({hasText:'List Student 04'});
+  await editedRow.getByRole('button',{name:'Edit'}).click();
+  await editedRow.getByLabel('Name for List Student 04').fill('Updated List Student 04');
+  await editedRow.getByLabel('ID number for List Student 04').fill('L-EDIT-04');
+  await editedRow.getByRole('button',{name:'Save'}).click();await p.waitForTimeout(500);
+  check('student information can be edited directly in its roster row',
+    await p.getByRole('row').filter({hasText:'Updated List Student 04'}).innerText().then(t=>t.includes('L-EDIT-04')));
+  await p.getByRole('link',{name:'Manage roster'}).click();await p.waitForURL(/\/sections\/.+\/students$/);
   await p.getByRole('button',{name:'In this section'}).waitFor();
   await p.getByLabel('Search',{exact:true}).fill('List Student 05');await p.waitForTimeout(600);
   await p.locator('tbody tr').first().getByRole('button',{name:'Withdraw'}).click();
@@ -90,7 +108,30 @@ try{
   check('the button counts the subjects',(await d.locator('.actions .primary').innerText())==='Assign 2 subjects');
   await d.locator('.actions .primary').click();await p.locator('.toast').waitFor();
   const offerings=(await call(p,'GET',`/terms/${term.id}/offerings`)).data.map(o=>`${o.subject.code}:${o.sections.map(s=>s.name)}`).sort();
-  check('both subjects were assigned with their year-level sections in one go',offerings.join(' ')==='LST 101:1A LST 201:2A',offerings.join(' '));
+  check('both subjects were assigned with their year-level sections in one go',offerings.join(' ')==='LST 101:BSE 1A LST 201:2A',offerings.join(' '));
+  await p.getByRole('button',{name:'Students',exact:true}).click();
+  await p.getByRole('button',{name:'Add section',exact:true}).click();
+  const addSection=p.locator('dialog');
+  await addSection.getByLabel('Course').selectOption(college.id);
+  await addSection.getByLabel('Year level').selectOption('1');
+  await addSection.getByRole('button',{name:'Add section to list'}).click();
+  check('college-code section names appear in a downward list',
+    (await addSection.locator('.section-name-list').innerText()).includes('BSE 1B'));
+  await addSection.getByRole('button',{name:'Create 1 section'}).click();await p.waitForTimeout(500);
+  const createdOffering=(await call(p,'GET',`/terms/${term.id}/offerings`)).data.find(o=>o.subject.code==='LST 101');
+  check('new sections are not assigned to subject offerings',!createdOffering.sections.some(s=>s.name==='BSE 1B'));
+  await p.getByLabel('Filter by course').selectOption(college.id);
+  const sectionFilter=p.getByLabel('Filter by section');
+  const sectionOptions=await sectionFilter.locator('option').allInnerTexts();
+  check('the section filter follows the selected college/program',sectionOptions.some(s=>s.startsWith('BSE 1A'))&&sectionOptions.some(s=>s.startsWith('BSE 1B')));
+  const newSectionOption=await sectionFilter.locator('option').filter({hasText:'BSE 1B'}).getAttribute('value');
+  await sectionFilter.selectOption(newSectionOption);
+  await p.waitForTimeout(500);
+  check('the college and section filters scope the roster table',await p.getByText('This section belongs to the selected college/program but has no students yet.').count()===1);
+  await p.getByLabel('Filter by course').selectOption('');
+  const sectionAOption=await sectionFilter.locator('option').filter({hasText:'BSE 1A'}).getAttribute('value');
+  await sectionFilter.selectOption(sectionAOption);
+  await p.getByRole('button',{name:'Offerings',exact:true}).click();
   await p.getByRole('button',{name:'Assign subjects'}).click();await d.getByLabel('Teacher').selectOption({label:'Demo faculty 2'});await d.getByLabel('Filter subjects').fill('LST 102');
   await d.getByRole('checkbox',{name:/LST 102/}).check();await d.locator('.actions .primary').click();await p.locator('.toast').waitFor();
   const teacherFilter=p.getByRole('combobox',{name:'Filter offerings by teacher'});
@@ -100,6 +141,13 @@ try{
   await teacherFilter.selectOption({label:'Demo faculty 2'});
   check('the teacher filter switches the offerings to the selected teacher',await p.locator('.offerings-table tbody').innerText().then(t=>t.includes('LST 102')&&!t.includes('LST 101')));
   await teacherFilter.selectOption('');
+  await p.getByRole('button',{name:'Students',exact:true}).click();
+  const courseFilter=p.getByLabel('Filter students by course');
+  const courseOptions=await courseFilter.locator('option').allInnerTexts();
+  check('the student course filter lists only courses assigned to the selected section',
+    courseOptions.length===3&&courseOptions.some(option=>option.startsWith('LST 101'))&&
+    courseOptions.some(option=>option.startsWith('LST 102'))&&!courseOptions.some(option=>option.startsWith('LST 201')));
+  await p.getByRole('button',{name:'Offerings',exact:true}).click();
   await p.getByRole('button',{name:'Assign subjects'}).click();await d.getByLabel('Teacher').selectOption({label:'Demo faculty 1'});await d.getByLabel('Filter subjects').fill('LST 101');
   check('a subject the teacher already has is shown as assigned and cannot be picked again',await d.getByRole('checkbox',{name:/LST 101/}).isDisabled());
   check('axe finds no violations on the bulk dialog',(await axe(p)).length===0);
