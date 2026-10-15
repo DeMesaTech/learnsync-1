@@ -1,5 +1,16 @@
 # Acceptance status
 
+### 2026-10-15 (Student section controls layout)
+- Moved Import students into the section action row beside section invite/delete and Add section controls. Added a year-specific Add section action in each year-level dropdown. Restyled the section summary/actions into a compact aligned row that wraps on mobile.
+- Passed: `cd frontend; npm run build`, `npm run lint`, and `git diff --check`. Vite emitted the existing large-chunk warning.
+- Not run: browser interaction check; the shared local API is unavailable.
+
+### 2026-10-15 (Student year-level section menus and bulk roster actions)
+- Replaced the separate section selector with section menus revealed by hovering/focusing or opening a year-level tab. Clicking a section selects its roster; the menu is keyboard reachable.
+- Moved Add section into the section action row alongside invite/delete actions. Added row checkboxes and page selection, with multi-select send-links (batched at the account API's 25-ID limit) and history-preserving bulk withdrawal requiring an audited reason. Individual student edit/actions remain.
+- Passed: `cd frontend; npm run build`, `npm run lint`, and `git diff --check`. Vite emitted the existing large-chunk warning.
+- Not run: browser/E2E interaction checks; the local API is unavailable in the shared browser session.
+
 ### 2026-10-15 (Prospectus semester columns)
 - Prospectus semester panels now render in a two-column grid, sorted so 1st semester is on the left and 2nd semester is on the right. The grid stacks on narrow screens; any other semester groups remain ordered after the first two.
 - Passed: `cd frontend; npm run build`, `npm run lint`, and `git diff --check`. Vite emitted the existing large-chunk warning.

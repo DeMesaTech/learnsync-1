@@ -38,8 +38,12 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
   const [sectionError,setSectionError]=useState('');
   const [deletingSection,setDeletingSection]=useState<string|null>(null);
   const [activeYear,setActiveYear]=useState<number|null>(null);
+  const [openYearMenu,setOpenYearMenu]=useState<number|null>(null);
   const [selectedSectionId,setSelectedSectionId]=useState('');
   const [courseFilter,setCourseFilter]=useState('');
+  const [selectedStudents,setSelectedStudents]=useState<SectionRosterRow[]>([]);
+  const [withdrawingSelected,setWithdrawingSelected]=useState(false);
+  const [bulkActionBusy,setBulkActionBusy]=useState(false);
   const [rosterPage,setRosterPage]=useState(1);
   const [rosterPageSize,setRosterPageSize]=useState(25);
   const [editingStudentId,setEditingStudentId]=useState<string|null>(null);
@@ -111,6 +115,46 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
     }catch(err){setEmailError(errorText(err))}
     finally{setSendingStudentId(null)}
   }
+  async function sendSelectedStudentLinks(){
+    if(!selectedStudents.length)return;
+    if(!await ask({
+      title:`Send links to ${selectedStudents.length} selected students?`,
+      message:'Invited students receive invitation links. Active accounts receive password-reset links.',
+      yes:'Send links',
+    }))return;
+    setBulkActionBusy(true);setEmailError('');
+    try{
+      const results:BulkInvitationResult['results']=[];
+      const requestErrors:string[]=[];
+      for(let index=0;index<selectedStudents.length;index+=25){
+        const batch=selectedStudents.slice(index,index+25);
+        try{
+          const result=await post<BulkInvitationResult>('/accounts/send-links',{
+            account_ids:batch.map(student=>student.student_id),
+          });
+          results.push(...result.results);
+        }catch(err){
+          requestErrors.push(`${batch.length} link${batch.length===1?'':'s'}: ${errorText(err)}`);
+          batch.forEach(student=>results.push({
+            id:student.student_id,email:student.email,status:'failed',message:errorText(err),
+          }));
+        }
+      }
+      const sent=results.filter(item=>item.status==='sent').length;
+      const failed=results.length-sent;
+      const failedIds=new Set(results.filter(item=>item.status==='failed').map(item=>item.id));
+      setSelectedStudents(current=>current.filter(student=>failedIds.has(student.student_id)));
+      if(failed){
+        const failures=results.filter(item=>item.status==='failed')
+          .map(item=>`${item.email}: ${item.message}`);
+        setEmailError(`Could not send ${failed} link${failed===1?'':'s'}. ${[...requestErrors,...failures].join(' ')}`);
+      }
+      toast(sent
+        ?`${sent} link${sent===1?'':'s'} sent${failed?`; ${failed} failed`:''}.`
+        :failed?'Some links could not be sent.':'No links were sent.');
+    }catch(err){setEmailError(errorText(err))}
+    finally{setBulkActionBusy(false)}
+  }
   async function sendSectionInvitations(){
     if(!selectedSection)return;
     setSendingSectionInvitations(true);setEmailError('');
@@ -137,6 +181,27 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
     queryClient.invalidateQueries({queryKey:['offerings',termId]});
     toast(`${student.display_name} withdrawn. Their enrollment history is kept.`);
   }
+  async function withdrawSelectedStudents(reason:string){
+    if(!selectedSection)return;
+    setBulkActionBusy(true);setEmailError('');
+    const failed:SectionRosterRow[]=[];
+    for(const student of selectedStudents){
+      try{
+        await send('DELETE',`/sections/${selectedSection.id}/members/${student.student_id}?reason=${encodeURIComponent(reason.trim())}`);
+      }catch(err){
+        failed.push(student);
+        setEmailError(current=>`${current}${current?' ':''}${student.display_name}: ${errorText(err)}`);
+      }
+    }
+    setSelectedStudents(failed);
+    setWithdrawingSelected(false);
+    setBulkActionBusy(false);
+    queryClient.invalidateQueries({queryKey:['section-roster']});
+    queryClient.invalidateQueries({queryKey:['sections',termId]});
+    queryClient.invalidateQueries({queryKey:['offerings',termId]});
+    const withdrawn=selectedStudents.length-failed.length;
+    if(withdrawn)toast(`${withdrawn} student${withdrawn===1?'':'s'} withdrawn. Enrollment history is kept.`);
+  }
   const teacherGroups=offerings.data?.reduce<{id:string;name:string;rows:{offering:OfferingSummary;section:{id:string;name:string;enrolled:number}}[]}[]>((groups,offering)=>{
     let group=groups.find(item=>item.id===offering.faculty.id);
     if(!group){group={id:offering.faculty.id,name:offering.faculty.display_name,rows:[]};groups.push(group)}
@@ -149,6 +214,10 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
   const totalStudents=sections.data?.reduce((sum, section) => sum + section.member_count, 0) ?? 0;
   const activeOfferings=offerings.data?.filter(offering => offering.status === 'active').length ?? 0;
   const invitationCount=roster.data?.invitation_count??0;
+  const rosterRows=roster.data?.items??[];
+  const selectableRosterRows=rosterRows.filter(student=>student.account_status!=='inactive');
+  const everyVisibleStudentSelected=selectableRosterRows.length>0&&selectableRosterRows.every(student=>
+    selectedStudents.some(selected=>selected.student_id===student.student_id));
 
   if(years.isPending)return <p>Loading…</p>;
   if(!term)return <section className="panel"><h1>Term not found</h1><Link to="/admin/settings">Back to School-year settings</Link></section>;
@@ -183,31 +252,55 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
         {!subjects.isError&&subjects.isSuccess&&programYears.length===0&&<p className="muted">No year levels are assigned in the prospectus yet. <Link to="/admin/subjects">Add or place subjects in the prospectus</Link> before creating sections.</p>}
         {sectionError&&<p role="alert">{sectionError}</p>}
         <div className="student-course-filter">
-          <label>Course<select aria-label="Filter by course" value={courseFilter} onChange={event=>{setCourseFilter(event.target.value);setSelectedSectionId('');setRosterPage(1);setEmailError('')}}>
+          <label>Course<select aria-label="Filter by course" value={courseFilter} disabled={bulkActionBusy} onChange={event=>{setCourseFilter(event.target.value);setSelectedSectionId('');setSelectedStudents([]);setRosterPage(1);setEmailError('')}}>
             <option value="">All courses</option>
             {colleges.data?.filter(college=>college.status==='active').map(college=><option key={college.id} value={college.id}>{college.name}</option>)}
           </select></label>
         </div>
         {programYears.length>0&&<>
           <nav className="tabs year-tabs" aria-label="Year levels">
-            {programYears.map(yearLevel=><button key={yearLevel} type="button" className={visibleYear===yearLevel?'active':''} aria-pressed={visibleYear===yearLevel}
-              onMouseEnter={()=>{setActiveYear(yearLevel);setSelectedSectionId('');setRosterPage(1);setEmailError('')}}
-              onFocus={()=>{setActiveYear(yearLevel);setSelectedSectionId('');setRosterPage(1);setEmailError('')}}
-              onClick={()=>{setActiveYear(yearLevel);setSelectedSectionId('');setRosterPage(1);setEmailError('')}}>{yearLabel(yearLevel)}</button>)}
+            {programYears.map(yearLevel=>{
+              const sectionsForYear=(sections.data??[]).filter(section=>
+                section.year_level===yearLevel&&(!courseFilter||section.college_id===courseFilter));
+              return <div className="year-tab-menu" key={yearLevel}
+              onMouseEnter={()=>setOpenYearMenu(yearLevel)}
+              onMouseLeave={event=>{if(!event.currentTarget.contains(document.activeElement))setOpenYearMenu(current=>current===yearLevel?null:current)}}
+              onFocus={()=>setOpenYearMenu(yearLevel)}
+              onBlur={event=>{const next=event.relatedTarget;if(!(next instanceof Node)||!event.currentTarget.contains(next))setOpenYearMenu(current=>current===yearLevel?null:current)}}>
+              <button type="button" className={visibleYear===yearLevel?'active':''} aria-pressed={visibleYear===yearLevel}
+                disabled={bulkActionBusy}
+                aria-expanded={openYearMenu===yearLevel}
+                onClick={()=>setOpenYearMenu(yearLevel)}>{yearLabel(yearLevel)}</button>
+              {openYearMenu===yearLevel&&<div className="year-section-menu" role="group" aria-label={`${yearLabel(yearLevel)} sections`}>
+                {sections.isPending?<span className="muted">Loading sections…</span>
+                  :sectionsForYear.length?sectionsForYear.map(section=><button key={section.id} type="button"
+                    className={selectedSection?.id===section.id?'selected':''}
+                    disabled={bulkActionBusy}
+                    aria-pressed={selectedSection?.id===section.id}
+                    onClick={()=>{setActiveYear(yearLevel);setSelectedSectionId(section.id);setSelectedStudents([]);setRosterPage(1);setEmailError('');setOpenYearMenu(null)}}>
+                    <span>{section.name}</span><span className="muted">{section.member_count} students</span>
+                  </button>)
+                  :<span className="muted">No sections for this year level.</span>}
+                <button type="button" className="year-section-add"
+                  disabled={closed||bulkActionBusy||subjects.isPending||subjects.isError||colleges.isPending||colleges.isError||programYears.length===0}
+                  onClick={()=>{setActiveYear(yearLevel);setOpenYearMenu(null);setDialog('section')}}>
+                  <span aria-hidden="true">＋</span> Add section to {yearLabel(yearLevel)}
+                </button>
+              </div>}
+            </div>})}
           </nav>
           <div className="student-section-panel">
             <div className="student-section-filter">
-              <label>Section<select aria-label="Filter by section" value={selectedSection?.id??''} onChange={event=>{setSelectedSectionId(event.target.value);setRosterPage(1);setEmailError('')}}>
-                {filteredYearSections.map(section=><option key={section.id} value={section.id}>{section.name} ({section.member_count} students)</option>)}
-              </select></label>
-              {selectedSection&&<div className="actions">
-                {!closed&&invitationCount>0&&<button type="button" className="icon-button" aria-label={`Invite all ${invitationCount} students awaiting invitation`} title={`Invite all ${invitationCount} students awaiting invitation`} disabled={sendingSectionInvitations} onClick={sendSectionInvitations}><StudentManagementIcon name="mail"/></button>}
-                {!closed&&<button type="button" className="danger icon-button" aria-label={`Delete ${selectedSection.name}`} title="Delete section" disabled={deletingSection!==null} onClick={()=>removeSection(selectedSection)}>{deletingSection===selectedSection.id?'…':<StudentManagementIcon name="delete"/>}</button>}
-              </div>}
-            </div>
-            <div className="actions student-year-actions">
-              <button className={sections.data?.length===0?'primary':''} aria-label="Add section" disabled={closed||subjects.isPending||subjects.isError||colleges.isPending||colleges.isError||programYears.length===0} onClick={()=>setDialog('section')}><span aria-hidden="true">＋</span> Add section</button>
-              <Link className="button" to="/admin/students">Import students</Link>
+              <div className="student-section-summary">
+                <strong>{selectedSection?.name??'No section selected'}</strong>
+                {selectedSection&&<span className="muted">{selectedSection.member_count} students</span>}
+              </div>
+              <div className="actions student-section-actions">
+                {!closed&&invitationCount>0&&<button type="button" className="icon-button" aria-label={`Invite all ${invitationCount} students awaiting invitation`} title={`Invite all ${invitationCount} students awaiting invitation`} disabled={sendingSectionInvitations||bulkActionBusy} onClick={sendSectionInvitations}><StudentManagementIcon name="mail"/></button>}
+                {selectedSection&&!closed&&<button type="button" className="danger icon-button" aria-label={`Delete ${selectedSection.name}`} title="Delete section" disabled={deletingSection!==null} onClick={()=>removeSection(selectedSection)}>{deletingSection===selectedSection.id?'…':<StudentManagementIcon name="delete"/>}</button>}
+                <button className={sections.data?.length===0?'primary':''} aria-label="Add section" disabled={closed||bulkActionBusy||subjects.isPending||subjects.isError||colleges.isPending||colleges.isError||programYears.length===0} onClick={()=>setDialog('section')}><span aria-hidden="true">＋</span> Add section</button>
+                <Link className="button" to="/admin/students">Import students</Link>
+              </div>
             </div>
           </div>
         </>}
@@ -215,25 +308,47 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
           filteredYearSections.length===0?<p className="muted">{courseFilter?`No sections for the selected college/program are assigned to ${visibleYear?yearLabel(visibleYear):'this year level'}.`:`No sections for ${visibleYear?yearLabel(visibleYear):'this year level'} yet. Add a section to start managing students.`}</p>:
           <>
             {emailError&&<p role="alert">{emailError}</p>}
+            {selectedStudents.length>0&&<div className="actions student-bulk-actions">
+              <span role="status">{selectedStudents.length} selected</span>
+              <button type="button" disabled={bulkActionBusy} onClick={()=>void sendSelectedStudentLinks()}>
+                {bulkActionBusy?'Working…':'Send links to selected'}
+              </button>
+              {!closed&&<button type="button" className="danger" disabled={bulkActionBusy} onClick={()=>setWithdrawingSelected(true)}>
+                Withdraw selected
+              </button>}
+              <button type="button" className="linklike" disabled={bulkActionBusy} onClick={()=>setSelectedStudents([])}>Clear selection</button>
+            </div>}
             {roster.isPending?<p>Loading students…</p>:roster.error?<p role="alert">{roster.error.message}</p>:
               roster.data.items.length===0?<p className="muted">{courseFilter?'This section belongs to the selected college/program but has no students yet.':`No students are enrolled in ${selectedSection.name} yet.`}</p>:
               <div className="table-wrap" tabIndex={0} role="region" aria-label={`Students in ${selectedSection.name}`}>
                 <table className="student-management-table"><caption className="sr-only">Students in {selectedSection.name}</caption>
-                  <thead><tr><th scope="col">ID number</th><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
+                  <thead><tr><th scope="col"><input type="checkbox" aria-label="Select eligible students on this page"
+                    checked={everyVisibleStudentSelected}
+                    disabled={!selectableRosterRows.length||bulkActionBusy}
+                    onChange={event=>setSelectedStudents(current=>event.target.checked
+                      ?[...current,...selectableRosterRows.filter(student=>!current.some(selected=>selected.student_id===student.student_id))]
+                      :current.filter(student=>!selectableRosterRows.some(row=>row.student_id===student.student_id)))}/></th>
+                    <th scope="col">ID number</th><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
                   <tbody>{roster.data.items.map(student=>{
                     const rowDraft=editingStudentId===student.student_id?studentDraft:null;
                     const isEditing=rowDraft!==null;
                     return <tr key={student.student_id}>
+                      <td><input type="checkbox" aria-label={`Select ${student.display_name}`}
+                        checked={selectedStudents.some(selected=>selected.student_id===student.student_id)}
+                        disabled={student.account_status==='inactive'||bulkActionBusy}
+                        onChange={event=>setSelectedStudents(current=>event.target.checked
+                          ?current.some(selected=>selected.student_id===student.student_id)?current:[...current,student]
+                          :current.filter(selected=>selected.student_id!==student.student_id))}/></td>
                       <td>{rowDraft?<input aria-label={`ID number for ${student.display_name}`} maxLength={50} value={rowDraft.student_number} onChange={event=>setStudentDraft(current=>current?{...current,student_number:event.target.value}:current)}/>:student.student_number||'—'}</td>
                       <th scope="row">{rowDraft?<input aria-label={`Name for ${student.display_name}`} maxLength={150} value={rowDraft.display_name} onChange={event=>setStudentDraft(current=>current?{...current,display_name:event.target.value}:current)}/>:student.display_name}</th>
                       <td>{rowDraft?<input type="email" aria-label={`Email for ${student.display_name}`} maxLength={254} value={rowDraft.email} onChange={event=>setStudentDraft(current=>current?{...current,email:event.target.value}:current)}/>:student.email}</td>
                       <td><span className={`badge ${student.account_status==='active'?'done':''}`}>{student.account_status==='active'?'Active':student.account_status==='invited'?'Invitation pending':'Inactive'}</span></td>
                       <td><div className="actions student-row-actions">
-                        {isEditing?<><button type="button" className="primary icon-button" aria-label={`Save ${student.display_name}`} title="Save" disabled={savingStudentId===student.student_id||!studentDraft?.display_name.trim()||!studentDraft?.email.trim()||!studentDraft?.student_number.trim()} onClick={()=>saveStudent(student)}>{savingStudentId===student.student_id?'…':<StudentManagementIcon name="save"/>}</button>
+                        {isEditing?<><button type="button" className="primary icon-button" aria-label={`Save ${student.display_name}`} title="Save" disabled={bulkActionBusy||savingStudentId===student.student_id||!studentDraft?.display_name.trim()||!studentDraft?.email.trim()||!studentDraft?.student_number.trim()} onClick={()=>saveStudent(student)}>{savingStudentId===student.student_id?'…':<StudentManagementIcon name="save"/>}</button>
                           <button type="button" className="icon-button" aria-label={`Cancel editing ${student.display_name}`} title="Cancel" disabled={savingStudentId===student.student_id} onClick={()=>{setEditingStudentId(null);setStudentDraft(null)}}><StudentManagementIcon name="cancel"/></button></>
-                          :<><button type="button" className="icon-button" aria-label={`${student.account_status==='invited'?'Send invitation':'Send reset link'} to ${student.display_name}`} title={student.account_status==='invited'?'Send invitation':'Send reset link'} disabled={student.account_status==='inactive'||sendingStudentId!==null} onClick={()=>sendStudentLink(student)}>{sendingStudentId===student.student_id?'…':<StudentManagementIcon name="mail"/>}</button>
-                            <button type="button" className="icon-button" aria-label={`Edit ${student.display_name}`} title="Edit" disabled={closed||savingStudentId!==null} onClick={()=>{setEditingStudentId(student.student_id);setStudentDraft({display_name:student.display_name,email:student.email,student_number:student.student_number})}}><StudentManagementIcon name="edit"/></button>
-                            {!closed&&student.status==='active'&&<button type="button" className="danger icon-button" aria-label={`Withdraw ${student.display_name}`} title="Withdraw" onClick={()=>setLeaving(student)}><StudentManagementIcon name="withdraw"/></button>}</>}
+                          :<><button type="button" className="icon-button" aria-label={`${student.account_status==='invited'?'Send invitation':'Send reset link'} to ${student.display_name}`} title={student.account_status==='invited'?'Send invitation':'Send reset link'} disabled={bulkActionBusy||student.account_status==='inactive'||sendingStudentId!==null} onClick={()=>sendStudentLink(student)}>{sendingStudentId===student.student_id?'…':<StudentManagementIcon name="mail"/>}</button>
+                            <button type="button" className="icon-button" aria-label={`Edit ${student.display_name}`} title="Edit" disabled={bulkActionBusy||closed||savingStudentId!==null} onClick={()=>{setEditingStudentId(student.student_id);setStudentDraft({display_name:student.display_name,email:student.email,student_number:student.student_number})}}><StudentManagementIcon name="edit"/></button>
+                            {!closed&&student.status==='active'&&<button type="button" className="danger icon-button" aria-label={`Withdraw ${student.display_name}`} title="Withdraw" disabled={bulkActionBusy} onClick={()=>setLeaving(student)}><StudentManagementIcon name="withdraw"/></button>}</>}
                       </div></td>
                     </tr>
                   })}</tbody>
@@ -277,6 +392,8 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
       onClose={()=>setEditing(null)} onDone={()=>{setEditing(null);refresh()}}/>}
     {leaving&&selectedSection&&<WithdrawStudentDialog sectionName={selectedSection.name} student={leaving}
       onClose={()=>setLeaving(null)} onSubmit={reason=>withdrawStudent(leaving,reason)}/>}
+    {withdrawingSelected&&<BulkWithdrawDialog count={selectedStudents.length}
+      onClose={()=>setWithdrawingSelected(false)} onSubmit={withdrawSelectedStudents}/>}
   </>;
 }
 
@@ -392,6 +509,24 @@ function WithdrawStudentDialog({sectionName,student,onClose,onSubmit}:{sectionNa
     <label>Reason (kept in the audit history)<textarea value={reason} onChange={e=>setReason(e.target.value)} minLength={3} maxLength={1000} required autoFocus placeholder="For example: transferred to another program"/></label>
     {error&&<p role="alert">{error}</p>}
     <div className="actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button><button className="danger" disabled={busy||reason.trim().length<3}>{busy?'Withdrawing…':'Withdraw student'}</button></div>
+  </form></Dialog>;
+}
+
+function BulkWithdrawDialog({count,onClose,onSubmit}:{count:number;onClose:()=>void;onSubmit:(reason:string)=>Promise<void>}){
+  const [reason,setReason]=useState('');const [error,setError]=useState('');const [busy,setBusy]=useState(false);
+  async function submit(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();setBusy(true);setError('');
+    try{await onSubmit(reason)}
+    catch(err){setError(errorText(err))}
+    finally{setBusy(false)}
+  }
+  return <Dialog title={`Withdraw ${count} selected students?`} onClose={()=>busy?false:onClose()}><form onSubmit={submit}>
+    <p>The selected students will leave this section. Their enrollment history will be kept.</p>
+    <label>Reason (kept in each student's audit history)<textarea value={reason} onChange={event=>setReason(event.target.value)}
+      minLength={3} maxLength={1000} required autoFocus placeholder="For example: transferred to another program"/></label>
+    {error&&<p role="alert">{error}</p>}
+    <div className="actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button>
+      <button type="submit" className="danger" disabled={busy||reason.trim().length<3}>{busy?'Withdrawing…':`Withdraw ${count} students`}</button></div>
   </form></Dialog>;
 }
 
