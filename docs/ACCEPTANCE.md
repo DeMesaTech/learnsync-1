@@ -1,5 +1,19 @@
 # Acceptance status
 
+### 2026-10-15 (Settings hub and academic calendar)
+- Rebuilt `/admin/settings` as a general Settings hub in the existing navy/blue visual system. Its institution settings navigation links to real Prospectus, Student management, Course offerings, and Account/theme pages; Academic calendar is the active section.
+- Preserved school-year behavior: year and semester overview, create-year dialog with two semesters and per-semester section/optional offering copy, term links, close confirmation, and reason-required audited reopening.
+- Playwright on the running local app confirmed the Settings heading, five settings links, one year/two semester cards, New school year dialog with two semester fieldsets, and the close-semester confirmation. Both dialogs were cancelled; no data was changed. The existing API remained available during this browser check.
+- Passed: `cd frontend; npm run build`, `npm run lint`, and `git diff --check`. Vite emitted the existing large-chunk warning.
+
+### 2026-10-15 (Student roster compact table)
+- Reduced student roster table text from 15px to about 13px and tightened cell padding to reduce row height. Table actions are icon-only and retain accessible names/titles; their 44px targets remain accessible.
+- Passed: `cd frontend; npm run build`, `npm run lint`, and `git diff --check`. Vite emitted the existing large-chunk warning.
+
+### 2026-10-15 (Student management typography)
+- Slightly reduced typography on Student management only: page title, panel heading, supporting copy, tabs, actions, and roster table. Minimum target sizes remain unchanged.
+- Passed: `cd frontend; npm run build`, `npm run lint`, and `git diff --check`. Vite emitted the existing large-chunk warning.
+
 ### 2026-10-15 (Student section controls layout)
 - Moved Import students into the section action row beside section invite/delete and Add section controls. Added a year-specific Add section action in each year-level dropdown. Restyled the section summary/actions into a compact aligned row that wraps on mobile.
 - Passed: `cd frontend; npm run build`, `npm run lint`, and `git diff --check`. Vite emitted the existing large-chunk warning.

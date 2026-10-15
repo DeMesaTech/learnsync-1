@@ -14,6 +14,9 @@ export function SchoolYears(){
   const [reopening,setReopening]=useState<Term|null>(null);
   const [message,setMessage]=useState('');
   const allTerms=years.data?.flatMap(y=>y.terms.map(t=>({...t,label:`${y.label} · ${t.name}`})))??[];
+  const termCount=years.data?.reduce((count,year)=>count+year.terms.length,0)??0;
+  const openTermCount=years.data?.reduce((count,year)=>
+    count+year.terms.filter(term=>term.status==='open').length,0)??0;
 
   async function close(term:Term){
     if(!await ask({title:`Close ${term.name}?`,message:'Teaching records become read-only until it is reopened.',yes:'Close term',danger:true}))return;
@@ -21,27 +24,90 @@ export function SchoolYears(){
     catch(e){setMessage(errorText(e))}
   }
   return <>
-    <div className="page-heading settings-header">
-      <div><p className="eyebrow">Administration</p><h1>School-year settings</h1>
-        <p className="muted">Manage the active academic calendar, term status, and the yearly setup for sections and enrollment. A term marked “open” can be edited; its dates show the academic period, so you can prepare the next semester ahead.</p></div>
-      <button className="primary" onClick={()=>{setMessage('');setCreating(true)}}>New school year</button>
+    <div className="settings-page-heading">
+      <div className="settings-page-mark" aria-hidden="true">⚙</div>
+      <div><p className="eyebrow">Administration</p><h1>Settings</h1>
+        <p className="muted">Configure the academic year and the structure used across LearnSync.</p></div>
     </div>
-    {message&&<p role="status">{message}</p>}
-    {years.isPending?<p>Loading…</p>:years.error?<p role="alert">{years.error.message}</p>:
-      years.data.length===0?<section className="panel settings-panel"><h2>No school year yet</h2><p>Create the first school year to begin.</p></section>:
-      years.data.map(year=><section className="panel settings-panel" key={year.id}>
-        <div className="settings-panel-header"><div><h2>{year.label}</h2><p className="muted">{year.start_date} to {year.end_date}</p></div></div>
-        <div className="settings-grid">{year.terms.map(term=><article className="settings-card" key={term.id}>
-          <div className="settings-card-header"><div><h3>{term.name}</h3><p className="muted">{term.start_date} to {term.end_date}</p></div><span className={`badge ${term.status}`}>{term.status}</span></div>
-          <div className="settings-card-actions">
-            <Link className="button primary" to="/admin/students">Student management</Link>
-            <Link className="button" to="/admin/offerings">Course offerings</Link>
-            {term.status==='open'
-              ?<button onClick={()=>close(term)}>Close term</button>
-              :<button onClick={()=>{setMessage('');setReopening(term)}}>Reopen</button>}
-          </div>
-        </article>)}</div>
-      </section>)}
+    <div className="settings-layout">
+      <aside className="settings-navigation">
+        <p className="settings-navigation-title">Institution</p>
+        <nav aria-label="Settings sections">
+          <Link className="settings-nav-link active" to="/admin/settings" aria-current="page">
+            <span aria-hidden="true">▦</span><span><strong>Academic calendar</strong><small>School years and semesters</small></span>
+          </Link>
+          <Link className="settings-nav-link" to="/admin/subjects">
+            <span aria-hidden="true">▤</span><span><strong>Prospectus</strong><small>Subjects and placements</small></span>
+          </Link>
+          <Link className="settings-nav-link" to="/admin/students">
+            <span aria-hidden="true">◫</span><span><strong>Students and sections</strong><small>Enrollment and rosters</small></span>
+          </Link>
+          <Link className="settings-nav-link" to="/admin/offerings">
+            <span aria-hidden="true">☷</span><span><strong>Course offerings</strong><small>Teacher assignments</small></span>
+          </Link>
+          <Link className="settings-nav-link" to="/account">
+            <span aria-hidden="true">○</span><span><strong>Account and theme</strong><small>Your profile preferences</small></span>
+          </Link>
+        </nav>
+        <div className="settings-navigation-note">
+          <strong>Academic setup</strong>
+          <p>Changes here affect the terms where students and teachers work.</p>
+        </div>
+      </aside>
+      <div className="settings-main">
+        <section className="settings-section-heading">
+          <div><p className="eyebrow">ACADEMIC CALENDAR</p><h2>School years and semesters</h2>
+            <p className="muted">Create yearly calendars, prepare semesters, and control when academic records can be changed.</p></div>
+          <button className="primary" onClick={()=>{setMessage('');setCreating(true)}}>＋ New school year</button>
+        </section>
+        {message&&<p role="status" className="settings-message">{message}</p>}
+        {years.isPending?<section className="panel settings-empty">Loading school-year settings…</section>
+          :years.error?<section className="panel settings-empty"><p role="alert">{years.error.message}</p></section>
+          :<>
+            <section className="settings-overview" aria-label="Academic calendar overview">
+              <article><span className="settings-overview-icon" aria-hidden="true">▦</span><div><strong>{years.data.length}</strong><span>School years</span></div></article>
+              <article><span className="settings-overview-icon" aria-hidden="true">◷</span><div><strong>{termCount}</strong><span>Semesters</span></div></article>
+              <article><span className="settings-overview-icon" aria-hidden="true">●</span><div><strong>{openTermCount}</strong><span>Open for changes</span></div></article>
+            </section>
+            {years.data.length===0?<section className="settings-empty panel">
+              <span className="settings-empty-icon" aria-hidden="true">▦</span>
+              <h3>No school years configured</h3>
+              <p className="muted">Create a school year to set its dates and prepare the first two semesters.</p>
+              <button className="primary" onClick={()=>{setMessage('');setCreating(true)}}>Create school year</button>
+            </section>:<div className="settings-years">
+              {years.data.map(year=>{
+                const openCount=year.terms.filter(term=>term.status==='open').length;
+                return <section className="settings-year-card" key={year.id}>
+                  <header className="settings-year-header">
+                    <span className="settings-year-icon" aria-hidden="true">▦</span>
+                    <div className="settings-year-title"><p className="eyebrow">SCHOOL YEAR</p><h3>{year.label}</h3>
+                      <p className="muted">{year.start_date} <span aria-hidden="true">→</span> {year.end_date}</p></div>
+                    <span className="settings-year-summary">{openCount} of {year.terms.length} semesters open</span>
+                  </header>
+                  <div className="settings-terms">{year.terms.map(term=><article className="settings-term-card" key={term.id}>
+                    <div className="settings-term-top">
+                      <div><p className="eyebrow">SEMESTER {term.sequence}</p><h4>{term.name}</h4></div>
+                      <span className={`badge ${term.status}`}>{term.status==='open'?'Open':'Closed'}</span>
+                    </div>
+                    <p className="settings-term-dates">{term.start_date}<span aria-hidden="true">→</span>{term.end_date}</p>
+                    <div className="settings-term-links">
+                      <Link to="/admin/students">Student management</Link>
+                      <Link to="/admin/offerings">Course offerings</Link>
+                    </div>
+                    <div className="settings-term-actions">
+                      {term.status==='open'
+                        ?<button type="button" onClick={()=>close(term)}>Close semester</button>
+                        :<button type="button" onClick={()=>{setMessage('');setReopening(term)}}>Reopen semester</button>}
+                    </div>
+                  </article>)}</div>
+                </section>;
+              })}
+            </div>}
+            <p className="settings-calendar-help"><strong>About semester status</strong>
+              <span>Open semesters can be edited. Closing one makes its teaching and academic records read-only; reopening requires a reason and is recorded in audit history.</span></p>
+          </>}
+      </div>
+    </div>
     {creating&&<NewYear terms={allTerms} onClose={()=>setCreating(false)} onDone={()=>{setCreating(false);setMessage('School year created.');queryClient.invalidateQueries({queryKey:['school-years']})}}/>}
     {reopening&&<Dialog title={`Reopen ${reopening.name}`} onClose={()=>setReopening(null)}>
       <p>Reopening allows changes to a closed term. The reason is kept in the audit history.</p>

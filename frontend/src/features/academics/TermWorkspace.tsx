@@ -220,16 +220,16 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
     selectedStudents.some(selected=>selected.student_id===student.student_id));
 
   if(years.isPending)return <p>Loading…</p>;
-  if(!term)return <section className="panel"><h1>Term not found</h1><Link to="/admin/settings">Back to School-year settings</Link></section>;
+  if(!term)return <section className="panel"><h1>Term not found</h1><Link to="/admin/settings">Back to Settings</Link></section>;
   const standaloneHeading=initialTab==='sections'?'Student management':'Course offerings';
   const headingLabel=standalone ? standaloneHeading : term.name;
   return <>
-    {!standalone&&<p className="back"><Link to="/admin/settings">← School-year settings</Link></p>}
+    {!standalone&&<p className="back"><Link to="/admin/settings">← Settings</Link></p>}
     <div className="page-heading">
-      <div><p className="eyebrow">{standalone ? 'Administration' : year?.label}</p><h1>{headingLabel}</h1>
+      <div><p className="eyebrow">{standalone ? 'Administration' : year?.label}</p><h1 className={activeTab==='sections'?'student-management-title':''}>{headingLabel}</h1>
         {!standalone&&<span className={`badge ${term.status}`}>{term.status}</span>}</div>
     </div>
-    {!standalone&&closed&&<p className="warn" role="status">This term is closed. Reopen it from School-year settings to make changes.</p>}
+    {!standalone&&closed&&<p className="warn" role="status">This term is closed. Reopen it from Settings to make changes.</p>}
     {!standalone&&<div className="stats-grid">
       <div className="stat-card"><span>Sections</span><strong>{totalSections}</strong></div>
       <div className="stat-card"><span>Students</span><strong>{totalStudents}</strong></div>
@@ -241,7 +241,7 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
     </nav>}
 
     {activeTab==='sections'?
-      <section className="panel panel-settings">
+      <section className="panel panel-settings student-management-panel">
         <div className="page-heading"><div><h2>Student management</h2>
           {!subjects.isError&&subjects.isSuccess&&programYears.length>0&&<p className="muted">Manage students by year level and section. Program duration: {highestProgramYear} year{highestProgramYear===1?'':'s'}.</p>}
         </div></div>
@@ -284,7 +284,7 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
                 <button type="button" className="year-section-add"
                   disabled={closed||bulkActionBusy||subjects.isPending||subjects.isError||colleges.isPending||colleges.isError||programYears.length===0}
                   onClick={()=>{setActiveYear(yearLevel);setOpenYearMenu(null);setDialog('section')}}>
-                  <span aria-hidden="true">＋</span> Add section to {yearLabel(yearLevel)}
+                  <span aria-hidden="true">＋</span> Add section
                 </button>
               </div>}
             </div>})}

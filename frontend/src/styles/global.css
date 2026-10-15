@@ -945,6 +945,45 @@ code {
   white-space: nowrap
 }
 
+.student-management-title {
+  font-size: clamp(1.55rem, 3.6vw, 2rem)
+}
+
+.student-management-panel {
+  font-size: .95rem
+}
+
+.student-management-panel h2 {
+  font-size: 1.1rem
+}
+
+.student-management-panel .tabs button,
+.student-management-panel .year-section-menu button,
+.student-management-panel .student-section-filter,
+.student-management-panel .student-bulk-actions {
+  font-size: .94rem
+}
+
+.student-management-panel .student-management-table {
+  font-size: .82rem
+}
+
+.student-management-panel .student-management-table th,
+.student-management-panel .student-management-table td {
+  padding: 4px 6px;
+  vertical-align: middle
+}
+
+.student-management-panel .student-management-table thead th {
+  padding-top: 6px;
+  padding-bottom: 6px;
+  font-size: .72rem
+}
+
+.student-management-panel .muted {
+  font-size: .92rem
+}
+
 .settings-header {
   border-bottom: 1px solid var(--border);
   padding-bottom: 18px;
@@ -989,6 +1028,496 @@ code {
 .settings-card-actions {
   display: flex;
   justify-content: flex-end
+}
+
+.settings-page-heading {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px
+}
+
+.settings-page-heading h1,
+.settings-page-heading p {
+  margin-bottom: 4px
+}
+
+.settings-page-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 54px;
+  width: 54px;
+  height: 54px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--action);
+  box-shadow: 0 6px 18px rgba(25, 52, 71, .06);
+  font-size: 1.6rem
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(215px, 250px) minmax(0, 1fr);
+  align-items: start;
+  gap: 20px
+}
+
+.settings-navigation {
+  position: sticky;
+  top: calc(var(--header-h, 74px) + 18px);
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgba(25, 52, 71, .04)
+}
+
+.settings-navigation-title {
+  margin: 4px 8px 10px;
+  color: var(--muted);
+  font-size: .72rem;
+  font-weight: 750;
+  letter-spacing: .1em;
+  text-transform: uppercase
+}
+
+.settings-navigation nav {
+  display: grid;
+  gap: 4px
+}
+
+.settings-nav-link {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 10px 8px;
+  border-radius: 9px;
+  color: var(--text);
+  text-decoration: none
+}
+
+.settings-nav-link>span:first-child {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--surface-alt);
+  color: var(--action);
+  font-size: 1.1rem
+}
+
+.settings-nav-link strong,
+.settings-nav-link small {
+  display: block
+}
+
+.settings-nav-link strong {
+  font-size: .88rem
+}
+
+.settings-nav-link small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: .74rem;
+  line-height: 1.35
+}
+
+.settings-nav-link:hover,
+.settings-nav-link:focus-visible,
+.settings-nav-link.active {
+  background: var(--surface-alt)
+}
+
+.settings-nav-link.active strong {
+  color: var(--action)
+}
+
+.settings-navigation-note {
+  margin-top: 14px;
+  padding: 12px 10px 4px;
+  border-top: 1px solid var(--border);
+  font-size: .8rem
+}
+
+.settings-navigation-note p {
+  margin: 5px 0 8px;
+  color: var(--muted);
+  font-size: .76rem
+}
+
+.settings-main {
+  display: grid;
+  min-width: 0;
+  gap: 16px
+}
+
+.settings-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-alt) 100%)
+}
+
+.settings-section-heading h2,
+.settings-section-heading p {
+  margin-bottom: 5px
+}
+
+.settings-section-heading .eyebrow,
+.settings-year-title .eyebrow,
+.settings-term-top .eyebrow {
+  margin-bottom: 5px
+}
+
+.settings-section-heading .eyebrow,
+.settings-year-title .eyebrow,
+.settings-term-top .eyebrow {
+  font-size: .67rem
+}
+
+.settings-section-heading h2 {
+  font-size: 1.18rem
+}
+
+.settings-section-heading>.primary {
+  flex: 0 0 auto
+}
+
+.settings-message {
+  margin: 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--success);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text)
+}
+
+.settings-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px
+}
+
+.settings-overview article {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 4px 14px rgba(25, 52, 71, .035)
+}
+
+.settings-overview-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: var(--surface-alt);
+  color: var(--action);
+  font-size: 1rem
+}
+
+.settings-overview article div {
+  display: grid;
+  min-width: 0
+}
+
+.settings-overview strong {
+  font-size: 1.28rem;
+  line-height: 1.2
+}
+
+.settings-overview article div span {
+  color: var(--muted);
+  font-size: .76rem
+}
+
+.settings-years {
+  display: grid;
+  gap: 14px
+}
+
+.settings-year-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgba(25, 52, 71, .04)
+}
+
+.settings-year-header {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--border)
+}
+
+.settings-year-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--surface-alt);
+  color: var(--action);
+  font-size: 1.15rem
+}
+
+.settings-year-title {
+  min-width: 0
+}
+
+.settings-year-title h3,
+.settings-year-title p {
+  margin: 0
+}
+
+.settings-year-title h3 {
+  font-size: 1.05rem
+}
+
+.settings-year-title .muted {
+  font-size: .8rem
+}
+
+.settings-year-summary {
+  margin-left: auto;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-alt);
+  color: var(--muted);
+  font-size: .72rem;
+  white-space: nowrap
+}
+
+.settings-terms {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding-top: 14px
+}
+
+.settings-term-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: linear-gradient(180deg, var(--surface) 0%, var(--canvas) 100%)
+}
+
+.settings-term-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px
+}
+
+.settings-term-top h4 {
+  margin: 0;
+  font-size: .96rem
+}
+
+.settings-term-top .badge {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  font-size: .7rem;
+  text-transform: capitalize
+}
+
+.settings-term-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  color: var(--muted);
+  font-size: .78rem
+}
+
+.settings-term-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 2px;
+  font-size: .76rem
+}
+
+.settings-term-links a {
+  text-decoration: none
+}
+
+.settings-term-links a:hover {
+  text-decoration: underline
+}
+
+.settings-term-actions {
+  padding-top: 9px;
+  border-top: 1px solid var(--border)
+}
+
+.settings-term-actions button {
+  min-height: 38px;
+  padding: 7px 11px;
+  font-size: .8rem
+}
+
+.settings-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 32px 20px;
+  text-align: center
+}
+
+.settings-empty h3,
+.settings-empty p {
+  margin: 0
+}
+
+.settings-empty h3 {
+  font-size: 1rem
+}
+
+.settings-empty .muted {
+  max-width: 460px;
+  font-size: .85rem
+}
+
+.settings-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 4px;
+  border-radius: 14px;
+  background: var(--surface-alt);
+  color: var(--action);
+  font-size: 1.3rem
+}
+
+.settings-calendar-help {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 13px 15px;
+  border-left: 3px solid var(--action);
+  border-radius: 8px;
+  background: var(--surface-alt);
+  font-size: .8rem
+}
+
+.settings-calendar-help span {
+  color: var(--muted)
+}
+
+@media (max-width: 900px) {
+  .settings-layout {
+    grid-template-columns: 1fr;
+    gap: 14px
+  }
+
+  .settings-navigation {
+    position: static
+  }
+
+  .settings-navigation nav {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr))
+  }
+
+  .settings-navigation-note {
+    display: none
+  }
+}
+
+@media (max-width: 640px) {
+  .settings-page-heading {
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 18px
+  }
+
+  .settings-page-mark {
+    flex-basis: 44px;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    font-size: 1.3rem
+  }
+
+  .settings-page-heading h1 {
+    font-size: 1.65rem
+  }
+
+  .settings-page-heading .muted {
+    font-size: .86rem
+  }
+
+  .settings-section-heading {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 16px
+  }
+
+  .settings-section-heading>.primary {
+    width: 100%
+  }
+
+  .settings-overview {
+    gap: 8px
+  }
+
+  .settings-overview article {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    padding: 11px
+  }
+
+  .settings-overview strong {
+    font-size: 1.1rem
+  }
+
+  .settings-overview article div span {
+    font-size: .68rem
+  }
+
+  .settings-year-card {
+    padding: 13px
+  }
+
+  .settings-year-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px
+  }
+
+  .settings-year-summary {
+    margin-left: 52px
+  }
+
+  .settings-terms {
+    grid-template-columns: 1fr
+  }
+
+  .settings-navigation nav {
+    grid-template-columns: 1fr
+  }
 }
 
 .content {

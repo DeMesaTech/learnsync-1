@@ -22,7 +22,7 @@ function navigation(role:'admin'|'faculty'|'student', schoolYears?:SchoolYear[],
     return [
       {label:'Management',items:[{to:`${home}/students`,label:'Student management',icon:'◫'},{to:`${home}/offerings`,label:'Course offerings',icon:'☰'}]},
       {label:'Oversight',items:[{to:`${home}/subjects`,label:'Prospectus',icon:'▤'},{to:`${home}/issues`,label:'Reports',icon:'?'},{to:`${home}/audit`,label:'Audit history',icon:'◷'}]},
-      {label:'Settings',items:[{to:`${home}/settings`,label:'School-year settings',icon:'⚙'}]}
+      {label:'Settings',items:[{to:`${home}/settings`,label:'Settings',icon:'⚙'}]}
     ];
   }
   const student=role==='student';

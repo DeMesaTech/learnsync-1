@@ -7,7 +7,7 @@ const PLACES:[RegExp,string][]=[
   [/^\/(student|faculty|admin)$/,'Dashboard'],
   [/^\/(student|faculty)\/subjects$/,'My Classes'],
   [/^\/admin\/terms\/[^/]+$/,'Term workspace'],
-  [/^\/admin\/settings$/,'School-year settings'],
+  [/^\/admin\/settings$/,'Settings'],
   [/^\/admin\/students$/,'Student management'],
   [/\/classwork$/,'Classwork'],
   [/\/lessons$/,'Lessons & materials'],

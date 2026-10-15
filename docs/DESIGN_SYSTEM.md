@@ -16,7 +16,7 @@ Several plan routes became tabs of one offering page; this is the actual map (so
 
 Public: `/login`, `/forgot-password`, `/reset-password`, `/accept-invitation`. Signed in: `/account`; each role's home `/admin`, `/faculty`, `/student`.
 
-Admin (`/admin/...`): `academics` (school years and terms), `terms/:termId` (Student management with college/program, year, and section filters and inline student profile editing, plus Offerings; imports are launched from their matching tabs), `terms/:termId/import-students`, `terms/:termId/sections/:sectionId/students` (searchable roster, candidates, and withdrawal history), `teachers` (faculty account management), `teachers/import` (reviewed faculty import), `subjects`, `subjects/import`, `subjects/import/:importId`, `offerings/:offeringId` (roster), `accounts`, `issues` (reports), `audit`.
+Admin (`/admin/...`): `settings` is the Settings hub, with the Academic calendar section for school-year/semester creation, optional section/offering copy, closing and reasoned reopening; its settings navigation links to Prospectus, Student management, Course offerings, and Account/theme. `students` and `offerings` are independent management pages. The other established routes include `subjects`, `subjects/import`, `subjects/import/:importId`, `teachers/import` (reviewed faculty import), `offerings/:offeringId` (roster), `issues` (reports), and `audit`.
 
 Student management retains the **Course** filter label for college/program selection. Sections are owned by one college/program and use its code in generated names (for example, `BSE 1A`); subject offerings are assigned later in the separate Offerings tab.
 
