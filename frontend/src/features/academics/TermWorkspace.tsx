@@ -221,7 +221,7 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
 
   if(years.isPending)return <p>Loading…</p>;
   if(!term)return <section className="panel"><h1>Term not found</h1><Link to="/admin/settings">Back to Settings</Link></section>;
-  const standaloneHeading=initialTab==='sections'?'Student management':'Course offerings';
+  const standaloneHeading=initialTab==='sections'?'Student management':'Faculty management';
   const headingLabel=standalone ? standaloneHeading : term.name;
   return <>
     {!standalone&&<p className="back"><Link to="/admin/settings">← Settings</Link></p>}
@@ -237,7 +237,7 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
     </div>}
     {!standalone&&<nav className="tabs" aria-label="Term workspace tabs">
       <button type="button" className={tab==='sections'?'active':''} aria-pressed={tab==='sections'} onClick={()=>setTab('sections')}>Students</button>
-      <button type="button" className={tab==='offerings'?'active':''} aria-pressed={tab==='offerings'} onClick={()=>setTab('offerings')}>Course offerings</button>
+      <button type="button" className={tab==='offerings'?'active':''} aria-pressed={tab==='offerings'} onClick={()=>setTab('offerings')}>Faculty</button>
     </nav>}
 
     {activeTab==='sections'?
@@ -246,7 +246,7 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
           {!subjects.isError&&subjects.isSuccess&&programYears.length>0&&<p className="muted">Manage students by year level and section. Program duration: {highestProgramYear} year{highestProgramYear===1?'':'s'}.</p>}
         </div></div>
         {subjects.isError&&<p role="alert">Could not load the prospectus year levels: {subjects.error.message}</p>}
-        {offerings.isError&&<p role="alert">Could not load course offerings: {offerings.error.message}</p>}
+        {offerings.isError&&<p role="alert">Could not load Faculty Management: {offerings.error.message}</p>}
         {colleges.isError&&<p role="alert">Could not load colleges: {colleges.error.message}</p>}
         {!closed&&colleges.data?.every(college=>college.status!=='active')&&<p className="muted">Add an active college/program before creating sections.</p>}
         {!subjects.isError&&subjects.isSuccess&&programYears.length===0&&<p className="muted">No year levels are assigned in the prospectus yet. <Link to="/admin/subjects">Add or place subjects in the prospectus</Link> before creating sections.</p>}
@@ -359,7 +359,7 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
       </section>
       :
       <section className="panel panel-settings">
-        <div className="page-heading"><h2>Course offerings</h2><div className="actions">
+        <div className="page-heading"><h2>Faculty Management</h2><div className="actions">
           <Link className="button" to="/admin/teachers/import">Import teachers</Link>
           <button className={sections.data?.length&&offerings.data?.length===0?'primary':''} disabled={closed||!sections.data} onClick={()=>setDialog('offering')}>Assign subjects</button>
         </div></div>
@@ -386,7 +386,7 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
     }
 
     {dialog==='section'&&<SectionDialog termId={term.id} yearLevels={programYears} initialYear={visibleYear??programYears[0]??1} initialCollegeId={courseFilter} sections={sections.data??[]} colleges={colleges.data??[]} onClose={()=>setDialog(null)} onDone={(yearLevel,collegeId)=>{setDialog(null);setActiveYear(yearLevel);setCourseFilter(collegeId);setSelectedSectionId('');refresh()}}/>}
-    {dialog==='offering'&&<BulkAssignDialog termId={term.id} termSequence={term.sequence} sections={sections.data??[]} existing={offerings.data??[]}
+    {dialog==='offering'&&<BulkAssignDialog termId={term.id} termSequence={term.sequence} termLabel={`${year?.label??'Academic year'} · ${term.name}`} sections={sections.data??[]} existing={offerings.data??[]}
       onClose={()=>setDialog(null)} onDone={()=>{setDialog(null);refresh()}}/>}
     {editing&&<OfferingDialog sections={sections.data??[]} offering={editing}
       onClose={()=>setEditing(null)} onDone={()=>{setEditing(null);refresh()}}/>}
@@ -558,13 +558,17 @@ function OfferingDialog({sections,offering,onClose,onDone}:{sections:Section[];o
 }
 
 /** One teacher, several subjects, each with its own sections, saved together (all or nothing). */
-function BulkAssignDialog({termId,termSequence,sections,existing,onClose,onDone}:{termId:string;termSequence:number;sections:Section[];existing:OfferingSummary[];onClose:()=>void;onDone:()=>void}){
+function BulkAssignDialog({termId,termSequence,termLabel,sections,existing,onClose,onDone}:{termId:string;termSequence:number;termLabel:string;sections:Section[];existing:OfferingSummary[];onClose:()=>void;onDone:()=>void}){
   const toast=useToast();
   const subjects=useQuery({queryKey:['subjects',false],queryFn:()=>api<Subject[]>('/subjects')});
   const faculty=useQuery({queryKey:['faculty-list'],queryFn:()=>api<Account[]>('/accounts?role=faculty&page_size=100')});
+  const colleges=useQuery({queryKey:['colleges'],queryFn:()=>api<College[]>('/colleges')});
   const [facultyId,setFacultyId]=useState('');
+  const [collegeId,setCollegeId]=useState('');
   const [find,setFind]=useState('');
   const [semesterFilter,setSemesterFilter]=useState<'current'|'all'>('current');
+  const [yearLevelFilter,setYearLevelFilter]=useState('all');
+  const [subjectChooserOpen,setSubjectChooserOpen]=useState(false);
   const [pick,setPick]=useState<Record<string,string[]>>({});          // subject id -> chosen section ids; present = subject selected
   const [reasons,setReasons]=useState<Record<string,string>>({});
   const [error,setError]=useState('');const [busy,setBusy]=useState(false);
@@ -573,15 +577,24 @@ function BulkAssignDialog({termId,termSequence,sections,existing,onClose,onDone}
   const matchesYear=(sub:Subject,sec:Section)=>sub.year_level===null||sec.year_level===sub.year_level;
   const fits=(sub:Subject,sec:Section)=>sub.year_level===null||sub.semester===null||(sec.year_level===sub.year_level&&termSequence===sub.semester);
   const needle=find.trim().toLowerCase();
-  const list=(subjects.data??[]).filter(sub=>sub.status==='active'&&(semesterFilter==='all'||sub.semester===termSequence)&&(!needle||`${sub.code} ${sub.title}`.toLowerCase().includes(needle)))
+  const programSections=sections.filter(section=>section.college_id===collegeId);
+  const subjectYearLevels=[...new Set((subjects.data??[])
+    .filter(subject=>subject.status==='active'&&(subject.college_id===null||subject.college_id===collegeId))
+    .map(subject=>subject.year_level)
+    .filter((yearLevel):yearLevel is number=>yearLevel!==null))].sort((a,b)=>a-b);
+  const list=(subjects.data??[]).filter(sub=>sub.status==='active'&&(sub.college_id===null||sub.college_id===collegeId)&&(semesterFilter==='all'||sub.semester===termSequence)&&(!needle||`${sub.code} ${sub.title}`.toLowerCase().includes(needle)))
     .sort((a,b)=>Number(pick[b.id]!==undefined)-Number(pick[a.id]!==undefined)||Number(a.semester===termSequence?0:1)-Number(b.semester===termSequence?0:1)||a.code.localeCompare(b.code));
+  const availableSubjects=list.filter(subject=>pick[subject.id]===undefined);
+  const matchingSubjects=availableSubjects.filter(subject=>yearLevelFilter==='all'||
+    (yearLevelFilter==='unplaced'?subject.year_level===null:subject.year_level===Number(yearLevelFilter)));
   const chosen=Object.keys(pick);
   const subjectOf=(id:string)=>subjects.data?.find(x=>x.id===id);
-  const needsReason=(id:string)=>{const sub=subjectOf(id);return !!sub&&pick[id].some(sid=>{const sec=sections.find(x=>x.id===sid);return !!sec&&!fits(sub,sec)})};
-  const ready=!!facultyId&&chosen.length>0&&chosen.every(id=>pick[id].length>0&&(!needsReason(id)||(reasons[id]??'').trim().length>=3));
+  const offeringsCount=chosen.reduce((total,id)=>total+pick[id].length,0);
+  const needsReason=(id:string)=>{const sub=subjectOf(id);return !!sub&&pick[id].some(sid=>{const sec=programSections.find(x=>x.id===sid);return !!sec&&!fits(sub,sec)})};
+  const ready=!!facultyId&&!!collegeId&&chosen.length>0&&chosen.every(id=>pick[id].length>0&&(!needsReason(id)||(reasons[id]??'').trim().length>=3));
   function toggleSubject(sub:Subject,on:boolean){
     if(!on){const rest={...pick};delete rest[sub.id];setPick(rest);return}
-    setPick({...pick,[sub.id]:sections.filter(sec=>sub.year_level!==null&&matchesYear(sub,sec)&&fits(sub,sec)).map(sec=>sec.id)});
+    setPick({...pick,[sub.id]:programSections.filter(sec=>sub.year_level!==null&&matchesYear(sub,sec)&&fits(sub,sec)).map(sec=>sec.id)});
   }
   async function submit(e:FormEvent){
     e.preventDefault();setBusy(true);setError('');
@@ -591,29 +604,85 @@ function BulkAssignDialog({termId,termSequence,sections,existing,onClose,onDone}
       setError(errorText(err));
     }finally{setBusy(false)}
   }
-  return <Dialog title="Assign subjects" onClose={onClose}><form onSubmit={submit}>
-    <label>Teacher<select required value={facultyId} onChange={e=>setFacultyId(e.target.value)}><option value="" disabled>Choose a teacher</option>
-      {faculty.data?.filter(f=>f.status!=='inactive').map(f=><option key={f.id} value={f.id}>{f.display_name}</option>)}</select></label>
-    <fieldset className="bulk-subjects"><legend>Subjects and the sections taking each</legend>
-      {sections.length===0&&<p className="muted">Add sections first.</p>}
-      <label>Show subjects<select aria-label="Filter subjects by semester" value={semesterFilter} onChange={e=>setSemesterFilter(e.target.value as 'current'|'all')}>
-        <option value="current">Current semester ({termSequence})</option><option value="all">All semesters</option>
+  const subjectCard=(id:string)=>{
+    const sub=subjectOf(id);
+    if(!sub)return null;
+    const availableSections=programSections.filter(sec=>matchesYear(sub,sec));
+    return <article className="bulk-assignment-card" key={sub.id}>
+      <div className="bulk-assignment-card-heading">
+        <div><h3>{sub.code}</h3><p className="muted">{sub.title}</p></div>
+        <button type="button" className="icon-button" aria-label={`Remove ${sub.code}`} title={`Remove ${sub.code}`} onClick={()=>toggleSubject(sub,false)}>×</button>
+      </div>
+      <p className="bulk-assignment-label">Sections</p>
+      <div className="bulk-assignment-chips" role="group" aria-label={`Sections for ${sub.code}`}>
+        {availableSections.map(section=>{
+          const selected=pick[sub.id].includes(section.id);
+          return <label className={`bulk-assignment-chip${selected?' selected':''}`} key={section.id}>
+            <input type="checkbox" checked={selected} onChange={event=>setPick({...pick,[sub.id]:event.target.checked?[...pick[sub.id],section.id]:pick[sub.id].filter(id=>id!==section.id)})}/>
+            <span>{section.name}</span>
+          </label>;
+        })}
+      </div>
+      {availableSections.length===0&&<p className="muted">No sections exist for this subject’s year level in this program.</p>}
+      <p className="bulk-assignment-count">{pick[sub.id].length} offering{pick[sub.id].length===1?'':'s'} selected</p>
+      {needsReason(sub.id)&&<label>Reason for placing {sub.code} outside its prospectus semester (kept in the audit history)<textarea value={reasons[sub.id]??''} onChange={event=>setReasons({...reasons,[sub.id]:event.target.value})} minLength={3} maxLength={1000} required/></label>}
+    </article>;
+  };
+  return <Dialog title="Assign Subjects to Faculty" onClose={onClose} className="bulk-assignment-dialog"><form onSubmit={submit}>
+    <p className="bulk-assignment-intro">Assign one faculty member to multiple subject-section offerings.</p>
+    <div className="bulk-assignment-context">
+      <label>Academic term<input value={termLabel} readOnly/></label>
+      <label>College / Program<select required value={collegeId} onChange={event=>setCollegeId(event.target.value)} disabled={chosen.length>0}>
+        <option value="" disabled>{colleges.isPending?'Loading programs…':'Choose a college / program'}</option>
+        {colleges.data?.filter(college=>college.status==='active'&&sections.some(section=>section.college_id===college.id)).map(college=><option key={college.id} value={college.id}>{college.code}</option>)}
       </select></label>
-      <label>Filter subjects<input type="search" value={find} onChange={e=>setFind(e.target.value)} placeholder="Code or title"/></label>
-      {subjects.isPending?<p>Loading subjects…</p>:list.length===0?<p className="muted">No active subjects match this semester and search.</p>:<ul className="pick-list" aria-label="Subjects">{list.map(sub=>{
-        const on=pick[sub.id]!==undefined,done=taken.has(sub.id);
-        return <li key={sub.id} className={on?'on':''}>
-          <label className="inline"><input type="checkbox" checked={on} disabled={!facultyId||done} onChange={e=>toggleSubject(sub,e.target.checked)}/>
-            <span><strong>{sub.code}</strong> {sub.title} <span className="muted">{sub.year_level?`Year ${sub.year_level}, semester ${sub.semester}`:'not placed'}{done?' · already assigned to this teacher':''}</span></span></label>
-          {on&&<div className="bulk-sections"><div className="chips" role="group" aria-label={`Sections for ${sub.code}`}>{sections.filter(sec=>matchesYear(sub,sec)).map(sec=>
-            <label className="inline" key={sec.id}><input type="checkbox" checked={pick[sub.id].includes(sec.id)} onChange={e=>setPick({...pick,[sub.id]:e.target.checked?[...pick[sub.id],sec.id]:pick[sub.id].filter(x=>x!==sec.id)})}/> {sec.name} <span className="muted">({sec.member_count}){fits(sub,sec)?'':' · other semester'}</span></label>)}</div>
-            {sections.every(sec=>!matchesYear(sub,sec))&&<p className="muted">No sections exist for this subject’s year level.</p>}
-            {pick[sub.id].length===0&&<p className="muted">Choose at least one section.</p>}
-            {needsReason(sub.id)&&<label>Reason for placing {sub.code} outside its prospectus semester (kept in the audit history)<textarea value={reasons[sub.id]??''} onChange={e=>setReasons({...reasons,[sub.id]:e.target.value})} minLength={3} maxLength={1000} required/></label>}</div>}</li>})}</ul>}
-      {!facultyId&&<p className="muted">Choose a teacher first.</p>}
-    </fieldset>
-    <p className="muted">Subjects with a year-level placement only show sections for that year. An off-semester placement asks for a reason. Nothing is saved unless every selected subject can be assigned.</p>
+    </div>
+    {colleges.isError&&<p role="alert">Could not load colleges: {colleges.error.message}</p>}
+    {!colleges.isPending&&!colleges.isError&&colleges.data?.filter(college=>college.status==='active'&&sections.some(section=>section.college_id===college.id)).length===0&&<p className="muted">Add an active college / program and create its sections before assigning subjects.</p>}
+    <section className="bulk-assignment-faculty">
+      <label>Faculty member<select required value={facultyId} onChange={event=>setFacultyId(event.target.value)}><option value="" disabled>{faculty.isPending?'Loading faculty…':'Choose a faculty member'}</option>
+        {faculty.data?.filter(member=>member.status!=='inactive').map(member=><option key={member.id} value={member.id}>{member.display_name}</option>)}</select></label>
+      {teacher&&<div className="bulk-assignment-faculty-card"><span className="bulk-assignment-avatar" aria-hidden="true">{teacher.display_name.slice(0,1).toUpperCase()}</span>
+        <span><strong>{teacher.display_name}</strong><small>{teacher.email}</small></span><span className="bulk-assignment-selected">Selected</span></div>}
+      {faculty.isError&&<p role="alert">Could not load faculty: {faculty.error.message}</p>}
+    </section>
+    <section className="bulk-assignment-subjects" aria-labelledby="bulk-assignment-subjects-title">
+      <div className="bulk-assignment-section-heading"><h3 id="bulk-assignment-subjects-title">Subject and section assignments</h3><span className="badge">{offeringsCount} offering{offeringsCount===1?'':'s'}</span></div>
+      <p className="muted">Choose a subject, then select one or more sections where this faculty member will handle it.</p>
+      {chosen.map(subjectCard)}
+      {!collegeId&&<p className="muted">Choose a college / program to see its available subjects and sections.</p>}
+      {sections.length===0&&<p className="muted">Add sections first.</p>}
+      {subjects.isError&&<p role="alert">Could not load subjects: {subjects.error.message}</p>}
+      {subjectChooserOpen&&<div className="bulk-assignment-subject-chooser">
+        <div className="bulk-assignment-filters">
+          <label>Show subjects<select aria-label="Filter subjects by semester" value={semesterFilter} onChange={event=>setSemesterFilter(event.target.value as 'current'|'all')}>
+            <option value="current">Current semester ({termSequence})</option><option value="all">All semesters</option>
+          </select></label>
+          <label>Year level<select aria-label="Filter subjects by year level" value={yearLevelFilter} onChange={event=>setYearLevelFilter(event.target.value)}>
+            <option value="all">All year levels</option>
+            {subjectYearLevels.map(yearLevel=><option key={yearLevel} value={yearLevel}>Year {yearLevel}</option>)}
+            <option value="unplaced">Unplaced</option>
+          </select></label>
+          <label>Filter subjects<input type="search" value={find} onChange={event=>setFind(event.target.value)} placeholder="Code or title"/></label>
+        </div>
+        {subjects.isPending?<p>Loading subjects…</p>:subjects.isError?<p role="alert">Could not load subjects: {subjects.error.message}</p>:
+          availableSubjects.length===0?<p className="muted">No active subjects match this program, semester, and search.</p>:
+          matchingSubjects.length===0?<p className="muted">No available subjects match this year level.</p>:
+          <ul className="bulk-assignment-subject-list" aria-label="Available subjects">{matchingSubjects.map(subject=>{
+            const done=taken.has(subject.id);
+            return <li key={subject.id}><span><strong>{subject.code}</strong> {subject.title}<small>{subject.year_level?`Year ${subject.year_level}, semester ${subject.semester}`:'Not placed'}</small></span>
+              <button type="button" disabled={done||!facultyId} onClick={()=>toggleSubject(subject,true)}>{done?'Already assigned':'Add'}</button></li>;
+          })}</ul>}
+      </div>}
+      <button type="button" className="bulk-assignment-add" disabled={!collegeId||!facultyId||subjects.isError} onClick={()=>setSubjectChooserOpen(open=>!open)}>
+        {subjectChooserOpen?'− Close subject list':'+ Add another subject'}
+      </button>
+    </section>
+    <div className="bulk-assignment-summary">
+      <strong>Total selected</strong><strong>{offeringsCount} subject-section assignment{offeringsCount===1?'':'s'}</strong>
+    </div>
+    <p className="muted">Before saving, LearnSync checks for duplicate assignments, unavailable offerings, and sections already assigned to another faculty member. Subjects with a year-level placement only show sections for that year; an off-semester placement requires a reason. Nothing is saved unless every selected assignment is valid.</p>
     {error&&<p role="alert">{error}</p>}
-    <div className="actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary" disabled={!ready||busy}>{busy?'Assigning…':chosen.length===0?'Assign subjects':`Assign ${chosen.length} subject${chosen.length===1?'':'s'}`}</button></div>
+    <div className="actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary" disabled={!ready||busy||subjects.isError||faculty.isError||colleges.isError}>{busy?'Assigning…':'Assign all'}</button></div>
   </form></Dialog>;
 }

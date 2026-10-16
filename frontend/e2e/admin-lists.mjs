@@ -90,14 +90,22 @@ try{
   await p.goto(`/admin/terms/${term.id}`);await p.waitForLoadState('networkidle');
   await p.getByRole('button',{name:'Assign subjects'}).click();
   const d=p.locator('dialog');
-  check('subjects stay locked until a teacher is chosen',await d.getByRole('checkbox',{name:/LST 101/}).isDisabled());
-  await d.getByLabel('Teacher').selectOption({label:'Demo faculty 1'});
+  await d.getByLabel('College / Program').selectOption(college.id);
+  check('subjects stay locked until a faculty member is chosen',await d.locator('.bulk-assignment-add').isDisabled());
+  await d.getByLabel('Faculty member').selectOption({label:'Demo faculty 1'});
+  await d.getByRole('button',{name:/Add another subject/}).click();
   await d.getByLabel('Filter subjects').fill('LST');
-  check('bulk assignment defaults to subjects in the term semester',await d.getByRole('checkbox',{name:/LST 202/}).count()===0);
+  check('bulk assignment defaults to subjects in the term semester',await d.locator('.bulk-assignment-subject-list li').filter({hasText:'LST 202'}).count()===0);
+  await d.getByLabel('Filter subjects by year level').selectOption('1');
+  check('year-level filtering limits subjects to the selected prospectus year',
+    await d.locator('.bulk-assignment-subject-list li').filter({hasText:'LST 101'}).count()===1&&
+    await d.locator('.bulk-assignment-subject-list li').filter({hasText:'LST 201'}).count()===0);
+  await d.getByLabel('Filter subjects by year level').selectOption('all');
   await d.getByLabel('Filter subjects by semester').selectOption('all');
-  check('all semesters can be shown for intentional off-semester assignments',await d.getByRole('checkbox',{name:/LST 202/}).count()===1);
+  check('all semesters can be shown for intentional off-semester assignments',await d.locator('.bulk-assignment-subject-list li').filter({hasText:'LST 202'}).count()===1);
   await d.getByLabel('Filter subjects by semester').selectOption('current');
-  await d.getByRole('checkbox',{name:/LST 101/}).check();await d.getByRole('checkbox',{name:/LST 201/}).check();
+  await d.locator('.bulk-assignment-subject-list li').filter({hasText:'LST 101'}).getByRole('button',{name:'Add',exact:true}).click();
+  await d.locator('.bulk-assignment-subject-list li').filter({hasText:'LST 201'}).getByRole('button',{name:'Add',exact:true}).click();
   const yearOneSections=d.getByRole('group',{name:'Sections for LST 101'});
   const yearTwoSections=d.getByRole('group',{name:'Sections for LST 201'});
   check('each subject shows only sections from its year level',await yearOneSections.locator('label').count()===1&&(await yearOneSections.innerText()).includes('1A')&&await yearTwoSections.locator('label').count()===1&&(await yearTwoSections.innerText()).includes('2A'));
@@ -105,7 +113,7 @@ try{
   await yearTwoSections.locator('input').uncheck();
   check('every selected subject needs a section before Assign is enabled',await d.locator('.actions .primary').isDisabled());
   await yearTwoSections.locator('input').check();
-  check('the button counts the subjects',(await d.locator('.actions .primary').innerText())==='Assign 2 subjects');
+  check('the summary counts selected subject-section assignments',(await d.locator('.bulk-assignment-summary').innerText()).includes('2 subject-section assignments'));
   await d.locator('.actions .primary').click();await p.locator('.toast').waitFor();
   const offerings=(await call(p,'GET',`/terms/${term.id}/offerings`)).data.map(o=>`${o.subject.code}:${o.sections.map(s=>s.name)}`).sort();
   check('both subjects were assigned with their year-level sections in one go',offerings.join(' ')==='LST 101:BSE 1A LST 201:2A',offerings.join(' '));
@@ -132,8 +140,10 @@ try{
   const sectionAOption=await sectionFilter.locator('option').filter({hasText:'BSE 1A'}).getAttribute('value');
   await sectionFilter.selectOption(sectionAOption);
   await p.getByRole('button',{name:'Offerings',exact:true}).click();
-  await p.getByRole('button',{name:'Assign subjects'}).click();await d.getByLabel('Teacher').selectOption({label:'Demo faculty 2'});await d.getByLabel('Filter subjects').fill('LST 102');
-  await d.getByRole('checkbox',{name:/LST 102/}).check();await d.locator('.actions .primary').click();await p.locator('.toast').waitFor();
+  await p.getByRole('button',{name:'Assign subjects'}).click();await d.getByLabel('College / Program').selectOption(college.id);await d.getByLabel('Faculty member').selectOption({label:'Demo faculty 2'});
+  await d.getByRole('button',{name:/Add another subject/}).click();await d.getByLabel('Filter subjects').fill('LST 102');
+  await d.locator('.bulk-assignment-subject-list li').filter({hasText:'LST 102'}).getByRole('button',{name:'Add',exact:true}).click();
+  await d.locator('.actions .primary').click();await p.locator('.toast').waitFor();
   const teacherFilter=p.getByRole('combobox',{name:'Filter offerings by teacher'});
   check('the offerings list provides a teacher filter when several teachers are assigned',await teacherFilter.count()===1&&await teacherFilter.locator('option').count()===3);
   await teacherFilter.selectOption({label:'Demo faculty 1'});
@@ -148,8 +158,10 @@ try{
     courseOptions.length===3&&courseOptions.some(option=>option.startsWith('LST 101'))&&
     courseOptions.some(option=>option.startsWith('LST 102'))&&!courseOptions.some(option=>option.startsWith('LST 201')));
   await p.getByRole('button',{name:'Offerings',exact:true}).click();
-  await p.getByRole('button',{name:'Assign subjects'}).click();await d.getByLabel('Teacher').selectOption({label:'Demo faculty 1'});await d.getByLabel('Filter subjects').fill('LST 101');
-  check('a subject the teacher already has is shown as assigned and cannot be picked again',await d.getByRole('checkbox',{name:/LST 101/}).isDisabled());
+  await p.getByRole('button',{name:'Assign subjects'}).click();await d.getByLabel('College / Program').selectOption(college.id);await d.getByLabel('Faculty member').selectOption({label:'Demo faculty 1'});
+  await d.getByRole('button',{name:/Add another subject/}).click();await d.getByLabel('Filter subjects').fill('LST 101');
+  check('a subject the faculty member already has is marked assigned and cannot be added',
+    await d.locator('.bulk-assignment-subject-list li').filter({hasText:'LST 101'}).getByRole('button',{name:'Already assigned'}).isDisabled());
   check('axe finds no violations on the bulk dialog',(await axe(p)).length===0);
 }catch(e){console.log('SCRIPT ERROR:',e.message);results.push(false)}
 await browser.close();

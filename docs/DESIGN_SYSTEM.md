@@ -16,7 +16,7 @@ Several plan routes became tabs of one offering page; this is the actual map (so
 
 Public: `/login`, `/forgot-password`, `/reset-password`, `/accept-invitation`. Signed in: `/account`; each role's home `/admin`, `/faculty`, `/student`.
 
-Admin (`/admin/...`): `settings` is the Settings hub, with the Academic calendar section for school-year/semester creation, optional section/offering copy, closing and reasoned reopening; its settings navigation links to Prospectus, Student management, Course offerings, and Account/theme. `students` and `offerings` are independent management pages. The other established routes include `subjects`, `subjects/import`, `subjects/import/:importId`, `teachers/import` (reviewed faculty import), `offerings/:offeringId` (roster), `issues` (reports), and `audit`.
+Admin (`/admin/...`): `settings` is the Settings hub, with the Academic calendar section for school-year/semester creation, optional section/offering copy, closing and reasoned reopening; its settings navigation links to Prospectus, Student management, Faculty Management, and Account/theme. `students` and `offerings` are independent management pages. The other established routes include `subjects`, `subjects/import`, `subjects/import/:importId`, `teachers/import` (reviewed faculty import), `offerings/:offeringId` (roster), `issues` (reports), and `audit`.
 
 Student management retains the **Course** filter label for college/program selection. Sections are owned by one college/program and use its code in generated names (for example, `BSE 1A`); subject offerings are assigned later in the separate Offerings tab.
 
@@ -38,6 +38,8 @@ Confirmations and undo (Phase 3): confirm only what cannot be undone or what stu
 
 ## Term offering administration
 - The term's Offerings table can be filtered to one teacher when multiple teachers have assignments. Bulk Assign subjects defaults to active subjects placed in that term's semester; an explicit All semesters option remains available for approved exceptions. For a prospectus subject with a year-level placement, the assignment dialog lists only sections in that year.
+- Bulk subject assignment identifies the academic term, narrows the workflow to a college/program, then selects one faculty member and one or more subject-section pairs. Selected pairs remain visible as subject cards with section chips and a live assignment total. Keep duplicate checks, year-level filtering, off-semester reasons, and all-or-nothing saving intact.
+- Admin data tables use compact typography and cell spacing and preserve readable column widths with horizontal scrolling inside their table region rather than compressing columns or causing page-wide overflow. The bulk assignment subject chooser can filter by prospectus year level, including unplaced subjects.
 
 ## Replacing a syllabus
 - On a published syllabus, make “Replace syllabus from a file” available as a DOCX/PDF import. Import creates a reviewable draft; keep the published revision and its grading policy live until faculty publishes the replacement. Preserve the existing grading policy in the imported draft.

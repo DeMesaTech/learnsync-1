@@ -1,7 +1,7 @@
 # Acceptance status
 
 ### 2026-10-15 (Settings hub and academic calendar)
-- Rebuilt `/admin/settings` as a general Settings hub in the existing navy/blue visual system. Its institution settings navigation links to real Prospectus, Student management, Course offerings, and Account/theme pages; Academic calendar is the active section.
+- Rebuilt `/admin/settings` as a general Settings hub in the existing navy/blue visual system. Its institution settings navigation links to real Prospectus, Student management, Faculty Management, and Account/theme pages; Academic calendar is the active section.
 - Preserved school-year behavior: year and semester overview, create-year dialog with two semesters and per-semester section/optional offering copy, term links, close confirmation, and reason-required audited reopening.
 - Playwright on the running local app confirmed the Settings heading, five settings links, one year/two semester cards, New school year dialog with two semester fieldsets, and the close-semester confirmation. Both dialogs were cancelled; no data was changed. The existing API remained available during this browser check.
 - Passed: `cd frontend; npm run build`, `npm run lint`, and `git diff --check`. Vite emitted the existing large-chunk warning.
@@ -940,3 +940,20 @@ Note: another process (started from Codex's Python runtime) was already serving 
 - Fixed standalone rendering to select its panel directly from the route's `initialTab`; the tab state remains in use for the term workspace only.
 - Playwright attempted both URLs after starting Vite. The frontend rendered “Cannot reach the server” on each route because the API/backend is unavailable, so authenticated page content could not be verified in-browser. This is a validation blocker, not a successful UI smoke test.
 - Passed: `cd frontend; npm run build` (TypeScript and Vite production build; Vite emitted the existing large-chunk warning), `npm run lint`, and `git diff --check`.
+
+### Bulk subject assignment dialog refresh (2026-10-16)
+- Reworked the admin assignment dialog to show the academic term and college/program, select a faculty member, add subjects into individual cards, toggle sections as chips, and display the selected subject-section total. Existing year-level rules, semester filtering, off-semester reasons, duplicate blocking, and all-or-nothing submission remain in place.
+- Updated the disposable-database admin E2E flow for the new controls.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; Vite emitted the existing large-chunk warning), `npm run lint`, and `git diff --check`.
+- Not verified: authenticated browser interaction was blocked by an expired browser session. The admin E2E was not run because it provisions and mutates records and requires explicit confirmation that its database is disposable.
+
+### Compact admin tables and assignment year filter (2026-10-16)
+- Reduced table font size, cell padding, and line height; admin tables preserve readable column widths with horizontal scrolling inside the table region rather than compressing columns or causing page-wide overflow.
+- Added a year-level filter to the assignment subject chooser, with all-year, specific-year, and unplaced options. Updated the admin E2E flow to check year filtering.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk warning), `npm run lint`, `node --check frontend\\e2e\\admin-lists.mjs`, and `git diff --check`.
+- Not verified: authenticated browser interaction remains blocked by expired session requests (401). The updated admin E2E was not run because it creates records and requires explicit confirmation that its database is disposable.
+
+### Admin table horizontal scrolling (2026-10-16)
+- Admin offerings, student management, and section roster tables now keep compact text and readable minimum column widths; narrow viewports scroll horizontally within the labeled, keyboard-focusable table region.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk warning), `npm run lint`, `node --check frontend\\e2e\\admin-lists.mjs`, and `git diff --check`.
+- Not verified: the shared browser still has an expired admin session, so live responsive behavior was not checked at runtime.

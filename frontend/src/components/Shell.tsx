@@ -20,8 +20,8 @@ function navigation(role:'admin'|'faculty'|'student', schoolYears?:SchoolYear[],
   const account={label:'Account & help',items:[{to:'/account',label:'Account & theme',icon:'○'}]};
   if(role==='admin'){
     return [
-      {label:'Management',items:[{to:`${home}/students`,label:'Student management',icon:'◫'},{to:`${home}/offerings`,label:'Course offerings',icon:'☰'}]},
-      {label:'Oversight',items:[{to:`${home}/subjects`,label:'Prospectus',icon:'▤'},{to:`${home}/issues`,label:'Reports',icon:'?'},{to:`${home}/audit`,label:'Audit history',icon:'◷'}]},
+      {label:'Management',items:[{to:`${home}/students`,label:'Student',icon:'◫'},{to:`${home}/offerings`,label:'Faculty',icon:'☰'}]},
+      {label:'Oversight',items:[{to:`${home}/subjects`,label:'Subjects',icon:'▤'},{to:`${home}/issues`,label:'Reports',icon:'?'},{to:`${home}/audit`,label:'Audit history',icon:'◷'}]},
       {label:'Settings',items:[{to:`${home}/settings`,label:'Settings',icon:'⚙'}]}
     ];
   }

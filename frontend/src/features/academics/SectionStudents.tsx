@@ -80,7 +80,7 @@ export function SectionStudents(){
       {message&&<p role="alert" className="error">{message}</p>}
       {list.isPending?<p>Loading…</p>:list.error?<p role="alert">{list.error.message}</p>:rows.length===0
         ?<p className="muted">{search?'No students match that search.':tab==='add'?'No students are available to add.':status==='withdrawn'?'Nobody has been withdrawn from this section.':'No students in this section yet.'}</p>
-        :<div className="table-wrap"><table><caption className="sr-only">{tab==='current'?'Students in this section':'Students you can add'}</caption>
+        :<div className="table-wrap" tabIndex={0} role="region" aria-label="Section students, scrolls horizontally"><table className="section-students-table"><caption className="sr-only">{tab==='current'?'Students in this section':'Students you can add'}</caption>
           <thead><tr>{tab==='add'&&<th scope="col"><input type="checkbox" aria-label="Select every student on this page" checked={pageAllPicked} onChange={e=>togglePage(e.target.checked)}/></th>}
             <th scope="col">Student</th><th scope="col">Student no.</th><th scope="col">Email</th><th scope="col">{tab==='current'?'Status':'Account'}</th>{tab==='current'&&!closed&&<th scope="col"><span className="sr-only">Actions</span></th>}</tr></thead>
           <tbody>{rows.map(r=><tr key={r.student_id}>

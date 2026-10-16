@@ -43,7 +43,7 @@ export function SchoolYears(){
             <span aria-hidden="true">◫</span><span><strong>Students and sections</strong><small>Enrollment and rosters</small></span>
           </Link>
           <Link className="settings-nav-link" to="/admin/offerings">
-            <span aria-hidden="true">☷</span><span><strong>Course offerings</strong><small>Teacher assignments</small></span>
+            <span aria-hidden="true">☷</span><span><strong>Faculty assignments</strong><small>Teacher assignments</small></span>
           </Link>
           <Link className="settings-nav-link" to="/account">
             <span aria-hidden="true">○</span><span><strong>Account and theme</strong><small>Your profile preferences</small></span>
@@ -92,7 +92,7 @@ export function SchoolYears(){
                     <p className="settings-term-dates">{term.start_date}<span aria-hidden="true">→</span>{term.end_date}</p>
                     <div className="settings-term-links">
                       <Link to="/admin/students">Student management</Link>
-                      <Link to="/admin/offerings">Course offerings</Link>
+                      <Link to="/admin/offerings">Faculty Management</Link>
                     </div>
                     <div className="settings-term-actions">
                       {term.status==='open'
