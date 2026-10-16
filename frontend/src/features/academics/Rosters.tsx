@@ -11,8 +11,9 @@ import type {MySubject,OfferingSummary,RosterRow} from './types';
 const labels:Record<string,string>={enrolled:'Enrolled',withdrawn:'Withdrawn',excluded:'Excluded'};
 
 /** Roster for one offering: read-only for the assigned faculty, manageable by admin. */
-export function OfferingRoster({embedded=false}:{embedded?:boolean}){
-  const {offeringId}=useParams();
+export function OfferingRoster({embedded=false,offeringId:providedOfferingId}:{embedded?:boolean;offeringId?:string}){
+  const {offeringId:routeOfferingId}=useParams();
+  const offeringId=providedOfferingId??routeOfferingId;
   const {session}=useAuth();
   const isAdmin=session?.user?.role==='admin';
   const here=useHere();
@@ -38,6 +39,9 @@ export function OfferingRoster({embedded=false}:{embedded?:boolean}){
     {!embedded&&<p className="back"><Link to={back}>← Back to {parent.label}</Link></p>}
     {!embedded&&<div className="page-heading"><div><p className="eyebrow">{offering.data?.term}</p><h1>{offering.data?`${offering.data.subject.code} roster`:'Student roster'}</h1>{offering.data&&<p className="muted">{offering.data.subject.title} · {offering.data.faculty.display_name}</p>}</div>
       {isAdmin&&offering.data?.term_status==='open'&&<button className="primary" onClick={()=>{setMessage('');setDialog(true)}}>Add exception</button>}</div>}
+    {embedded&&isAdmin&&offering.data?.term_status==='open'&&<div className="actions roster-dialog-actions">
+      <button className="primary" onClick={()=>{setMessage('');setDialog(true)}}>Add exception</button>
+    </div>}
     {!isAdmin&&<label className="inline"><input type="checkbox" checked={history} onChange={e=>setHistory(e.target.checked)}/> Show withdrawn students</label>}
     {offering.data&&offering.data.sections.length>0&&<label>Section<select aria-label="Filter students by section" value={sectionId} onChange={e=>setSectionId(e.target.value)}>
       <option value="">All sections ({roster.data?.length??offering.data.enrolled})</option>{offering.data.sections.map(s=><option key={s.id} value={s.id}>

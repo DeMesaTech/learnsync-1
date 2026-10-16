@@ -1,7 +1,6 @@
 import {useToast} from '../../components/undo';
-import {useEffect,useMemo,useState,type FormEvent} from 'react';
+import {useEffect,useMemo,useRef,useState,type FormEvent} from 'react';
 import {Link,useParams} from 'react-router-dom';
-import {useHere} from '../../components/origin';
 import {useQuery} from '@tanstack/react-query';
 import {api,post,send,errorText,ApiError,type Account} from '../../app/api';
 import {queryClient} from '../../app/providers';
@@ -9,6 +8,7 @@ import {Dialog} from '../../components/Dialog';
 import {Pager} from '../../components/Pager';
 import {useConfirm} from '../../components/confirm';
 import {yearLabel,type College,type OfferingSummary,type SchoolYear,type Section,type Subject} from './types';
+import {OfferingRoster} from './Rosters';
 
 interface SectionRosterRow{student_id:string;display_name:string;email:string;student_number:string;account_status:'active'|'invited'|'inactive';status:'active'|'withdrawn'}
 interface SectionRosterPage{items:SectionRosterRow[];total:number;page:number;page_size:number;invitation_count:number}
@@ -17,7 +17,6 @@ interface StudentDraft{display_name:string;email:string;student_number:string}
 
 export function TermWorkspace({initialTab='sections',standalone=false}:{initialTab?:'sections'|'offerings';standalone?:boolean}={}){
   const {termId:routeTermId}=useParams();
-  const here=useHere();
   const ask=useConfirm();
   const toast=useToast();
   const years=useQuery({queryKey:['school-years'],queryFn:()=>api<SchoolYear[]>('/school-years')});
@@ -32,6 +31,9 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
   const colleges=useQuery({queryKey:['colleges'],queryFn:()=>api<College[]>('/colleges')});
   const [dialog,setDialog]=useState<'section'|'offering'|null>(null);
   const [editing,setEditing]=useState<OfferingSummary|null>(null);
+  const [viewingRoster,setViewingRoster]=useState<OfferingSummary|null>(null);
+  const [addingSection,setAddingSection]=useState<OfferingSummary|null>(null);
+  const offeringsTableRef=useRef<HTMLDivElement>(null);
   const [tab,setTab]=useState<'sections'|'offerings'>(initialTab);
   const activeTab=standalone?initialTab:tab;
   const [teacherFilter,setTeacherFilter]=useState('');
@@ -84,6 +86,17 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
       setRosterPage(1);
     }
   },[colleges.data,courseFilter]);
+  useEffect(()=>{
+    const table=offeringsTableRef.current;
+    if(!table)return;
+    const scrollHorizontally=(event:WheelEvent)=>{
+      if(table.scrollWidth<=table.clientWidth||Math.abs(event.deltaY)<=Math.abs(event.deltaX))return;
+      event.preventDefault();
+      table.scrollLeft+=event.deltaY;
+    };
+    table.addEventListener('wheel',scrollHorizontally,{passive:false});
+    return ()=>table.removeEventListener('wheel',scrollHorizontally);
+  },[offerings.data]);
   const refresh=()=>{queryClient.invalidateQueries({queryKey:['sections',termId]});queryClient.invalidateQueries({queryKey:['offerings',termId]});queryClient.invalidateQueries({queryKey:['section-roster']})};
   async function removeSection(section:Section){
     if(!await ask({title:`Delete ${section.name}?`,message:'Only an unused section can be deleted. Sections with students, assignments, or academic records are protected.',yes:'Delete section',danger:true}))return;
@@ -202,11 +215,10 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
     const withdrawn=selectedStudents.length-failed.length;
     if(withdrawn)toast(`${withdrawn} student${withdrawn===1?'':'s'} withdrawn. Enrollment history is kept.`);
   }
-  const teacherGroups=offerings.data?.reduce<{id:string;name:string;rows:{offering:OfferingSummary;section:{id:string;name:string;enrolled:number}}[]}[]>((groups,offering)=>{
+  const teacherGroups=offerings.data?.reduce<{id:string;name:string;rows:OfferingSummary[]}[]>((groups,offering)=>{
     let group=groups.find(item=>item.id===offering.faculty.id);
     if(!group){group={id:offering.faculty.id,name:offering.faculty.display_name,rows:[]};groups.push(group)}
-    const sections=offering.sections.length?offering.sections:[{id:`${offering.id}-unassigned`,name:'—',enrolled:0}];
-    sections.forEach(section=>group.rows.push({offering,section}));
+    group.rows.push(offering);
     return groups;
   },[]).sort((a,b)=>a.name.localeCompare(b.name));
   const visibleTeacherGroups=teacherGroups?.filter(group=>!teacherFilter||group.id===teacherFilter);
@@ -369,17 +381,27 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
           {teacherGroups&&teacherGroups.length>1&&<label>Filter offerings by teacher<select aria-label="Filter offerings by teacher" value={teacherFilter} onChange={e=>setTeacherFilter(e.target.value)}>
             <option value="">All teachers</option>{teacherGroups.map(group=><option key={group.id} value={group.id}>{group.name}</option>)}
           </select></label>}
-          <div className="table-wrap" tabIndex={0} role="region" aria-label="Offerings by teacher"><table className="offerings-table">
+          <div ref={offeringsTableRef} className="table-wrap" tabIndex={0} role="region" aria-label="Offerings by teacher, scroll horizontally"><table className="offerings-table">
             <caption className="sr-only">Teachers, assigned subjects and sections, enrollment counts, and actions</caption>
-            <thead><tr><th scope="col">Teacher</th><th scope="col">Subject</th><th scope="col">Section</th><th scope="col">Number of enrolled</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
-            {visibleTeacherGroups?.map(group=><tbody key={group.id}>{group.rows.map(({offering,section},index)=>{
-              const offeringStart=index===0||group.rows[index-1].offering.id!==offering.id;
-              return <tr key={`${offering.id}:${section.id}`}>
+            <thead><tr><th scope="col">Teacher</th><th scope="col">Subject</th><th scope="col">Sections</th><th scope="col">Number of enrolled</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
+            {visibleTeacherGroups?.map(group=><tbody key={group.id}>{group.rows.map((offering,index)=>{
+              return <tr key={offering.id}>
               {index===0&&<th scope="rowgroup" rowSpan={group.rows.length}>{group.name}</th>}
-              {offeringStart&&<th scope="row" rowSpan={offering.sections.length||1}><strong>{offering.subject.code}</strong> {offering.subject.title}</th>}
-              <td>{section.name}</td><td>{section.enrolled}</td>
-              <td><div className="actions"><Link className="button" state={here} to={`/admin/offerings/${offering.id}`}>Roster</Link>
-                <button disabled={closed} onClick={()=>setEditing(offering)}>Edit</button></div></td></tr>;
+              <th scope="row"><strong>{offering.subject.code}</strong> {offering.subject.title}</th>
+              <td><div className="offering-sections-cell"><div className="offering-section-list">
+                {offering.sections.length?offering.sections.map(section=><span className="offering-section-entry" key={section.id}>{section.name}</span>):<span className="muted">No sections</span>}
+                {!closed&&<button type="button" className="offering-add-section" aria-label={`Add section to ${offering.subject.code}`} title="Add section"
+                  onClick={()=>setAddingSection(offering)}>+</button>}
+              </div></div></td>
+              <td><div className="offering-enrollment-list">{offering.sections.length?offering.sections.map(section=><span key={section.id}>{section.enrolled}</span>):<span>—</span>}</div></td>
+              <td><div className="actions offering-row-actions">
+                <button type="button" className="icon-button" aria-label={`View roster for ${offering.subject.code}`} title="View roster" onClick={()=>setViewingRoster(offering)}>
+                  <StudentManagementIcon name="roster"/>
+                </button>
+                <button type="button" className="icon-button" aria-label={`Edit assignment for ${offering.subject.code}`} title="Edit assignment" disabled={closed} onClick={()=>setEditing(offering)}>
+                  <StudentManagementIcon name="edit"/>
+                </button>
+              </div></td></tr>;
             })}</tbody>)}
           </table></div></>}
       </section>
@@ -388,8 +410,13 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
     {dialog==='section'&&<SectionDialog termId={term.id} yearLevels={programYears} initialYear={visibleYear??programYears[0]??1} initialCollegeId={courseFilter} sections={sections.data??[]} colleges={colleges.data??[]} onClose={()=>setDialog(null)} onDone={(yearLevel,collegeId)=>{setDialog(null);setActiveYear(yearLevel);setCourseFilter(collegeId);setSelectedSectionId('');refresh()}}/>}
     {dialog==='offering'&&<BulkAssignDialog termId={term.id} termSequence={term.sequence} termLabel={`${year?.label??'Academic year'} · ${term.name}`} sections={sections.data??[]} existing={offerings.data??[]}
       onClose={()=>setDialog(null)} onDone={()=>{setDialog(null);refresh()}}/>}
-    {editing&&<OfferingDialog sections={sections.data??[]} offering={editing}
+    {editing&&<OfferingDialog sections={sections.data??[]} colleges={colleges.data??[]} subject={subjects.data?.find(subject=>subject.id===editing.subject.id)} offering={editing}
       onClose={()=>setEditing(null)} onDone={()=>{setEditing(null);refresh()}}/>}
+    {addingSection&&<AddOfferingSectionsDialog offering={addingSection} termSequence={term.sequence} sections={sections.data??[]} subject={subjects.data?.find(subject=>subject.id===addingSection.subject.id)}
+      onClose={()=>setAddingSection(null)} onDone={()=>{setAddingSection(null);refresh()}}/>}
+    {viewingRoster&&<Dialog title={`${viewingRoster.subject.code} roster`} onClose={()=>setViewingRoster(null)} className="offering-roster-dialog" confirmOnClose={false}>
+      <OfferingRoster embedded offeringId={viewingRoster.id}/>
+    </Dialog>}
     {leaving&&selectedSection&&<WithdrawStudentDialog sectionName={selectedSection.name} student={leaving}
       onClose={()=>setLeaving(null)} onSubmit={reason=>withdrawStudent(leaving,reason)}/>}
     {withdrawingSelected&&<BulkWithdrawDialog count={selectedStudents.length}
@@ -530,31 +557,117 @@ function BulkWithdrawDialog({count,onClose,onSubmit}:{count:number;onClose:()=>v
   </form></Dialog>;
 }
 
-function OfferingDialog({sections,offering,onClose,onDone}:{sections:Section[];offering:OfferingSummary;onClose:()=>void;onDone:()=>void}){
-  const faculty=useQuery({queryKey:['faculty-list'],queryFn:()=>api<Account[]>('/accounts?role=faculty&page_size=100')});
+function OfferingDialog({sections,colleges,subject,offering,onClose,onDone}:{sections:Section[];colleges:College[];subject:Subject|undefined;offering:OfferingSummary;onClose:()=>void;onDone:()=>void}){
   const [chosen,setChosen]=useState<string[]>(offering.sections.map(s=>s.id));
-  const [facultyId,setFacultyId]=useState(offering.faculty.id);
   const [error,setError]=useState('');
   const [needsOverride,setNeedsOverride]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const programId=subject?.college_id??offering.sections.map(section=>sections.find(item=>item.id===section.id)?.college_id).find(Boolean)??null;
+  const program=colleges.find(college=>college.id===programId);
+  const alreadyAssigned=new Set(offering.sections.map(section=>section.id));
+  const availableSections=sections.filter(section=>
+    (alreadyAssigned.has(section.id)||!programId||section.college_id===programId)&&
+    (subject?.year_level===null||subject?.year_level===undefined||section.year_level===subject.year_level||alreadyAssigned.has(section.id)));
   async function submit(e:FormEvent<HTMLFormElement>){
-    e.preventDefault();const f=new FormData(e.currentTarget);
+    e.preventDefault();setBusy(true);setError('');
+    const f=new FormData(e.currentTarget);
     const override=needsOverride?String(f.get('override_reason')||'').trim()||undefined:undefined;
-    try{await send('PATCH',`/offerings/${offering.id}`,{faculty_id:f.get('faculty_id'),section_ids:chosen,placement_override_reason:override});onDone()}
+    try{await send('PATCH',`/offerings/${offering.id}`,{section_ids:chosen,placement_override_reason:override});onDone()}
     catch(err){setNeedsOverride(err instanceof ApiError&&err.code==='placement_mismatch');setError(errorText(err))}
+    finally{setBusy(false)}
   }
-  return <Dialog title={`Edit ${offering.subject.code}`} onClose={onClose}><form onSubmit={submit}>
-    <p><strong>{offering.subject.code}</strong> {offering.subject.title}</p>
-    <label>Teacher<select name="faculty_id" required value={facultyId} onChange={e=>setFacultyId(e.target.value)}><option value="" disabled>Choose a teacher</option>
-      {faculty.data?.filter(f=>f.status!=='inactive').map(f=><option key={f.id} value={f.id}>{f.display_name}</option>)}</select></label>
-    <fieldset><legend>Sections taking this subject</legend>
-      {sections.map(s=><label className="inline" key={s.id}><input type="checkbox" checked={chosen.includes(s.id)}
-        onChange={e=>setChosen(e.target.checked?[...chosen,s.id]:chosen.filter(x=>x!==s.id))}/> {s.name} ({s.member_count})</label>)}
-    </fieldset>
+  return <Dialog title="Edit Subject Assignment" onClose={()=>busy?false:onClose()} className="bulk-assignment-dialog"><form onSubmit={submit}>
+    <p className="bulk-assignment-intro">Update the sections for this assignment. Faculty member, subject, and academic term are read-only.</p>
+    <div className="bulk-assignment-context">
+      <label>Academic term<input value={offering.term} readOnly/></label>
+      <label>College / Program<input value={program?.code??'Program not available'} readOnly/></label>
+    </div>
+    <section className="bulk-assignment-faculty">
+      <label>Faculty member<select aria-label="Faculty member (read-only)" value={offering.faculty.id} disabled><option value={offering.faculty.id}>{offering.faculty.display_name}</option></select></label>
+    </section>
+    <section className="bulk-assignment-subjects" aria-labelledby="edit-assignment-subject-title">
+      <div className="bulk-assignment-section-heading"><h3 id="edit-assignment-subject-title">Subject and sections</h3><span className="badge">Subject fixed</span></div>
+      <article className="bulk-assignment-card">
+        <div className="bulk-assignment-card-heading"><div><h3>{offering.subject.code}</h3><p className="muted">{offering.subject.title}</p></div></div>
+        <p className="bulk-assignment-label">Sections</p>
+        <div className="bulk-assignment-chips" role="group" aria-label={`Sections for ${offering.subject.code}`}>
+          {availableSections.map(section=>{
+            const selected=chosen.includes(section.id);
+            return <label className={`bulk-assignment-chip${selected?' selected':''}`} key={section.id}>
+              <input type="checkbox" checked={selected} onChange={event=>setChosen(event.target.checked?[...chosen,section.id]:chosen.filter(id=>id!==section.id))}/>
+              <span>{section.name}</span>
+            </label>;
+          })}
+        </div>
+        {availableSections.length===0&&<p className="muted">No matching sections are available in this program.</p>}
+        <p className="bulk-assignment-count">{chosen.length} section{chosen.length===1?'':'s'} selected</p>
+      </article>
+    </section>
     <p className="muted">A subject placed in a year and semester only accepts matching sections. Use an enrollment exception for irregular students.</p>
     {error&&<p role="alert">{error}</p>}
-    {needsOverride&&<label>Reason for an off-semester placement (kept in the audit history)<textarea name="override_reason" minLength={3} maxLength={1000}/></label>}
-    <div className="actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary">Save changes</button></div>
+    {needsOverride&&<label>Reason for an off-semester placement (kept in the audit history)<textarea name="override_reason" minLength={3} maxLength={1000} required/></label>}
+    <div className="actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button><button className="primary" disabled={busy||chosen.length===0}>{busy?'Saving…':'Save changes'}</button></div>
   </form></Dialog>;
+}
+
+function AddOfferingSectionsDialog({offering,termSequence,sections,subject,onClose,onDone}:{offering:OfferingSummary;termSequence:number;sections:Section[];subject:Subject|undefined;onClose:()=>void;onDone:()=>void}){
+  const toast=useToast();
+  const [selected,setSelected]=useState<string[]>([]);
+  const [error,setError]=useState('');
+  const [busy,setBusy]=useState(false);
+  const [overrideRequested,setOverrideRequested]=useState(false);
+  const existingIds=new Set(offering.sections.map(section=>section.id));
+  const programId=subject?.college_id??offering.sections.map(section=>sections.find(item=>item.id===section.id)?.college_id).find(Boolean)??null;
+  const availableSections=sections.filter(section=>
+    !existingIds.has(section.id)&&(!programId||section.college_id===programId)&&
+    (subject?.year_level===null||subject?.year_level===undefined||section.year_level===subject.year_level));
+  const placementMismatch=subject?.year_level!==null&&subject?.year_level!==undefined&&subject.semester!==null&&
+    [...existingIds,...selected].some(id=>{
+      const section=sections.find(item=>item.id===id);
+      return !!section&&(section.year_level!==subject.year_level||termSequence!==subject.semester);
+    });
+  const requiresReason=placementMismatch||overrideRequested;
+  async function submit(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    const form=new FormData(event.currentTarget);
+    try{
+      await send('PATCH',`/offerings/${offering.id}`,{
+        section_ids:[...existingIds,...selected],
+        placement_override_reason:requiresReason?String(form.get('override_reason')||'').trim()||undefined:undefined,
+      });
+      toast(`${selected.length} section${selected.length===1?'':'s'} added to ${offering.subject.code}.`);
+      onDone();
+    }catch(err){
+      setOverrideRequested(err instanceof ApiError&&err.code==='placement_mismatch');
+      setError(errorText(err));
+    }finally{
+      setBusy(false);
+    }
+  }
+  return <Dialog title={`Add sections to ${offering.subject.code}`} onClose={()=>busy?false:onClose()} className="bulk-assignment-dialog">
+    <form onSubmit={submit}>
+      <p className="bulk-assignment-intro">Choose additional sections for this subject. Existing sections and the assigned faculty member will stay unchanged.</p>
+      <div className="bulk-assignment-context">
+        <label>Faculty member<input value={offering.faculty.display_name} readOnly/></label>
+        <label>Academic term<input value={offering.term} readOnly/></label>
+      </div>
+      <section className="bulk-assignment-subjects" aria-labelledby="add-sections-title">
+        <div className="bulk-assignment-section-heading"><h3 id="add-sections-title">Available sections</h3><span className="badge">{selected.length} selected</span></div>
+        {availableSections.length===0?<p className="muted">There are no additional matching sections available.</p>:
+          <div className="bulk-assignment-chips" role="group" aria-label={`Additional sections for ${offering.subject.code}`}>
+            {availableSections.map(section=><label className={`bulk-assignment-chip${selected.includes(section.id)?' selected':''}`} key={section.id}>
+              <input type="checkbox" checked={selected.includes(section.id)} onChange={event=>setSelected(current=>event.target.checked?[...current,section.id]:current.filter(id=>id!==section.id))}/>
+              <span>{section.name}</span>
+            </label>)}
+          </div>}
+      </section>
+      {requiresReason&&<label>Reason for placing this subject outside its prospectus year or semester (kept in audit history)<textarea name="override_reason" minLength={3} maxLength={1000} required/></label>}
+      {error&&<p role="alert">{error}</p>}
+      <div className="actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button><button className="primary" disabled={busy||selected.length===0}>{busy?'Saving…':'Add selected sections'}</button></div>
+    </form>
+  </Dialog>;
 }
 
 /** One teacher, several subjects, each with its own sections, saved together (all or nothing). */
@@ -624,7 +737,7 @@ function BulkAssignDialog({termId,termSequence,termLabel,sections,existing,onClo
         })}
       </div>
       {availableSections.length===0&&<p className="muted">No sections exist for this subject’s year level in this program.</p>}
-      <p className="bulk-assignment-count">{pick[sub.id].length} offering{pick[sub.id].length===1?'':'s'} selected</p>
+      <p className="bulk-assignment-count">{pick[sub.id].length} section{pick[sub.id].length===1?'':'s'} selected</p>
       {needsReason(sub.id)&&<label>Reason for placing {sub.code} outside its prospectus semester (kept in the audit history)<textarea value={reasons[sub.id]??''} onChange={event=>setReasons({...reasons,[sub.id]:event.target.value})} minLength={3} maxLength={1000} required/></label>}
     </article>;
   };
@@ -647,7 +760,7 @@ function BulkAssignDialog({termId,termSequence,termLabel,sections,existing,onClo
       {faculty.isError&&<p role="alert">Could not load faculty: {faculty.error.message}</p>}
     </section>
     <section className="bulk-assignment-subjects" aria-labelledby="bulk-assignment-subjects-title">
-      <div className="bulk-assignment-section-heading"><h3 id="bulk-assignment-subjects-title">Subject and section assignments</h3><span className="badge">{offeringsCount} offering{offeringsCount===1?'':'s'}</span></div>
+      <div className="bulk-assignment-section-heading"><h3 id="bulk-assignment-subjects-title">Subject and section assignments</h3><span className="badge">{offeringsCount} workload{offeringsCount===1?'':'s'}</span></div>
       <p className="muted">Choose a subject, then select one or more sections where this faculty member will handle it.</p>
       {chosen.map(subjectCard)}
       {!collegeId&&<p className="muted">Choose a college / program to see its available subjects and sections.</p>}

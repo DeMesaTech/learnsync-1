@@ -52,18 +52,19 @@ try{
     check('the scores page opened by URL falls back to Classwork',await says(fac,/Back to Classwork/));
   }
 
-  // ---- admin: term workspace -> roster -> Back to the term workspace; direct roster -> School years
+  // ---- admin: term workspace -> roster modal -> remain in the term workspace
   const adm=await newPage(browser,{state:await sessionFor(browser,'admin@example.com')});
   await adm.goto('/admin');await adm.getByRole('heading',{name:/academic workspace/}).waitFor();await adm.waitForLoadState('networkidle');
   await adm.locator('table a',{hasText:'Open'}).first().click();await adm.waitForURL(/\/admin\/terms\//);
   const term=path(adm);
-  await adm.getByRole('link',{name:'Roster'}).first().click();await adm.waitForURL(/\/admin\/offerings\//);
-  check('a roster opened from a term workspace says Back to Term workspace',await says(adm,/Back to Term workspace/));
-  const roster=path(adm);
-  await backLink(adm).click();await adm.waitForURL(u=>new URL(u).pathname===term);
-  check('and Back returns to that term workspace, not to School years',path(adm)===term);
-  await adm.goto('about:blank');await adm.goto(roster);
-  check('the roster opened by URL falls back to School years',await says(adm,/Back to School years/));
+  await adm.goto('/admin/offerings');await adm.waitForLoadState('networkidle');
+  const offeringsPage=path(adm);
+  await adm.getByRole('button',{name:/View roster for/}).first().click();
+  const rosterDialog=adm.getByRole('dialog');
+  check('the roster action opens the roster in a modal',await rosterDialog.isVisible()&&await rosterDialog.getByRole('region',{name:/Students/}).count()===1);
+  await rosterDialog.getByRole('button',{name:'Close dialog'}).click();
+  check('closing the roster modal stays on Faculty Management',path(adm)===offeringsPage&&await adm.getByRole('heading',{name:'Faculty Management'}).count()===1);
+  await adm.goto(term);
 
   // ---- phone width and keyboard: the same Back link is reachable and works
   const mob=await newPage(browser,{width:375,height:812,state:studentState});

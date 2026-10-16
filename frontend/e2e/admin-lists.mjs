@@ -163,6 +163,29 @@ try{
   check('a subject the faculty member already has is marked assigned and cannot be added',
     await d.locator('.bulk-assignment-subject-list li').filter({hasText:'LST 101'}).getByRole('button',{name:'Already assigned'}).isDisabled());
   check('axe finds no violations on the bulk dialog',(await axe(p)).length===0);
+  await d.getByRole('button',{name:'Close dialog'}).click();
+  await p.getByRole('button',{name:'Edit assignment for LST 101'}).first().click();
+  const editAssignment=p.getByRole('dialog');
+  check('editing an offering opens the subject-fixed assignment dialog',
+    await editAssignment.getByRole('heading',{name:'Edit Subject Assignment'}).count()===1&&
+    await editAssignment.locator('.bulk-assignment-card h3').innerText()==='LST 101'&&
+    await editAssignment.getByLabel('College / Program').getAttribute('readonly')!==null&&
+    await editAssignment.getByLabel('Faculty member (read-only)').isDisabled());
+  await editAssignment.getByRole('button',{name:'Cancel'}).click();
+  await p.getByRole('button',{name:'View roster for LST 101'}).first().click();
+  const rosterDialog=p.getByRole('dialog');
+  check('each assignment has one roster modal with its section filter',
+    await rosterDialog.getByRole('combobox',{name:'Filter students by section'}).count()===1&&
+    await rosterDialog.getByRole('heading',{name:'LST 101 roster'}).count()===1);
+  await rosterDialog.getByRole('button',{name:'Close dialog'}).click();
+  await p.getByRole('button',{name:'Add section to LST 101'}).first().click();
+  const addSections=p.getByRole('dialog');
+  await addSections.getByRole('checkbox',{name:'BSE 1B'}).check();
+  await addSections.getByRole('button',{name:'Add selected sections'}).click();
+  await addSections.waitFor({state:'detached'});
+  const updatedSections=(await call(p,'GET',`/terms/${term.id}/offerings`)).data.find(o=>o.subject.code==='LST 101').sections.map(s=>s.name);
+  check('adding a section preserves existing assignment sections and adds the selected section',
+    updatedSections.includes('BSE 1A')&&updatedSections.includes('BSE 1B'));
 }catch(e){console.log('SCRIPT ERROR:',e.message);results.push(false)}
 await browser.close();
 console.log(`${results.filter(Boolean).length}/${results.length} checks passed`);

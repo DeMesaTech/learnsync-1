@@ -957,3 +957,40 @@ Note: another process (started from Codex's Python runtime) was already serving 
 - Admin offerings, student management, and section roster tables now keep compact text and readable minimum column widths; narrow viewports scroll horizontally within the labeled, keyboard-focusable table region.
 - Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk warning), `npm run lint`, `node --check frontend\\e2e\\admin-lists.mjs`, and `git diff --check`.
 - Not verified: the shared browser still has an expired admin session, so live responsive behavior was not checked at runtime.
+
+### Compact table rows and actions (2026-10-16)
+- Reduced table row vertical padding/line height and scaled admin row-action buttons to 30px, with 15px icons in student-management rows and compact text actions in offerings and section rosters.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk warning), `npm run lint`, and `git diff --check`.
+- Not verified: visual sizing in the shared browser was not measured interactively.
+
+### Faculty offering row actions (2026-10-16)
+- Replaced the Faculty Management row labels with accessible icon buttons. Edit opens a subject-fixed dialog; roster opens the existing roster view in a modal and keeps the user on Faculty Management. Vertical mouse-wheel input over the horizontally overflowing offerings table now scrolls that table sideways.
+- Updated the navigation E2E check for the modal roster behavior.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk warning), `npm run lint`, `node --check frontend\\e2e\\flows-back.mjs`, `node --check frontend\\e2e\\admin-lists.mjs`, and `git diff --check`.
+- Not verified: browser interaction was not completed because the shared page already had an open assignment dialog, which intercepted the action-button click. The E2E flows were not run.
+
+### Faculty offering section list and add modal (2026-10-16)
+- Faculty Management now renders one table row per subject assignment, with section names and enrollment counts as aligned horizontal per-section lists and one roster/edit action pair. A hover- and keyboard-revealed plus action opens a dedicated add-sections dialog. Editing keeps the faculty member and subject read-only and changes only the assigned sections.
+- Extended the disposable admin E2E to cover read-only faculty, roster modal section filtering, and adding a section while preserving the current assignment.
+- Verified in the shared browser: one row per subject assignment; the add-sections modal opens and lists only additional matching sections; edit shows a disabled faculty selector; the roster modal contains a section filter and leaves the URL on `/admin/offerings`.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk warning), `npm run lint`, `node --check frontend\\e2e\\admin-lists.mjs`, and `git diff --check`.
+- Not run: the disposable-database E2E, because it provisions and mutates database records.
+
+### Horizontal offering section chips (2026-10-16)
+- Changed section names and enrollment counts to compact horizontal chips with distinct theme-aware borders, keeping each pair visually aligned and reducing tall subject rows.
+- Verified in the shared browser: section and enrollment chips render side by side, each section has a visible border, and the section cell height is 26px for the three-section sample (down from 84px).
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk warning), `npm run lint`, and `git diff --check`.
+
+### Minimized Faculty Management table width (2026-10-16)
+- Previously capped the Faculty Management offerings table at 780px with a 720px minimum; superseded by content-sized layout below.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk warning), `npm run lint`, and `git diff --check`.
+
+### Add-section button within its row (2026-10-16)
+- Positioned the hover/focus-revealed add-section button inside the section cell, reserving space so it no longer extends beyond the row boundary.
+- Verified in the shared browser: the hover-revealed button bounds are contained by the section cell.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk warning), `npm run lint`, and `git diff --check`.
+
+### Content-sized offerings table (2026-10-16)
+- Removed the fixed offerings-table cap and percentage column widths; the table now uses automatic content sizing. The add-section control follows the chips with a compact gap while remaining inside the section cell.
+- Verified in the shared browser: the table shrank from filling a 994px region to 809px for the current rows, the plus button is 5px after the last chip, and there is no page-wide horizontal overflow.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk warning), `npm run lint`, and `git diff --check`.
