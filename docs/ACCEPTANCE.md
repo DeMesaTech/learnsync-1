@@ -1,5 +1,18 @@
 # Acceptance status
 
+### 2026-10-16 (Existing section college column during migration)
+- A shared-database `alembic upgrade head` attempt reported `DuplicateColumn` for `section.college_id` at revision `d3b8f91a2c64`. The database schema is ahead of its Alembic revision for this field.
+- Updated the section-college migration to add `college_id`, its single-column index, and its college foreign key only when the equivalent schema object is missing. The existing data backfill still runs.
+- Passed Ruff and six focused college-filter/schema regressions; the backend test fixture also upgraded its isolated database through the clean migration chain. The broader selected test run had 38 passes and two failures unrelated to schema migration (invitation returned 503; a later login reported an expired session).
+- Not verified: a duplicate-column migration rehearsal against the isolated database timed out connecting, and the shared database has not yet been retried with the updated migration. The reported failed command did not reach the account-college migration.
+
+### 2026-10-16 (Faculty tabs and account college assignment)
+- Split Faculty Management into **Teachers** and **Subject assignments** tabs. Both tabs filter by the selected teacher account's `college_id`; the assignment tab's teacher selector is narrowed to accounts in the selected college/program instead of inferring college from assigned sections.
+- Added nullable `account.college_id` with a foreign key and index, account query filtering, and college selection when inviting or importing new teachers. The Teachers tab can update or clear a teacher's college assignment. The confirmed migration backfill assigns existing faculty to college `d81b2a06-85a9-44d0-9f50-41d7fbc76f7f`; deleting a college assigned to teachers is prevented.
+- Added regressions for account college filters/reassignment, teacher-account college deletion protection, and imported teacher college persistence.
+- Passed: frontend production build and ESLint, backend Ruff, 30 backend tests across academics plus focused account/import regressions, E2E syntax check, and `git diff --check`. The test fixture advances its isolated `*_test` database through the new migration, seeding the selected college first. Vite retains its existing large-chunk advisory; backend tests report existing dependency deprecation warnings.
+- Browser smoke confirmed the two tabs and the college-constrained teacher selector are present. The shared local API/database is still on the prior schema (teacher rows show no college assignment), so live database-filter behavior was not verified; the migration was intentionally not applied to the shared development database.
+
 ### 2026-10-27 (Admin search, imports, and assignment management)
 - Student management now searches the selected section roster by name, email, or student number using the existing server-side search API. The student import action opens a term-aware modal instead of routing back to the same page; the legacy term-specific import route remains functional.
 - Faculty Management now has debounced name/email search, a college/program filter, individual teacher invitations, and per-teacher invitation/reset-link sending with confirmation and explicit errors. Teacher import opens in a modal with editable preview fields; edits are persisted and revalidated by the server before commit.

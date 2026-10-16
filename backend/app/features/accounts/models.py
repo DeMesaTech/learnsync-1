@@ -20,6 +20,7 @@ class Account(Base):
         CheckConstraint("role <> 'student' OR student_number IS NOT NULL", name="student_number_required"),
     )
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    college_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("college.id"), index=True)
     email: Mapped[str] = mapped_column(String(254), unique=True)
     display_name: Mapped[str] = mapped_column(String(150))
     role: Mapped[str] = mapped_column(String(20))

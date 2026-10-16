@@ -24,6 +24,7 @@ from .schemas import (
     AccountView,
     BulkSendLinks,
     EmailRequest,
+    FacultyCollegeUpdate,
     FacultyImportUpdate,
     Handover,
     Invite,
@@ -99,16 +100,18 @@ def accounts(page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100
              search: str = Query("", max_length=150),
              role: str | None = Query(None, pattern="^(admin|faculty|student)$"),
              status: str | None = Query(None, pattern="^(invited|active|inactive)$"),
+             college_id: UUID | None = None,
              actor=Depends(admin), db: Session = Depends(get_db)):
-    return queries.list_accounts(db, page, page_size, search, role, status)
+    return queries.list_accounts(db, page, page_size, search, role, status, college_id)
 
 
 @router.get("/accounts/count")
 def account_count(search: str = Query("", max_length=150),
                   role: str | None = Query(None, pattern="^(admin|faculty|student)$"),
                   status: str | None = Query(None, pattern="^(invited|active|inactive)$"),
+                  college_id: UUID | None = None,
                   actor=Depends(admin), db: Session = Depends(get_db)):
-    return {"total": queries.count_accounts(db, search, role, status)}
+    return {"total": queries.count_accounts(db, search, role, status, college_id)}
 
 
 @router.post("/faculty-imports", status_code=201)
@@ -147,6 +150,14 @@ def change_status(account_id: UUID, data: AccountStatus, actor=Depends(admin), d
         fail(404, "not_found", "Account not found.")
     commands.set_status(db, actor, account, data.status)
     return account
+
+@router.patch("/accounts/{account_id}/college", response_model=AccountView)
+def change_faculty_college(account_id: UUID, data: FacultyCollegeUpdate,
+                           actor=Depends(admin), db: Session = Depends(get_db)):
+    account = db.get(Account, account_id)
+    if not account:
+        fail(404, "not_found", "Account not found.")
+    return commands.set_faculty_college(db, actor, account, data.college_id)
 
 @router.post("/accounts/{account_id}/send-link")
 def resend(account_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):

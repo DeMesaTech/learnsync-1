@@ -6,6 +6,10 @@ One Postgres database. Each feature owns commands (writes/transactions) and quer
 
 Opaque hashed server sessions, HttpOnly cookies and session CSRF tokens; Argon2 passwords. Parent/child resources are scoped by authenticated role, offering ownership/enrollment and section targeting. Restricted fields must never enter student responses.
 
+Teacher accounts carry an optional `account.college_id` foreign key to `college.id`. Admin account listing/count queries accept `college_id`; teacher invitations and reviewed imports store the selected active college. Admins can update or clear a faculty account's college through `PATCH /api/accounts/{id}/college`; this operation is audited. College deletion is refused while a teacher is assigned. Faculty assignment filters use this account association rather than deriving faculty college from their current offering sections.
+
+Migration `4e6a81c0b932` backfills every existing faculty account to the administrator-selected default college `d81b2a06-85a9-44d0-9f50-41d7fbc76f7f`.
+
 Files remain outside webroot and are delivered by an authorized API. Drafts use compare-and-swap revisions; published documents and grade snapshots are immutable.
 
 When committing a reviewed prospectus, the admin confirms an active college. Newly created subjects inherit that college; existing catalog subjects are not overwritten. The API validates the college at commit time.

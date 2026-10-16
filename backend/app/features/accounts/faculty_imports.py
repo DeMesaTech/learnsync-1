@@ -1,5 +1,6 @@
 """Reviewed faculty imports. Preview is read-only; commit revalidates before creating invites."""
 from pathlib import Path
+from uuid import UUID
 
 from fastapi import HTTPException
 from pydantic import EmailStr, TypeAdapter, ValidationError
@@ -16,9 +17,15 @@ FACULTY_TYPES = {".csv", ".xlsx"}
 
 
 def validate_faculty(db, rows):
+    from app.features.academics.models import College
+
     emails = {row["email"].strip().lower() for row in rows}
     existing = {account.email: account for account in db.scalars(
         select(Account).where(Account.email.in_(emails)))}
+    college_ids = {UUID(row["college_id"]) for row in rows if row.get("college_id")}
+    colleges = {college.id for college in db.scalars(
+        select(College).where(College.id.in_(college_ids), College.status == "active"))} \
+        if college_ids else set()
     seen, results = {}, []
     for raw in rows:
         email = raw["email"].strip().lower()
@@ -30,6 +37,9 @@ def validate_faculty(db, rows):
             errors.append("Email address is not valid.")
         if not name or len(name) > 150:
             errors.append("Name is required (max 150 characters).")
+        college_id = UUID(raw["college_id"]) if raw.get("college_id") else None
+        if college_id is not None and college_id not in colleges:
+            errors.append("College/program is unavailable.")
         if email in seen:
             errors.append(f"Email repeats row {seen[email]}.")
         seen.setdefault(email, raw["row"])
@@ -37,6 +47,7 @@ def validate_faculty(db, rows):
         if account and account.role != "faculty":
             errors.append("Email already belongs to a different account.")
         results.append({"row": raw["row"], "display_name": name, "email": email,
+                        "college_id": str(college_id) if college_id else None,
                         "status": "error" if errors else "existing" if account else "new",
                         "errors": errors})
     return results
@@ -81,9 +92,16 @@ def update_faculty_import(db, actor, import_id, rows):
     updates = {row.row: row for row in rows}
     if set(updates) != {row["row"] for row in imp.rows}:
         fail(422, "import_rows_mismatch", "Edit the existing preview rows without adding or removing rows.")
+    from app.features.academics.models import College
+    for row in updates.values():
+        if row.college_id is not None:
+            college = db.get(College, row.college_id)
+            if not college or college.status != "active":
+                fail(422, "college_unavailable", "Choose an active college/program for each new teacher.")
     imp.rows = [
         {**row, "display_name": updates[row["row"]].display_name,
-         "email": updates[row["row"]].email}
+         "email": updates[row["row"]].email,
+         "college_id": str(updates[row["row"]].college_id) if updates[row["row"]].college_id else None}
         for row in imp.rows
     ]
     audit(db, actor, "faculty_import.edited", "faculty_import", imp.id,
@@ -108,7 +126,9 @@ def commit_faculty_import(db, actor, import_id):
         if row["status"] != "new":
             continue
         account = Account(email=row["email"], display_name=row["display_name"],
-                          role="faculty", status="invited")
+                          role="faculty",
+                          college_id=UUID(row["college_id"]) if row.get("college_id") else None,
+                          status="invited")
         db.add(account)
         db.flush()
         invitations.append((account, issue_token(db, account, "invite", actor)))

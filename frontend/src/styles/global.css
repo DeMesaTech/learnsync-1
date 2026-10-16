@@ -1138,6 +1138,19 @@ code {
   font-size: clamp(1.55rem, 3.6vw, 2rem)
 }
 
+.faculty-management-tabs {
+  margin-top: 10px;
+  margin-bottom: 18px
+}
+
+.faculty-assignment-filters {
+  align-items: end
+}
+
+.faculty-assignment-filters label {
+  min-width: min(100%, 260px)
+}
+
 .student-management-panel {
   font-size: .95rem
 }

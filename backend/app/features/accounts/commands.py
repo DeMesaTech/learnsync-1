@@ -61,17 +61,46 @@ def send_link(account, raw, purpose):
 
 def invite(db, actor, data):
     email = str(data.email).lower()
+    if data.role == "faculty":
+        if data.college_id is not None:
+            from app.features.academics.models import College
+            college = db.get(College, data.college_id)
+            if not college or college.status != "active":
+                fail(422, "college_unavailable", "Choose an active college/program for this teacher.")
+    elif data.college_id is not None:
+        fail(422, "college_role_mismatch", "Only faculty accounts can be assigned to a college/program.")
     if db.scalar(select(Account.id).where(Account.email == email)):
         fail(409, "email_exists", "An account already uses this email.")
     if data.student_number and db.scalar(select(Account.id).where(Account.student_number == data.student_number)):
         fail(409, "student_number_exists", "An account already uses this student number.")
     account = Account(email=email, display_name=data.display_name, role=data.role,
+                      college_id=data.college_id if data.role == "faculty" else None,
                       student_number=data.student_number, status="invited")
     db.add(account)
     db.flush()
     token = issue_token(db, account, "invite", actor)
     audit(db, actor, "account.invited", "account", account.id)
     send_link(account, token, "invite")
+    db.commit()
+    return account
+
+
+def set_faculty_college(db, actor, account, college_id):
+    if account.role != "faculty":
+        fail(409, "not_faculty", "Only faculty accounts can be assigned to a college/program.")
+    if college_id is not None:
+        from app.features.academics.models import College
+        college = db.get(College, college_id)
+        if not college or college.status != "active":
+            fail(422, "college_unavailable", "Choose an active college/program for this teacher.")
+    previous_college_id = account.college_id
+    if previous_college_id == college_id:
+        return account
+    account.college_id = college_id
+    audit(db, actor, "account.faculty_college_updated", "account", account.id, {
+        "previous_college_id": str(previous_college_id) if previous_college_id else None,
+        "college_id": str(college_id) if college_id else None,
+    })
     db.commit()
     return account
 

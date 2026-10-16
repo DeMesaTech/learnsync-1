@@ -101,6 +101,38 @@ def test_accounts_can_be_filtered_by_status_and_counted(client, db, actors, head
     assert client.get("/api/accounts/count").status_code == 401
 
 
+def test_faculty_accounts_can_be_filtered_by_college(client, db, actors, headers, sent):
+    auth = sign_in(client, headers)
+    first = client.post("/api/colleges", headers=auth, json={"code": "COLA", "name": "College A"}).json()
+    second = client.post("/api/colleges", headers=auth, json={"code": "COLB", "name": "College B"}).json()
+    teacher_ids = {}
+    for suffix, college in (("a", first), ("b", second)):
+        response = client.post("/api/accounts", headers=auth, json={
+            "email": f"teacher-{suffix}@example.com",
+            "display_name": f"Teacher {suffix.upper()}",
+            "role": "faculty",
+            "college_id": college["id"],
+        })
+        assert response.status_code == 201, response.text
+        assert response.json()["college_id"] == college["id"]
+        teacher_ids[suffix] = response.json()["id"]
+
+    only_first = client.get(f"/api/accounts?role=faculty&college_id={first['id']}&page_size=100")
+    assert only_first.status_code == 200, only_first.text
+    assert [account["email"] for account in only_first.json()] == ["teacher-a@example.com"]
+    assert client.get(f"/api/accounts/count?role=faculty&college_id={second['id']}").json() == {"total": 1}
+    assert client.get(f"/api/accounts?role=faculty&college_id={first['id']}&search=teacher-b").json() == []
+    reassigned = client.patch(f"/api/accounts/{teacher_ids['a']}/college", headers=auth,
+                              json={"college_id": second["id"]})
+    assert reassigned.status_code == 200, reassigned.text
+    assert reassigned.json()["college_id"] == second["id"]
+    assert client.get(f"/api/accounts?role=faculty&college_id={first['id']}").json() == []
+    assert client.get(f"/api/accounts?role=faculty&college_id={second['id']}&page_size=100").json()
+    cleared = client.patch(f"/api/accounts/{teacher_ids['a']}/college", headers=auth,
+                           json={"college_id": None})
+    assert cleared.status_code == 200 and cleared.json()["college_id"] is None
+
+
 def test_bulk_send_links_reports_successes_and_email_failures(client, db, actors, headers, monkeypatch):
     from fastapi import HTTPException
 

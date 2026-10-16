@@ -1,4 +1,4 @@
-export interface Account {id:string;email:string;display_name:string;role:'admin'|'faculty'|'student';status:string;student_number:string|null;preferences:{theme?:Theme}}
+export interface Account {id:string;email:string;display_name:string;role:'admin'|'faculty'|'student';status:string;college_id:string|null;student_number:string|null;preferences:{theme?:Theme}}
 export type Theme='system'|'light'|'dark';
 export interface SessionInfo {user:Account|null;csrf:string}
 export class ApiError extends Error {constructor(public status:number,public code:string,message:string,public fields:Record<string,string>={}){super(message)}}

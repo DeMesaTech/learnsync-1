@@ -10,10 +10,26 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column("section", sa.Column("college_id", sa.UUID(), nullable=True))
-    op.create_index(op.f("ix_section_college_id"), "section", ["college_id"], unique=False)
-    op.create_foreign_key(
-        "section_college_fkey", "section", "college", ["college_id"], ["id"])
+    inspector = sa.inspect(op.get_bind())
+    section_columns = {column["name"] for column in inspector.get_columns("section")}
+    if "college_id" not in section_columns:
+        op.add_column("section", sa.Column("college_id", sa.UUID(), nullable=True))
+
+    inspector = sa.inspect(op.get_bind())
+    section_indexes = inspector.get_indexes("section")
+    if not any(index.get("column_names") == ["college_id"] for index in section_indexes):
+        op.create_index(op.f("ix_section_college_id"), "section", ["college_id"], unique=False)
+
+    section_foreign_keys = inspector.get_foreign_keys("section")
+    has_college_foreign_key = any(
+        foreign_key.get("constrained_columns") == ["college_id"]
+        and foreign_key.get("referred_table") == "college"
+        and foreign_key.get("referred_columns") == ["id"]
+        for foreign_key in section_foreign_keys
+    )
+    if not has_college_foreign_key:
+        op.create_foreign_key(
+            "section_college_fkey", "section", "college", ["college_id"], ["id"])
     op.execute(sa.text(
         "UPDATE section AS s "
         "SET college_id = linked.college_id "

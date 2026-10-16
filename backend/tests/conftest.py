@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from uuid import UUID
 
 from dotenv import load_dotenv
 
@@ -32,7 +33,17 @@ from app.security import _limits, passwords
 def migrated():
     from alembic import command
     from alembic.config import Config
-    command.upgrade(Config(str(Path(__file__).resolve().parents[1] / "alembic.ini")), "head")
+
+    from app.features.academics.models import College
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    command.upgrade(config, "d3b8f91a2c64")
+    with SessionLocal() as session:
+        default_college_id = UUID("d81b2a06-85a9-44d0-9f50-41d7fbc76f7f")
+        if session.get(College, default_college_id) is None:
+            session.add(College(id=default_college_id, code="MIGRATION-DEFAULT",
+                                name="Migration default college", description=""))
+            session.commit()
+    command.upgrade(config, "head")
 
 
 @pytest.fixture

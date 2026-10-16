@@ -37,8 +37,10 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
   const [teacherInviteOpen,setTeacherInviteOpen]=useState(false);
   const [teacherSearch,setTeacherSearch]=useState('');
   const [facultyCollegeFilter,setFacultyCollegeFilter]=useState('');
+  const [facultyTab,setFacultyTab]=useState<'teachers'|'assignments'>('teachers');
   const [teacherMessage,setTeacherMessage]=useState('');
   const [sendingTeacherId,setSendingTeacherId]=useState('');
+  const [updatingTeacherId,setUpdatingTeacherId]=useState('');
   const [addingSubjectFacultyId,setAddingSubjectFacultyId]=useState('');
   const [editing,setEditing]=useState<OfferingSummary|null>(null);
   const [viewingRoster,setViewingRoster]=useState<OfferingSummary|null>(null);
@@ -72,8 +74,13 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
   const closed=term?.status==='closed';
   const teacherSearchValue=useDebouncedValue(teacherSearch);
   const facultyAccounts=useQuery({
-    queryKey:['faculty-management-accounts',teacherSearchValue],
-    queryFn:()=>api<Account[]>(`/accounts?role=faculty&page_size=100&search=${encodeURIComponent(teacherSearchValue)}`),
+    queryKey:['faculty-management-accounts',teacherSearchValue,facultyCollegeFilter],
+    queryFn:()=>api<Account[]>(`/accounts?role=faculty&page_size=100&search=${encodeURIComponent(teacherSearchValue)}${facultyCollegeFilter?`&college_id=${facultyCollegeFilter}`:''}`),
+    enabled:activeTab==='offerings',
+  });
+  const facultyOptions=useQuery({
+    queryKey:['faculty-assignment-options',facultyCollegeFilter],
+    queryFn:()=>api<Account[]>(`/accounts?role=faculty&page_size=100${facultyCollegeFilter?`&college_id=${facultyCollegeFilter}`:''}`),
     enabled:activeTab==='offerings',
   });
   const highestProgramYear=Math.max(0,...(subjects.data??[]).map(subject=>subject.year_level??0));
@@ -214,6 +221,17 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
     }catch(err){setTeacherMessage(errorText(err))}
     finally{setSendingTeacherId('')}
   }
+  async function changeTeacherCollege(account:Account,collegeId:string|null){
+    setUpdatingTeacherId(account.id);
+    setTeacherMessage('');
+    try{
+      await send('PATCH',`/accounts/${account.id}/college`,{college_id:collegeId});
+      queryClient.invalidateQueries({queryKey:['faculty-management-accounts']});
+      queryClient.invalidateQueries({queryKey:['faculty-assignment-options']});
+      toast(`${account.display_name}'s college / program updated.`);
+    }catch(err){setTeacherMessage(errorText(err))}
+    finally{setUpdatingTeacherId('')}
+  }
   async function withdrawStudent(student:SectionRosterRow,reason:string){
     if(!selectedSection)return;
     await send('DELETE',`/sections/${selectedSection.id}/members/${student.student_id}?reason=${encodeURIComponent(reason.trim())}`);
@@ -250,13 +268,11 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
     group.rows.push(offering);
     return groups;
   },[]).sort((a,b)=>a.name.localeCompare(b.name));
-  const collegeTeacherIds=new Set((teacherGroups??[]).filter(group=>!facultyCollegeFilter||group.rows.some(offering=>
-    offering.sections.some(section=>sections.data?.some(candidate=>candidate.id===section.id&&candidate.college_id===facultyCollegeFilter)))).map(group=>group.id));
-  const searchableTeacherIds=new Set((facultyAccounts.data??[]).map(account=>account.id));
+  const facultyAccountById=new Map((facultyOptions.data??facultyAccounts.data??[]).map(account=>[account.id,account]));
   const visibleTeacherGroups=teacherGroups?.filter(group=>
-    (!teacherFilter||group.id===teacherFilter)&&collegeTeacherIds.has(group.id)&&searchableTeacherIds.has(group.id));
-  const visibleFacultyAccounts=(facultyAccounts.data??[]).filter(account=>
-    !facultyCollegeFilter||collegeTeacherIds.has(account.id));
+    (!teacherFilter||group.id===teacherFilter)&&facultyAccountById.has(group.id));
+  const visibleFacultyAccounts=facultyAccounts.data??[];
+  const assignmentTeachers=facultyOptions.data??[];
   const totalSections=sections.data?.length ?? 0;
   const totalStudents=sections.data?.reduce((sum, section) => sum + section.member_count, 0) ?? 0;
   const activeOfferings=offerings.data?.filter(offering => offering.status === 'active').length ?? 0;
@@ -413,46 +429,73 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
       :
       <section className="panel panel-settings">
         <div className="page-heading"><h2>Faculty Management</h2><div className="actions">
-          <button type="button" onClick={()=>setTeacherImportOpen(true)}>Import teachers</button>
-          <button type="button" onClick={()=>{setTeacherMessage('');setTeacherInviteOpen(true)}}>Add teacher</button>
-          <button className={sections.data?.length&&offerings.data?.length===0?'primary':''} disabled={closed||!sections.data} onClick={()=>setDialog('offering')}>Assign subjects</button>
+          {facultyTab==='teachers'?<>
+            <button type="button" onClick={()=>setTeacherImportOpen(true)}>Import teachers</button>
+            <button type="button" className="primary" onClick={()=>{setTeacherMessage('');setTeacherInviteOpen(true)}}>Add teacher</button>
+          </>:<button className="primary" disabled={closed||!sections.data} onClick={()=>setDialog('offering')}>Assign subjects</button>}
         </div></div>
-        <div className="filters">
-          <label>Search teachers
-            <input type="search" maxLength={150} value={teacherSearch} onChange={event=>setTeacherSearch(event.target.value)} placeholder="Name or email"/>
-          </label>
-          <label>College / program
-            <select aria-label="Filter teachers by college or program" value={facultyCollegeFilter} onChange={event=>setFacultyCollegeFilter(event.target.value)}>
-              <option value="">All colleges / programs</option>
-              {colleges.data?.filter(college=>college.status==='active').map(college=><option key={college.id} value={college.id}>{college.name}</option>)}
-            </select>
-          </label>
-        </div>
+        <nav className="tabs faculty-management-tabs" aria-label="Faculty management sections">
+          <button type="button" className={facultyTab==='teachers'?'active':''} aria-pressed={facultyTab==='teachers'} onClick={()=>setFacultyTab('teachers')}>Teachers</button>
+          <button type="button" className={facultyTab==='assignments'?'active':''} aria-pressed={facultyTab==='assignments'} onClick={()=>setFacultyTab('assignments')}>Subject assignments</button>
+        </nav>
         {teacherMessage&&<p role="alert">{teacherMessage}</p>}
         {colleges.isError&&<p role="alert">Could not load colleges/programs: {colleges.error.message}</p>}
-        <h3>Teacher accounts</h3>
-        {facultyAccounts.isPending?<p>Loading teachers…</p>:facultyAccounts.error?<p role="alert">{facultyAccounts.error.message}</p>:
-          visibleFacultyAccounts.length===0?<p className="muted">No teachers match these filters.</p>:
-          <div className="table-wrap" tabIndex={0} role="region" aria-label="Teacher accounts">
-            <table className="teacher-account-table"><thead><tr><th scope="col">Teacher</th><th scope="col">Email</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
-              <tbody>{visibleFacultyAccounts.map(account=><tr key={account.id}>
-                <th scope="row">{account.display_name}</th><td>{account.email}</td><td><span className="badge">{account.status}</span></td>
-                <td><button type="button" className="icon-button" title={account.status==='inactive'?'Inactive accounts cannot receive links':account.status==='invited'?'Send invitation':'Send password-reset link'}
-                  aria-label={account.status==='inactive'?`No email link available for inactive teacher ${account.display_name}`:`${account.status==='invited'?'Send invitation':'Send password-reset link'} to ${account.display_name}`}
-                  disabled={sendingTeacherId===account.id||account.status==='inactive'} onClick={()=>void sendTeacherLink(account)}>
-                  <StudentManagementIcon name="mail"/>
-                </button></td>
-              </tr>)}</tbody>
-            </table>
-          </div>}
-        <h3>Subject assignments</h3>
-        {offerings.isPending?<p>Loading…</p>:offerings.error?<p role="alert">{offerings.error.message}</p>:
-          offerings.data.length===0?<p className="muted">No subjects are assigned yet.</p>:
-          <>
-          {teacherGroups&&teacherGroups.length>1&&<label>Filter offerings by teacher<select aria-label="Filter offerings by teacher" value={teacherFilter} onChange={e=>setTeacherFilter(e.target.value)}>
-            <option value="">All teachers</option>{teacherGroups.map(group=><option key={group.id} value={group.id}>{group.name}</option>)}
-          </select></label>}
-          <div ref={offeringsTableRef} className="table-wrap" tabIndex={0} role="region" aria-label="Offerings by teacher, scroll horizontally"><table className="offerings-table">
+        {facultyTab==='teachers'?<>
+          <div className="filters">
+            <label>Search teachers
+              <input type="search" maxLength={150} value={teacherSearch} onChange={event=>setTeacherSearch(event.target.value)} placeholder="Name or email"/>
+            </label>
+            <label>College / program
+              <select aria-label="Filter teachers by college or program" value={facultyCollegeFilter} onChange={event=>{setFacultyCollegeFilter(event.target.value);setTeacherFilter('')}}>
+                <option value="">All colleges / programs</option>
+                {colleges.data?.map(college=><option key={college.id} value={college.id}>{college.name}{college.status==='inactive'?' (inactive)':''}</option>)}
+              </select>
+            </label>
+          </div>
+          {facultyAccounts.isPending?<p>Loading teachers…</p>:facultyAccounts.error?<p role="alert">{facultyAccounts.error.message}</p>:
+            visibleFacultyAccounts.length===0?<p className="muted">No teachers match these filters.</p>:
+            <div className="table-wrap" tabIndex={0} role="region" aria-label="Teacher accounts">
+              <table className="teacher-account-table"><thead><tr><th scope="col">Teacher</th><th scope="col">Email</th><th scope="col">College / program</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
+                <tbody>{visibleFacultyAccounts.map(account=><tr key={account.id}>
+                  <th scope="row">{account.display_name}</th><td>{account.email}</td>
+                  <td><label className="sr-only" htmlFor={`teacher-college-${account.id}`}>College / program for {account.display_name}</label>
+                    <select id={`teacher-college-${account.id}`} aria-label={`College / program for ${account.display_name}`}
+                      value={account.college_id??''} disabled={updatingTeacherId===account.id}
+                      onChange={event=>void changeTeacherCollege(account,event.target.value||null)}>
+                      <option value="">Not assigned</option>
+                      {colleges.data?.filter(college=>college.status==='active').map(college=><option key={college.id} value={college.id}>{college.name}</option>)}
+                      {account.college_id&&colleges.data?.some(college=>college.id===account.college_id&&college.status==='inactive')&&
+                        <option value={account.college_id} disabled>{colleges.data.find(college=>college.id===account.college_id)?.name} (inactive)</option>}
+                    </select>
+                  </td>
+                  <td><span className="badge">{account.status}</span></td>
+                  <td><button type="button" className="icon-button" title={account.status==='inactive'?'Inactive accounts cannot receive links':account.status==='invited'?'Send invitation':'Send password-reset link'}
+                    aria-label={account.status==='inactive'?`No email link available for inactive teacher ${account.display_name}`:`${account.status==='invited'?'Send invitation':'Send password-reset link'} to ${account.display_name}`}
+                    disabled={sendingTeacherId===account.id||account.status==='inactive'} onClick={()=>void sendTeacherLink(account)}>
+                    <StudentManagementIcon name="mail"/>
+                  </button></td>
+                </tr>)}</tbody>
+              </table>
+            </div>}
+        </>:<>
+          <div className="filters faculty-assignment-filters">
+            <label>College / program
+              <select aria-label="Filter assignment teachers by college or program" value={facultyCollegeFilter} onChange={event=>{setFacultyCollegeFilter(event.target.value);setTeacherFilter('')}}>
+                <option value="">All colleges / programs</option>
+                {colleges.data?.map(college=><option key={college.id} value={college.id}>{college.name}{college.status==='inactive'?' (inactive)':''}</option>)}
+              </select>
+            </label>
+            <label>Filter offerings by teacher
+              <select aria-label="Filter offerings by teacher" value={teacherFilter} onChange={event=>setTeacherFilter(event.target.value)}>
+                <option value="">All teachers</option>
+                {assignmentTeachers.map(account=><option key={account.id} value={account.id}>{account.display_name}</option>)}
+              </select>
+            </label>
+          </div>
+          {facultyOptions.isError&&<p role="alert">Could not load teachers for the selected college/program: {facultyOptions.error.message}</p>}
+          {offerings.isPending?<p>Loading…</p>:offerings.error?<p role="alert">{offerings.error.message}</p>:
+            !visibleTeacherGroups?.length?<p className="muted">{teacherFilter?'This teacher has no subject assignments in the selected college/program.':facultyCollegeFilter?'No subject assignments match this teacher college/program.':'No subjects are assigned yet.'}</p>:
+            <div ref={offeringsTableRef} className="table-wrap" tabIndex={0} role="region" aria-label="Offerings by teacher, scroll horizontally"><table className="offerings-table">
             <caption className="sr-only">Teachers, assigned subjects and sections, enrollment counts, and actions</caption>
             <thead><tr><th scope="col">Teacher</th><th scope="col">Subject</th><th scope="col">Sections</th><th scope="col">Number of enrolled</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
             {visibleTeacherGroups?.map(group=><tbody key={group.id}>{group.rows.map((offering,index)=>{
@@ -476,7 +519,8 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
                   :<button type="button" disabled={closed} onClick={async()=>{try{await send('POST',`/offerings/${offering.id}/restore`);refresh();toast(`${offering.subject.code} assignment restored.`)}catch(err){setTeacherMessage(errorText(err))}}}>Restore</button>}
               </div></td></tr>;
             })}</tbody>)}
-          </table></div></>}
+            </table></div>}
+        </>}
       </section>
     }
 
@@ -498,14 +542,16 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
     {withdrawingSelected&&<BulkWithdrawDialog count={selectedStudents.length}
       onClose={()=>setWithdrawingSelected(false)} onSubmit={withdrawSelectedStudents}/>}
     {studentImportOpen&&<StudentImport termId={term.id} onClose={()=>setStudentImportOpen(false)} onDone={refresh}/>}
-    {teacherImportOpen&&<TeacherImport onClose={()=>setTeacherImportOpen(false)} onDone={()=>{
+    {teacherImportOpen&&<TeacherImport colleges={colleges.data?.filter(college=>college.status==='active')??[]} onClose={()=>setTeacherImportOpen(false)} onDone={()=>{
       queryClient.invalidateQueries({queryKey:['faculty-management-accounts']});
       queryClient.invalidateQueries({queryKey:['faculty-list']});
+      queryClient.invalidateQueries({queryKey:['faculty-assignment-options']});
     }}/>}
-    {teacherInviteOpen&&<TeacherInviteDialog onClose={()=>setTeacherInviteOpen(false)} onDone={()=>{
+    {teacherInviteOpen&&<TeacherInviteDialog colleges={colleges.data?.filter(college=>college.status==='active')??[]} onClose={()=>setTeacherInviteOpen(false)} onDone={()=>{
       setTeacherInviteOpen(false);
       queryClient.invalidateQueries({queryKey:['faculty-management-accounts']});
       queryClient.invalidateQueries({queryKey:['faculty-list']});
+      queryClient.invalidateQueries({queryKey:['faculty-assignment-options']});
       toast('Teacher invitation sent.');
     }}/>}
   </>;
@@ -552,15 +598,16 @@ function useDebouncedValue(value:string,ms=300){
   return debounced;
 }
 
-function TeacherInviteDialog({onClose,onDone}:{onClose:()=>void;onDone:()=>void}){
+function TeacherInviteDialog({colleges,onClose,onDone}:{colleges:College[];onClose:()=>void;onDone:()=>void}){
   const [error,setError]=useState('');
   const [busy,setBusy]=useState(false);
+  const [collegeId,setCollegeId]=useState('');
   async function submit(event:FormEvent<HTMLFormElement>){
     event.preventDefault();
     setBusy(true);setError('');
     const data=new FormData(event.currentTarget);
     try{
-      await post('/accounts',{email:data.get('email'),display_name:data.get('display_name'),role:'faculty'});
+      await post('/accounts',{email:data.get('email'),display_name:data.get('display_name'),role:'faculty',college_id:collegeId});
       onDone();
     }catch(err){setError(errorText(err))}
     finally{setBusy(false)}
@@ -570,9 +617,13 @@ function TeacherInviteDialog({onClose,onDone}:{onClose:()=>void;onDone:()=>void}
       <p className="muted">The teacher will receive an invitation at their institutional email address to verify the account and choose a password.</p>
       <label>Full name<input name="display_name" required maxLength={150} autoFocus/></label>
       <label>Email<input name="email" type="email" required maxLength={254}/></label>
+      <label>College / program<select required value={collegeId} onChange={event=>setCollegeId(event.target.value)}>
+        <option value="">Choose a college / program</option>{colleges.map(college=><option key={college.id} value={college.id}>{college.name}</option>)}
+      </select></label>
+      {!colleges.length&&<p className="warn">Add an active college / program before inviting a teacher.</p>}
       {error&&<p role="alert">{error}</p>}
       <div className="actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button>
-        <button className="primary" disabled={busy}>{busy?'Sending…':'Send invitation'}</button></div>
+        <button className="primary" disabled={busy||!collegeId}>{busy?'Sending…':'Send invitation'}</button></div>
     </form>
   </Dialog>;
 }
@@ -822,6 +873,11 @@ function BulkAssignDialog({termId,termSequence,termLabel,sections,existing,initi
   const [pick,setPick]=useState<Record<string,string[]>>({});          // subject id -> chosen section ids; present = subject selected
   const [reasons,setReasons]=useState<Record<string,string>>({});
   const [error,setError]=useState('');const [busy,setBusy]=useState(false);
+  useEffect(()=>{
+    if(!initialFacultyId||!faculty.data)return;
+    const initialFaculty=faculty.data.find(member=>member.id===initialFacultyId);
+    if(initialFaculty?.college_id)setCollegeId(initialFaculty.college_id);
+  },[initialFacultyId,faculty.data]);
   const teacher=faculty.data?.find(f=>f.id===facultyId);
   const taken=new Set(existing.filter(o=>o.faculty.id===facultyId).map(o=>o.subject.id));
   const matchesYear=(sub:Subject,sec:Section)=>sub.year_level===null||sec.year_level===sub.year_level;
@@ -882,7 +938,7 @@ function BulkAssignDialog({termId,termSequence,termLabel,sections,existing,initi
     <p className="bulk-assignment-intro">{initialFacultyId?'Add subject-section offerings for this faculty member.':'Assign one faculty member to multiple subject-section offerings.'}</p>
     <div className="bulk-assignment-context">
       <label>Academic term<input value={termLabel} readOnly/></label>
-      <label>College / Program<select required value={collegeId} onChange={event=>setCollegeId(event.target.value)} disabled={chosen.length>0}>
+      <label>College / Program<select required value={collegeId} onChange={event=>{setCollegeId(event.target.value);if(!initialFacultyId)setFacultyId('')}} disabled={chosen.length>0||!!initialFacultyId}>
         <option value="" disabled>{colleges.isPending?'Loading programs…':'Choose a college / program'}</option>
         {colleges.data?.filter(college=>college.status==='active'&&sections.some(section=>section.college_id===college.id)).map(college=><option key={college.id} value={college.id}>{college.code}</option>)}
       </select></label>
@@ -890,8 +946,8 @@ function BulkAssignDialog({termId,termSequence,termLabel,sections,existing,initi
     {colleges.isError&&<p role="alert">Could not load colleges: {colleges.error.message}</p>}
     {!colleges.isPending&&!colleges.isError&&colleges.data?.filter(college=>college.status==='active'&&sections.some(section=>section.college_id===college.id)).length===0&&<p className="muted">Add an active college / program and create its sections before assigning subjects.</p>}
     <section className="bulk-assignment-faculty">
-      <label>Faculty member<select required value={facultyId} disabled={!!initialFacultyId} onChange={event=>setFacultyId(event.target.value)}><option value="" disabled>{faculty.isPending?'Loading faculty…':'Choose a faculty member'}</option>
-        {faculty.data?.filter(member=>member.status!=='inactive').map(member=><option key={member.id} value={member.id}>{member.display_name}</option>)}</select></label>
+      <label>Faculty member<select required value={facultyId} disabled={!!initialFacultyId} onChange={event=>setFacultyId(event.target.value)}><option value="" disabled>{faculty.isPending?'Loading faculty…':collegeId?'Choose a faculty member':'Choose a college first'}</option>
+        {faculty.data?.filter(member=>member.status!=='inactive'&&member.college_id===collegeId).map(member=><option key={member.id} value={member.id}>{member.display_name}</option>)}</select></label>
       {teacher&&<div className="bulk-assignment-faculty-card"><span className="bulk-assignment-avatar" aria-hidden="true">{teacher.display_name.slice(0,1).toUpperCase()}</span>
         <span><strong>{teacher.display_name}</strong><small>{teacher.email}</small></span><span className="bulk-assignment-selected">Selected</span></div>}
       {faculty.isError&&<p role="alert">Could not load faculty: {faculty.error.message}</p>}

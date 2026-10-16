@@ -3,11 +3,13 @@ import {post,send,upload,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
 import {Dialog} from '../../components/Dialog';
 import {useConfirm} from '../../components/confirm';
+import type {College} from '../academics/types';
 
 interface ImportRow{
   row:number;
   display_name:string;
   email:string;
+  college_id:string|null;
   status:'new'|'existing'|'error';
   errors:string[];
 }
@@ -19,13 +21,14 @@ interface FacultyPreview{
 }
 interface ImportResult{created:number;existing:number;email_failed:string[]}
 
-export function TeacherImport({onClose,onDone}:{onClose:()=>void;onDone:()=>void}){
+export function TeacherImport({colleges,onClose,onDone}:{colleges:College[];onClose:()=>void;onDone:()=>void}){
   const ask=useConfirm();
   const [preview,setPreview]=useState<FacultyPreview|null>(null);
   const [result,setResult]=useState<ImportResult|null>(null);
   const [error,setError]=useState('');
   const [busy,setBusy]=useState(false);
   const [dirty,setDirty]=useState(false);
+  const [collegeId,setCollegeId]=useState('');
 
   async function requestClose(){
     if(dirty&&!await ask({title:'Discard unsaved preview edits?',message:'Your edited names and email addresses have not been rechecked or saved yet.',yes:'Discard edits',danger:true}))return false;
@@ -52,7 +55,7 @@ export function TeacherImport({onClose,onDone}:{onClose:()=>void;onDone:()=>void
     setBusy(true);setError('');
     try{
       const next=await send<FacultyPreview>('PUT',`/faculty-imports/${preview.id}`,{
-        rows:preview.rows.map(({row,display_name,email})=>({row,display_name,email})),
+        rows:preview.rows.map(({row,display_name,email})=>({row,display_name,email,college_id:collegeId||null})),
       });
       setPreview(next);
       setDirty(false);
@@ -90,6 +93,12 @@ export function TeacherImport({onClose,onDone}:{onClose:()=>void;onDone:()=>void
       <h3>Preview</h3>
       <p>{preview.summary.new} new · {preview.summary.existing} existing · <span className={preview.summary.errors?'error':''}>{preview.summary.errors} with errors</span></p>
       {dirty&&<p className="muted" role="status">Preview edits are not saved yet. Save changes to revalidate them before importing.</p>}
+      {preview.summary.new>0&&<label>College / program for new teachers
+        <select value={collegeId} onChange={event=>{setCollegeId(event.target.value);setDirty(true)}} disabled={busy} required>
+          <option value="">Choose a college / program</option>
+          {colleges.map(college=><option key={college.id} value={college.id}>{college.name}</option>)}
+        </select>
+      </label>}
       {preview.summary.errors>0&&<ul className="rows" aria-label="Rows to fix">{preview.rows.filter(row=>row.status==='error').flatMap(row=>row.errors.map(message=><li key={`${row.row}-${message}`} className="error">Row {row.row}: {message}</li>))}</ul>}
       <div className="table-wrap" tabIndex={0} role="region" aria-label="Editable teacher import preview">
         <table><thead><tr><th>Row</th><th>Name</th><th>Email</th><th>Result</th></tr></thead>
@@ -107,8 +116,8 @@ export function TeacherImport({onClose,onDone}:{onClose:()=>void;onDone:()=>void
       </div>
       <div className="actions">
         {dirty&&<button type="button" disabled={busy} onClick={saveEdits}>{busy?'Checking…':'Save changes & recheck'}</button>}
-        <button type="button" className="primary" disabled={busy||dirty||preview.summary.errors>0} onClick={commit}>
-          {dirty?'Save edits before importing':preview.summary.errors>0?`Fix ${preview.summary.errors} ${preview.summary.errors===1?'row':'rows'} to import`:`Import ${preview.summary.total} teachers`}
+        <button type="button" className="primary" disabled={busy||dirty||preview.summary.errors>0||(preview.summary.new>0&&!collegeId)} onClick={commit}>
+          {preview.summary.new>0&&!collegeId?'Choose a college before importing':dirty?'Save edits before importing':preview.summary.errors>0?`Fix ${preview.summary.errors} ${preview.summary.errors===1?'row':'rows'} to import`:`Import ${preview.summary.total} teachers`}
         </button>
       </div>
     </section>}

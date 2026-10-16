@@ -571,6 +571,22 @@ def test_colleges_can_group_subjects_and_reject_usage(world):
     assert admin.delete(f"/api/colleges/{college['id']}").status_code == 204
 
 
+def test_college_assigned_to_teacher_cannot_be_deleted(world, monkeypatch):
+    monkeypatch.setattr("app.features.accounts.commands.send_link", lambda account, token, purpose: None)
+    admin = world["admin"]
+    college = admin.post("/api/colleges", {"code": "FAC", "name": "Faculty College"}).json()
+    invited = admin.post("/api/accounts", {
+        "email": "college-faculty@example.com",
+        "display_name": "College Faculty",
+        "role": "faculty",
+        "college_id": college["id"],
+    })
+    assert invited.status_code == 201, invited.text
+    deleted = admin.delete(f"/api/colleges/{college['id']}")
+    assert deleted.status_code == 409
+    assert deleted.json()["error"]["code"] == "college_in_use"
+
+
 def uuid_zero():
     import uuid
     return uuid.UUID(int=0)

@@ -11,6 +11,7 @@ class AccountView(BaseModel):
     display_name: str
     role: str
     status: str
+    college_id: UUID | None
     student_number: str | None
     preferences: dict
 
@@ -22,6 +23,7 @@ class Invite(BaseModel):
     email: EmailStr
     display_name: str = Field(min_length=1, max_length=150)
     role: Literal["admin", "faculty", "student"]
+    college_id: UUID | None = None
     student_number: str | None = Field(default=None, min_length=1, max_length=50)
 
     @model_validator(mode="after")
@@ -43,6 +45,9 @@ class AcceptToken(BaseModel):
 class AccountStatus(BaseModel):
     status: Literal["active", "inactive"]
 
+class FacultyCollegeUpdate(BaseModel):
+    college_id: UUID | None
+
 class BulkSendLinks(BaseModel):
     account_ids: list[UUID] = Field(min_length=1, max_length=25)
 
@@ -56,6 +61,7 @@ class FacultyImportRowUpdate(BaseModel):
     row: int = Field(ge=2)
     display_name: str = Field(max_length=150)
     email: str = Field(max_length=254)
+    college_id: UUID | None = None
 
 class FacultyImportUpdate(BaseModel):
     rows: list[FacultyImportRowUpdate] = Field(min_length=1, max_length=1000)

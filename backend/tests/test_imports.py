@@ -254,10 +254,11 @@ def test_faculty_import_reports_duplicates_and_non_faculty_accounts_without_part
     assert account_count(db) == before and stage["sent"] == []
 
 
-def test_faculty_import_preview_edits_are_revalidated_and_persisted(stage):
+def test_faculty_import_preview_edits_are_revalidated_and_persisted(db, stage):
     preview = faculty_upload(stage, b"email,display_name\nbroken-email,New Teacher\n").json()
     saved = stage["admin"].put(f"/api/faculty-imports/{preview['id']}", {"rows": [
-        {"row": 2, "display_name": "Corrected Teacher", "email": "corrected@example.com"},
+        {"row": 2, "display_name": "Corrected Teacher", "email": "corrected@example.com",
+         "college_id": stage["college"]["id"]},
     ]})
     assert saved.status_code == 200, saved.text
     assert saved.json()["summary"] == {"new": 1, "existing": 0, "errors": 0, "total": 1}
@@ -267,6 +268,8 @@ def test_faculty_import_preview_edits_are_revalidated_and_persisted(stage):
     done = stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit")
     assert done.status_code == 200, done.text
     assert stage["sent"] == ["corrected@example.com"]
+    teacher = db.scalar(select(Account).where(Account.email == "corrected@example.com"))
+    assert str(teacher.college_id) == stage["college"]["id"]
     assert stage["admin"].put(f"/api/faculty-imports/{preview['id']}", {"rows": [
         {"row": 2, "display_name": "Changed after commit", "email": "corrected@example.com"},
     ]}).status_code == 409

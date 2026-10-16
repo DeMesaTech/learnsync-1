@@ -171,9 +171,10 @@ def update_college(db, actor, college_id, data):
 def delete_college(db, actor, college_id):
     college = get_or_404(db, College, college_id, "College")
     if (db.scalar(select(Subject.id).where(Subject.college_id == college_id).limit(1))
-            or db.scalar(select(Section.id).where(Section.college_id == college_id).limit(1))):
+            or db.scalar(select(Section.id).where(Section.college_id == college_id).limit(1))
+            or db.scalar(select(Account.id).where(Account.college_id == college_id).limit(1))):
         fail(409, "college_in_use",
-             "This college still has subjects or sections assigned to it.")
+             "This college still has teachers, subjects, or sections assigned to it.")
     audit(db, actor, "college.deleted", "college", college.id, {"code": college.code})
     db.delete(college)
     db.commit()
