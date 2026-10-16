@@ -307,6 +307,30 @@ def test_only_unused_sections_can_be_deleted(world):
     assert blocked_history.json()["error"]["code"] == "section_in_use"
 
 
+def test_offering_assignment_can_be_archived_and_restored_without_losing_history(world, db):
+    admin = world["admin"]
+    offering_id = world["offering"]["id"]
+    student = world["students"][0]
+    section = world["sections"][0]
+    assert add_member(world, section, student).status_code == 204
+
+    blocked = admin.delete(f"/api/offerings/{offering_id}")
+    assert blocked.status_code == 409
+    assert blocked.json()["error"]["code"] == "offering_has_enrolled_students"
+
+    withdrawn = admin.delete(
+        f"/api/sections/{section['id']}/members/{student.id}?reason=Moved%20sections")
+    assert withdrawn.status_code == 204
+    archived = admin.delete(f"/api/offerings/{offering_id}")
+    assert archived.status_code == 200, archived.text
+    assert archived.json()["status"] == "archived"
+    assert roster(admin, offering_id)[str(student.id)]["status"] == "withdrawn"
+
+    restored = admin.post(f"/api/offerings/{offering_id}/restore")
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["status"] == "active"
+
+
 def test_one_active_section_per_term_and_withdrawal_history(db, world):
     s1 = world["students"][0]
     a, b = world["sections"]

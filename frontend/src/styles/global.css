@@ -451,6 +451,49 @@ dialog {
   padding: 24px
 }
 
+dialog.import-dialog {
+  width: min(1000px, calc(100vw - 24px))
+}
+
+.import-dialog .panel {
+  margin: 14px 0
+}
+
+.import-dialog table input {
+  min-width: 170px
+}
+
+.student-roster-search {
+  display: grid;
+  gap: 5px;
+  max-width: 460px;
+  font-size: .9rem
+}
+
+.teacher-account-table {
+  width: max-content;
+  min-width: min(100%, 620px);
+  font-size: .9rem
+}
+
+.teacher-account-table th,
+.teacher-account-table td {
+  padding: 6px 9px;
+  vertical-align: middle
+}
+
+.teacher-account-table .icon-button {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px
+}
+
+.teacher-account-table .icon-button svg {
+  width: 16px;
+  height: 16px
+}
+
 dialog.item-editor-dialog,
 dialog.assessment-editor-dialog {
   width: min(920px, calc(100vw - 24px));

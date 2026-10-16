@@ -233,6 +233,15 @@ def update_offering(offering_id: UUID, data: OfferingUpdate, actor=Depends(admin
     offering = commands.update_offering(db, actor, offering_id, data)
     return queries.offering_summary(db, [offering])[0]
 
+@router.delete("/offerings/{offering_id}")
+def archive_offering(offering_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):
+    offering = commands.archive_offering(db, actor, offering_id)
+    return queries.offering_summary(db, [offering])[0]
+
+@router.post("/offerings/{offering_id}/restore")
+def restore_offering(offering_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):
+    offering = commands.restore_offering(db, actor, offering_id)
+    return queries.offering_summary(db, [offering])[0]
 
 @router.get("/offerings/{offering_id}")
 def offering_detail(offering_id: UUID, actor=Depends(roster_actor), db: Session = Depends(get_db)):

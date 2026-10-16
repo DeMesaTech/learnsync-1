@@ -59,6 +59,8 @@ Syllabus file replacement uses the existing faculty `POST /api/teach/offerings/{
 
 ## Bulk assignment and the paginated section roster
 - `POST /api/terms/{id}/offerings/bulk` `{faculty_id, items:[{subject_id, section_ids, placement_override_reason?}]}`: one teacher, several subjects, each with its own sections, all or nothing. A refusal names the subject and saves nothing; the same subject twice is `duplicate_subject`. Single `POST .../offerings` and `PATCH /offerings/{id}` are unchanged.
+- `PUT /api/faculty-imports/{id}` edits only the staged faculty-import rows already in the preview, then revalidates against accounts and other rows; adding/removing rows is refused. Commit remains atomic if any row is invalid.
+- `DELETE /api/offerings/{id}` archives an assignment (with an audit event) without deleting enrollment/history, and is refused while any enrollment is still active. `POST /api/offerings/{id}/restore` restores an archived assignment. Both operations require an open term and admin authorization.
 - `GET /api/sections/{id}/roster?page&page_size&search&status=active|withdrawn|all`: a section's students a page at a time (admin only).
 - `GET /api/sections/{id}/candidates?page&page_size&search&account=all|active|invited`: students who can be added, excluding anyone already active in a section of the same term.
 - `DELETE /api/sections/{id}/members/{student}?reason=` now requires a reason (3 to 1000 characters, 422 `reason_required`); it is stored in the `section.member_withdrawn` audit event.

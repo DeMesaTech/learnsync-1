@@ -1,5 +1,13 @@
 # Acceptance status
 
+### 2026-10-27 (Admin search, imports, and assignment management)
+- Student management now searches the selected section roster by name, email, or student number using the existing server-side search API. The student import action opens a term-aware modal instead of routing back to the same page; the legacy term-specific import route remains functional.
+- Faculty Management now has debounced name/email search, a college/program filter, individual teacher invitations, and per-teacher invitation/reset-link sending with confirmation and explicit errors. Teacher import opens in a modal with editable preview fields; edits are persisted and revalidated by the server before commit.
+- Assignment editing can add another subject for the same locked faculty member. “Delete assignment” archives the assignment, preserving history and supporting restoration; the API refuses archive while enrolled students remain.
+- Passed: frontend `npm run build`, `npm run lint`, E2E syntax check (`node --check e2e\admin-lists.mjs`), backend Ruff on changed files, focused backend tests for editable teacher imports and archive/restore (2 passed), and `git diff --check`. Vite emitted the existing large-chunk advisory; backend tests emitted existing dependency deprecation warnings.
+- Broader `pytest tests\test_imports.py tests\test_academics.py -q`: 47 passed, 2 failed in existing unrelated cases: one test passes unsupported `student_number=` to the shared `make_account` helper, and another expects a `name` CSV header to be rejected although the existing parser accepts it. The new focused tests pass.
+- Not run: interactive browser verification; the available local app redirected to login with an expired session, and no credentials were provided. No email delivery was claimed or tested.
+
 ### 2026-10-15 (Settings hub and academic calendar)
 - Rebuilt `/admin/settings` as a general Settings hub in the existing navy/blue visual system. Its institution settings navigation links to real Prospectus, Student management, Faculty Management, and Account/theme pages; Academic calendar is the active section.
 - Preserved school-year behavior: year and semester overview, create-year dialog with two semesters and per-semester section/optional offering copy, term links, close confirmation, and reason-required audited reopening.

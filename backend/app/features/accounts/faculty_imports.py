@@ -72,6 +72,26 @@ def create_faculty_import(db, actor, upload):
     return imp
 
 
+def update_faculty_import(db, actor, import_id, rows):
+    imp = db.scalar(select(FacultyImport).where(FacultyImport.id == import_id).with_for_update())
+    if not imp:
+        fail(404, "not_found", "Import not found.")
+    if imp.status == "committed":
+        fail(409, "import_committed", "This import was already committed.")
+    updates = {row.row: row for row in rows}
+    if set(updates) != {row["row"] for row in imp.rows}:
+        fail(422, "import_rows_mismatch", "Edit the existing preview rows without adding or removing rows.")
+    imp.rows = [
+        {**row, "display_name": updates[row["row"]].display_name,
+         "email": updates[row["row"]].email}
+        for row in imp.rows
+    ]
+    audit(db, actor, "faculty_import.edited", "faculty_import", imp.id,
+          {"rows": len(imp.rows)})
+    db.commit()
+    return imp
+
+
 def commit_faculty_import(db, actor, import_id):
     imp = db.scalar(select(FacultyImport).where(FacultyImport.id == import_id).with_for_update())
     if not imp:

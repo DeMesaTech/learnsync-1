@@ -534,6 +534,34 @@ def update_offering(db, actor, offering_id, data):
     return offering
 
 
+def archive_offering(db, actor, offering_id):
+    offering = get_or_404(db, Offering, offering_id, "Offering")
+    open_term(db, offering.term_id)
+    if offering.status == "archived":
+        return offering
+    if db.scalar(select(Enrollment.id).where(
+            Enrollment.offering_id == offering.id, Enrollment.status == "enrolled").limit(1)):
+        fail(409, "offering_has_enrolled_students",
+             "Withdraw enrolled students before deleting this assignment. Enrollment history will be kept.")
+    offering.status = "archived"
+    audit(db, actor, "offering.archived", "offering", offering.id,
+          {"subject_id": str(offering.subject_id), "faculty_id": str(offering.faculty_id)})
+    db.commit()
+    return offering
+
+
+def restore_offering(db, actor, offering_id):
+    offering = get_or_404(db, Offering, offering_id, "Offering")
+    open_term(db, offering.term_id)
+    if offering.status == "active":
+        return offering
+    offering.status = "active"
+    audit(db, actor, "offering.restored", "offering", offering.id,
+          {"subject_id": str(offering.subject_id), "faculty_id": str(offering.faculty_id)})
+    db.commit()
+    return offering
+
+
 # ---------- irregular enrollment ----------
 
 def set_exception(db, actor, offering_id, student_id, data):

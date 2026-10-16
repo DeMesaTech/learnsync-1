@@ -254,6 +254,24 @@ def test_faculty_import_reports_duplicates_and_non_faculty_accounts_without_part
     assert account_count(db) == before and stage["sent"] == []
 
 
+def test_faculty_import_preview_edits_are_revalidated_and_persisted(stage):
+    preview = faculty_upload(stage, b"email,display_name\nbroken-email,New Teacher\n").json()
+    saved = stage["admin"].put(f"/api/faculty-imports/{preview['id']}", {"rows": [
+        {"row": 2, "display_name": "Corrected Teacher", "email": "corrected@example.com"},
+    ]})
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["summary"] == {"new": 1, "existing": 0, "errors": 0, "total": 1}
+    assert saved.json()["rows"][0]["display_name"] == "Corrected Teacher"
+    assert stage["sent"] == []
+
+    done = stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit")
+    assert done.status_code == 200, done.text
+    assert stage["sent"] == ["corrected@example.com"]
+    assert stage["admin"].put(f"/api/faculty-imports/{preview['id']}", {"rows": [
+        {"row": 2, "display_name": "Changed after commit", "email": "corrected@example.com"},
+    ]}).status_code == 409
+
+
 def test_faculty_import_skips_existing_faculty_and_supports_xlsx(db, stage):
     make_account(db, "existing-teacher@example.com", "faculty")
     book = openpyxl.Workbook()

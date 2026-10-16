@@ -24,6 +24,7 @@ from .schemas import (
     AccountView,
     BulkSendLinks,
     EmailRequest,
+    FacultyImportUpdate,
     Handover,
     Invite,
     Login,
@@ -124,6 +125,11 @@ def faculty_import(import_id: UUID, actor=Depends(admin), db: Session = Depends(
         fail(404, "not_found", "Import not found.")
     return faculty_imports.faculty_preview(db, imp)
 
+@router.put("/faculty-imports/{import_id}")
+def update_faculty_import(import_id: UUID, data: FacultyImportUpdate,
+                          actor=Depends(admin), db: Session = Depends(get_db)):
+    imp = faculty_imports.update_faculty_import(db, actor, import_id, data.rows)
+    return faculty_imports.faculty_preview(db, imp)
 
 @router.post("/faculty-imports/{import_id}/commit")
 def commit_faculty_import(import_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):

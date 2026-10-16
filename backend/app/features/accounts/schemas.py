@@ -52,6 +52,20 @@ class BulkSendLinks(BaseModel):
             raise ValueError("Account IDs must be unique")
         return self
 
+class FacultyImportRowUpdate(BaseModel):
+    row: int = Field(ge=2)
+    display_name: str = Field(max_length=150)
+    email: str = Field(max_length=254)
+
+class FacultyImportUpdate(BaseModel):
+    rows: list[FacultyImportRowUpdate] = Field(min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def unique_rows(self):
+        if len({row.row for row in self.rows}) != len(self.rows):
+            raise ValueError("Import row numbers must be unique")
+        return self
+
 class Handover(BaseModel):
     incoming_owner: str = Field(min_length=1, max_length=150)
     reason: str = Field(min_length=1, max_length=1000)
