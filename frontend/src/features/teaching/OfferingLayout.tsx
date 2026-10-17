@@ -17,7 +17,7 @@ function MainTabs({role,base}:{role:'faculty'|'student';base:string}){
       {label:'People',to:base,segments:['','attendance','progress','students']},{label:'Grades',to:`${base}/grades`,segments:['grades','gradebook','class-standing']}]
     :[{label:'Stream',to:`${base}/stream`,segments:['stream','announcements']},{label:'Classwork',to:`${base}/classwork`,segments:['classwork','syllabus','lessons','work']},
       {label:'Grades',to:`${base}/grades`,segments:['grades','results','progress']}];
-  return <nav className="tabs" aria-label="Subject sections">{tabs.map(t=>{const on=t.segments.includes(segment);
+  return <nav className="tabs offering-tabs" aria-label="Subject sections">{tabs.map(t=>{const on=t.segments.includes(segment);
     return <Link key={t.label} to={t.to} className={on?'active':undefined} aria-current={on?'page':undefined}>{t.label}</Link>})}</nav>;
 }
 
@@ -45,14 +45,14 @@ export function OfferingLayout({role}:{role:'faculty'|'student'}){
   return <>
     <p className="back"><Link to={`/${role}/subjects`}>← My Classes</Link></p>
     {query.isPending?<p>Loading…</p>:query.error?<section className="panel"><h1>Subject unavailable</h1><p role="alert">{query.error.message}</p></section>:<>
-      <div className="page-heading"><div>
+      <div className="page-heading offering-heading"><div>
         <p className="eyebrow">{query.data.term}{query.data.term_status!=='active'?` · ${query.data.term_status} (read-only)`:''}</p>
         <h1>{query.data.subject.code} · {query.data.subject.title}</h1>
         <p className="muted">{role==='faculty'?query.data.sections.map(s=>s.name).join(', ')||'No sections':query.data.faculty.display_name}</p>
       </div></div>
       {role==='student'&&query.data.enrollment_status==='withdrawn'?<>
         <p className="warn" role="status">You are no longer enrolled in this subject. Course content is not available, but you can still see your own results and your earlier study chats.</p>
-        <nav className="tabs" aria-label="Subject sections"><NavLink to={`/student/study-buddy?subject=${query.data.id}`}>Study buddy chats</NavLink><NavLink to={`${base}/results`}>Grades & results</NavLink></nav></>:<>
+        <nav className="tabs offering-tabs" aria-label="Subject sections"><NavLink to={`/student/study-buddy?subject=${query.data.id}`}>Study buddy chats</NavLink><NavLink to={`${base}/results`}>Grades & results</NavLink></nav></>:<>
       {needsSetup&&<p className="notice" role="status"><strong>This subject is not set up yet.</strong> A guided setup takes a few minutes. <Link className="touch" to={`${base}/setup`}>Set up this subject</Link></p>}
       {!setup&&<MainTabs role={role} base={base}/>}</>}
       {role==='faculty'&&!setup&&<EditorPills offeringId={query.data.id}/>}

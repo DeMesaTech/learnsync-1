@@ -1,13 +1,13 @@
 import {useToast} from '../../components/undo';
 import {useEffect,useRef,useState,type FormEvent} from 'react';
-import {Link,useOutletContext,useParams} from 'react-router-dom';
+import {Link,useNavigate,useOutletContext,useParams} from 'react-router-dom';
 import {useQuery,type UseQueryResult} from '@tanstack/react-query';
 import {api,post,send,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
 import {Dialog} from '../../components/Dialog';
 import {catOfKind} from '../../components/ClassworkTypes';
 import {useConfirm} from '../../components/confirm';
-import {useOrigin} from '../../components/origin';
+import {useHere,useOrigin} from '../../components/origin';
 import type {OfferingSummary} from '../academics/types';
 import {VerdictBadge} from './AnswerReview';
 import {KIND_LABEL,fmt,when,type Assessment,type AttemptDetail,type AttemptRow,type ScoreRow} from './types';
@@ -16,6 +16,8 @@ export function ScoresPage(){
   const ask=useConfirm();const toast=useToast();
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const {assessmentId}=useParams();
+  const navigate=useNavigate();
+  const here=useHere();
   const closed=offering.term_status!=='active';
   const base=`/teach/offerings/${offering.id}/assessments/${assessmentId}`;
   const a=useQuery({queryKey:['assessment',assessmentId],queryFn:()=>api<Assessment>(base)});
@@ -39,11 +41,21 @@ export function ScoresPage(){
     try{const r=await post<{released:number}>(`${base}/release`,{student_ids:null});{const text=r.released===0?'Nothing new to return.':`Returned ${r.released} result${r.released===1?'':'s'}.`;setMessage(text);toast(text)};refresh()}
     catch(e){setMessage(errorText(e))}
   }
+  async function editSettings(){
+    if(kind==='online_quiz'&&!closed&&!await ask({
+      title:'Edit this online quiz?',
+      message:'Editing is an explicit request to change this quiz. Review the draft carefully before updating what students see.',
+      yes:'Open quiz editor',
+    }))return;
+    navigate(`/faculty/offerings/${offering.id}/assessments/${assessmentId}/edit`,{state:here});
+  }
   return <>
     <p className="back"><Link to={origin.to}>← Back to {origin.label}</Link></p>
     <div className="page-heading"><div><p className="eyebrow">{KIND_LABEL[kind]} · out of {fmt(rev.max_points)}</p><h2>{rev.title}</h2>
       <p className="muted">Students only see a result after you return it. Online quiz totals are returned automatically when a student submits.</p></div>
-      <div className="actions"><Link className="button" to={`/faculty/offerings/${offering.id}/assessments/${assessmentId}/edit`}>{closed?'View settings':'Edit settings'}</Link>
+      <div className="actions">{closed?<Link className="button" to={`/faculty/offerings/${offering.id}/assessments/${assessmentId}/edit`}>View settings</Link>
+        :kind==='online_quiz'?<button type="button" onClick={editSettings}>Edit settings</button>
+          :<Link className="button" state={here} to={`/faculty/offerings/${offering.id}/assessments/${assessmentId}/edit`}>Edit settings</Link>}
       <button className={toReturn>0?'primary':''} disabled={closed||toReturn===0} onClick={release}>{toReturn>0?`Return ${toReturn} graded result${toReturn===1?'':'s'}`:'All graded results returned'}</button></div></div>
     {message&&<p role="status">{message}</p>}
     {offering.sections.length>0&&<><label>Section<select aria-label="Filter scores by section" value={sectionId} onChange={e=>setSectionId(e.target.value)}>

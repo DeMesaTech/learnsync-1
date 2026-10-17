@@ -2,9 +2,10 @@ import type React from 'react';
 import {useEffect,useRef,useState} from 'react';
 import {Link,useNavigate,useOutletContext,useSearchParams} from 'react-router-dom';
 import {ClassworkTypes,catOf,CATS} from '../../components/ClassworkTypes';
+import {Dialog} from '../../components/Dialog';
 import {useHere} from '../../components/origin';
 import {useQuery} from '@tanstack/react-query';
-import {api,send,errorText} from '../../app/api';
+import {api,post,send,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
 import type {OfferingSummary} from '../academics/types';
 import {useUndo} from '../../components/undo';
@@ -14,7 +15,7 @@ import {AssessmentEditorDialog} from '../assessments/AssessmentEditor';
 import {detail as workDetail} from '../assessments/Work';
 import {KIND_LABEL,fmt,type Assessment,type Kind,type LearnItem as Work} from '../assessments/types';
 import {ItemEditorDialog,KIND,NewItemDialog,itemTitle,stateLabel,useNodes} from './Content';
-import {type Chapter,type Item,type LearnItem,type LearnSyllabus,type Outline,type SyllabusState} from './types';
+import {emptyChapter,newId,type Chapter,type Item,type LearnItem,type LearnSyllabus,type Outline,type SyllabusState} from './types';
 
 type Create={type:'item';kind:Item['kind']}|{type:'item-editor';itemId:string}|{type:'assessment';kind:Kind}|{type:'assessment-editor';assessmentId:string}|{type:'ai'}|null;
 interface Row{canUnpublish:boolean;pending:boolean;key:string;type:'item'|'assessment';kind:string;sectionIds:string[];id:string;title:string;label:string;anchor:string|null;archived:boolean;status:string;published:boolean;to:string;meta:string}
@@ -33,10 +34,10 @@ export function FacultyClasswork(){
   const items=useQuery({queryKey:['items',offering.id],queryFn:()=>api<Item[]>(`/teach/offerings/${offering.id}/items`)});
   const assessments=useQuery({queryKey:['assessments',offering.id],queryFn:()=>api<Assessment[]>(`/teach/offerings/${offering.id}/assessments`)});
   const syllabus=useQuery({queryKey:['syllabus',offering.id],queryFn:()=>api<SyllabusState>(`/teach/offerings/${offering.id}/syllabus`)});
-  const offerings=useQuery({queryKey:['my-offerings'],queryFn:()=>api<OfferingSummary[]>('/me/offerings')});
   const nodes=useNodes(offering.id);
   const offer=useUndo();
   const [create,setCreate]=useState<Create>(null);
+  const [addingChapter,setAddingChapter]=useState(false);
   const [search,setSearch]=useState('');const [archived,setArchived]=useState(false);
   const [materialFilter,setMaterialFilter]=useState<MaterialFilter>('all');
   const [sectionId,setSectionId]=useState(offering.sections[0]?.id??'all');
@@ -126,14 +127,10 @@ export function FacultyClasswork(){
         <p className="muted">Manage chapters, lessons, assessments, and learning resources in one place.</p></div>
     </section>
     <div className="content-manager-context">
-      <label>Assigned subject<select aria-label="Assigned subject" value={offering.id} onChange={event=>navigate(`/faculty/offerings/${event.target.value}/classwork`)}>
-        {(offerings.data??[offering]).map(subject=><option key={subject.id} value={subject.id}>{subject.subject.code} · {subject.subject.title}</option>)}
-      </select></label>
       <label>Section<select aria-label="Section" value={selectedSection?.id??'all'} onChange={event=>setSectionId(event.target.value)}>
         <option value="all">All sections</option>{offering.sections.map(section=><option key={section.id} value={section.id}>{section.name}</option>)}
       </select></label>
     </div>
-    {offerings.error&&<p role="alert">Could not load assigned subjects: {offerings.error.message}</p>}
     <section className="content-manager-overview" aria-label="Content overview">
       <article><span aria-hidden="true">▤</span><div><strong>{chapters.length}</strong><small>Chapters</small></div></article>
       <article><span aria-hidden="true">▣</span><div><strong>{activeRows.length}</strong><small>Resources</small></div></article>
@@ -145,7 +142,7 @@ export function FacultyClasswork(){
     {moved&&<p role="status" className="muted">{moved}</p>}
     {(items.isPending||assessments.isPending)?<p>Loading…</p>:items.error||assessments.error?<p role="alert">{(items.error??assessments.error)!.message}</p>:
       <div className="chapter-workspace">
-        <ChapterNavigation outline={outline} rows={visibleRows} selected={selectedChapterId} onSelect={setActiveChapter} editHref={`${base}/syllabus`}/>
+        <ChapterNavigation outline={outline} rows={visibleRows} selected={selectedChapterId} onSelect={setActiveChapter} onAdd={()=>setAddingChapter(true)} canAdd={!closed}/>
         <section className="chapter-detail panel">
           <header className="chapter-detail-heading">
             <div><p className="eyebrow">{selectedChapter?`CHAPTER ${chapters.indexOf(selectedChapter)+1}`:'OTHER MATERIALS'}</p>
@@ -175,7 +172,62 @@ export function FacultyClasswork(){
     {create?.type==='assessment'&&<NewDialog offering={offering} kind={create.kind} onClose={()=>setCreate(null)} onCreated={assessmentCreated}/>}
     {create?.type==='assessment-editor'&&<AssessmentEditorDialog offering={offering} assessmentId={create.assessmentId} onClose={()=>{setCreate(null);queryClient.invalidateQueries({queryKey:['assessments',offering.id]})}}/>}
     {create?.type==='ai'&&<GenerateDialog offering={offering} onClose={()=>setCreate(null)} onCreated={assessmentCreated}/>}
+    {addingChapter&&<ChapterDialog offeringId={offering.id} onClose={()=>setAddingChapter(false)} onAdded={id=>{setAddingChapter(false);setActiveChapter(id)}}/>}
   </>;
+}
+
+function ChapterDialog({offeringId,onClose,onAdded}:{offeringId:string;onClose:()=>void;onAdded:(id:string)=>void}){
+  const url=`/teach/offerings/${offeringId}/syllabus`;
+  const [chapter,setChapter]=useState<Chapter>(()=>emptyChapter());
+  const [topics,setTopics]=useState<{id:string;title:string}[]>([]);
+  const [message,setMessage]=useState('');
+  const [saving,setSaving]=useState(false);
+
+  async function save(event:React.FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    setMessage('');
+    if(!chapter.title.trim()){
+      setMessage('Enter a chapter title.');
+      return;
+    }
+    setSaving(true);
+    try{
+      let state=await api<SyllabusState>(url);
+      if(!state.draft){
+        await post(`${url}/draft`,{});
+        state=await api<SyllabusState>(url);
+      }
+      if(!state.draft)throw new Error('A syllabus draft could not be created. Please try again.');
+      const nextChapter={...chapter,title:chapter.title.trim(),topics:topics.filter(topic=>topic.title.trim()).map(topic=>({...topic,title:topic.title.trim()}))};
+      await send('PUT',`${url}/draft`,{
+        expected_counter:state.draft.counter,
+        outline:{...state.draft.outline,chapters:[...state.draft.outline.chapters,nextChapter]},
+        grading_policy:state.draft.grading_policy,
+      });
+      await queryClient.invalidateQueries({queryKey:['syllabus',offeringId]});
+      onAdded(nextChapter.id);
+    }catch(error){setMessage(errorText(error))}
+    finally{setSaving(false)}
+  }
+
+  return <Dialog title="Add chapter" onClose={onClose}>
+    <form onSubmit={save}>
+      <div className="grid-2">
+        <label>Title<input value={chapter.title} maxLength={300} required onChange={event=>setChapter({...chapter,title:event.target.value})}/></label>
+        <label>Time allotment<input value={chapter.weeks} maxLength={60} placeholder="Week 2" onChange={event=>setChapter({...chapter,weeks:event.target.value})}/></label>
+      </div>
+      <fieldset><legend>Topics</legend>
+        {topics.map((topic,index)=><div className="topic-row" key={topic.id}>
+          <input aria-label={`Topic ${index+1}`} value={topic.title} maxLength={300} onChange={event=>setTopics(topics.map(item=>item.id===topic.id?{...item,title:event.target.value}:item))}/>
+          <button type="button" className="icon-button" aria-label={`Remove topic ${index+1}`} onClick={()=>setTopics(topics.filter(item=>item.id!==topic.id))}>×</button>
+        </div>)}
+        <button type="button" onClick={()=>setTopics([...topics,{id:newId(),title:''}])}>Add topic</button>
+      </fieldset>
+      {message&&<p role="alert">{message}</p>}
+      <div className="actions"><button type="button" disabled={saving} onClick={onClose}>Cancel</button>
+        <button className="primary" disabled={saving}>{saving?'Saving…':'Add chapter'}</button></div>
+    </form>
+  </Dialog>;
 }
 
 interface WorkRow extends Work{anchor_node_id?:string|null}
@@ -210,13 +262,13 @@ function chapterNodeIds(chapter:Chapter){
 
 const materialIcon=(kind:string)=>kind==='lesson'?'▱':kind==='file'?'▣':kind==='reference'?'↗':kind==='online_quiz'?'☷':kind==='activity'?'▧':'✎';
 
-function ChapterNavigation({outline,rows,selected,onSelect,editHref}:{outline:Outline|undefined;rows:{anchor:string|null}[];selected:string;onSelect:(id:string)=>void;editHref?:string}){
+function ChapterNavigation({outline,rows,selected,onSelect,onAdd,canAdd}:{outline:Outline|undefined;rows:{anchor:string|null}[];selected:string;onSelect:(id:string)=>void;onAdd?:()=>void;canAdd?:boolean}){
   const chapters=outline?.chapters??[];
   const known=new Set(chapters.flatMap(chapter=>[...chapterNodeIds(chapter)]));
   const otherCount=rows.filter(row=>!row.anchor||!known.has(row.anchor)).length;
   return <aside className="chapter-navigation" aria-label="Chapter navigation">
     <div className="chapter-navigation-heading"><div><p className="eyebrow">COURSE CONTENT</p><h2>Chapters</h2></div>
-      {editHref&&<Link className="chapter-add-link" to={editHref} aria-label="Add or edit chapters" title="Add or edit chapters">＋</Link>}</div>
+      {canAdd&&onAdd&&<button type="button" className="chapter-add-link" onClick={onAdd} aria-label="Add chapter" title="Add chapter">＋</button>}</div>
     <nav className="chapter-navigation-list" aria-label="Chapters">
       {chapters.map((chapter,index)=>{
         const ids=chapterNodeIds(chapter);

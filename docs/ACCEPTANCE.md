@@ -1,5 +1,11 @@
 # Acceptance status
 
+### 2026-10-17 (Faculty Classwork and gradebook refinements)
+- Replaced the Classwork chapter link with an accessible add-chapter dialog using syllabus chapter fields; saving creates/updates a compare-and-swap syllabus draft while preserving the published revision. Removed the assigned-subject selector. Stream published items now use the Classwork material-row styling, and offering headers use a more compact shared layout.
+- Gradebook now pages filtered student rows (25 per page by default), uses accessible icon controls for score editing and assessment-score links, and narrows score inputs to 70px. Editing an online quiz from its scores page now requires explicit confirmation. The sticky save bar is shorter.
+- Passed: frontend production build/type-check, ESLint, and `git diff --check`.
+- Authenticated browser inspection confirmed the assigned-subject control is absent, the add-chapter modal presents title/time allotment/topics, and the gradebook reports `1–25 of 206` with page-size and navigation controls. The browser environment did not reliably activate the gradebook pagination/edit and quiz-confirmation buttons, so those interactions and live score-input dimensions were not browser-verified. No chapter or quiz data was saved during browser checks.
+
 ### 2026-10-17 (Setup form clarity)
 - Category weights display zero as a blank input while retaining numeric zero internally for draft totals. The grading confirmation is a red-tinted callout with a 22px checkbox; it remains disabled until category weights total 100%. Category removal is icon-only with an accessible label; Add another category uses the primary action style; total messages are larger. Assessment planning and class schedule steps are labeled Optional.
 - Passed: frontend production build, ESLint, and `git diff --check`. Authenticated browser measurements confirmed the blank input, checkbox visibility/color, 44px remove target, primary add-category control, enlarged total, and both Optional labels.

@@ -5,6 +5,7 @@ import {useQuery} from '@tanstack/react-query';
 import {ApiError,api,post,send,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
 import {Dialog} from '../../components/Dialog';
+import {Pager} from '../../components/Pager';
 import {useHere,type Origin} from '../../components/origin';
 import type {OfferingSummary} from '../academics/types';
 import {PERIOD_LABEL,fmt,type Cell,type Gradebook,type GradeRow} from './types';
@@ -31,6 +32,7 @@ export function GradebookPage(){
   const [publishing,setPublishing]=useState<string|null>(null);
   const [message,setMessage]=useState('');
   const [find,setFind]=useState('');const [section,setSection]=useState('');const [only,setOnly]=useState('');   // view filters: they never change what Publish acts on
+  const [page,setPage]=useState(1);const [pageSize,setPageSize]=useState(25);
   const [editing,setEditing]=useState(false);
   const [edits,setEdits]=useState<Record<string,string>>({});          // cellKey -> typed score, only for cells that differ
   const [rejected,setRejected]=useState<Record<string,string>>({});    // cellKey -> why the server refused it
@@ -47,6 +49,9 @@ export function GradebookPage(){
   const periods=[...book.policy.periods.map(p=>p.key),'course'];
   const shown=periods.filter(p=>!only||p==='course'||p===only);
   const rows=book.rows.filter(r=>(!section||r.section===section)&&`${r.display_name} ${r.student_number}`.toLowerCase().includes(find.trim().toLowerCase()));
+  const pageCount=Math.max(1,Math.ceil(rows.length/pageSize));
+  const currentPage=Math.min(page,pageCount);
+  const pageRows=rows.slice((currentPage-1)*pageSize,currentPage*pageSize);
   const byPeriod=(period:string)=>book.columns.filter(c=>c.period===period);
   const label=(key:string|null)=>book.policy.categories.find(c=>c.key===key)?.label??key??'';
   const stats=Object.fromEntries(periods.map(p=>[p,periodStats(book,p)])) as Record<string,Stats>;
@@ -96,24 +101,26 @@ export function GradebookPage(){
     <section className="panel"><h3>Scores and grades</h3>
       <p className="muted">— means pending (not scored yet). 0.00 is a real recorded zero. “Unreleased change” means the student still sees an older result. Grades and ranks to share or download are on the Class standing tab.</p>
       <details className="more"><summary>Filter students</summary>
-        <div className="actions"><label>Find a student<input type="search" value={find} onChange={e=>setFind(e.target.value)} placeholder="Name or student number"/></label>
-          <label>Section<select aria-label="Filter scores and grades by section" value={section} onChange={e=>setSection(e.target.value)}><option value="">All sections ({book.rows.length})</option>{offering.sections.map(s=><option key={s.id} value={s.name}>{s.name} ({s.enrolled})</option>)}</select></label>
+        <div className="actions"><label>Find a student<input type="search" value={find} onChange={e=>{setFind(e.target.value);setPage(1)}} placeholder="Name or student number"/></label>
+          <label>Section<select aria-label="Filter scores and grades by section" value={section} onChange={e=>{setSection(e.target.value);setPage(1)}}><option value="">All sections ({book.rows.length})</option>{offering.sections.map(s=><option key={s.id} value={s.name}>{s.name} ({s.enrolled})</option>)}</select></label>
           <label>Period<select value={only} onChange={e=>setOnly(e.target.value)}><option value="">All periods</option>{book.policy.periods.map(p=><option key={p.key} value={p.key}>{PERIOD_LABEL[p.key]??p.key}</option>)}</select></label></div></details>
       <p className="muted" role="status">Showing {rows.length} of {book.rows.length} students.{editing?' Editing: type a score in any cell, then save once.':''}</p>
-      {!editing&&<div className="actions"><button disabled={closed} onClick={()=>{setEditing(true);setMessage('')}}>Edit scores</button><span className="muted">{closed?'This term is closed, so scores are read-only.':'Type scores straight into the table below.'}</span></div>}
+      {!editing&&<div className="actions"><button className="icon-button" type="button" aria-label="Edit scores" title="Edit scores" disabled={closed} onClick={()=>{setEditing(true);setMessage('')}}>✎</button><span className="muted">{closed?'This term is closed, so scores are read-only.':'Type scores straight into the table below.'}</span></div>}
       {editing&&<div className="actions sticky-bar"><button className="primary" disabled={changed===0||saving} onClick={saveAll}>{saving?'Saving…':changed===0?'Save scores':`Save ${changed} changed score${changed===1?'':'s'}`}</button><button disabled={saving} onClick={leaveEditing}>Cancel</button><span className="muted">{changed===0?'No changes yet.':'Nothing is saved until you press Save.'}</span></div>}
       <div className="table-wrap gradebook" role="region" aria-label="Gradebook, scrolls sideways" tabIndex={0}><table>
         <thead>
           <tr><th className="sticky">Student</th>{shown.filter(p=>p!=='course').map(p=><th key={p} colSpan={byPeriod(p).length+1}>{PERIOD_LABEL[p]??p}</th>)}<th>Course</th></tr>
           <tr><th className="sticky"><span className="sr-only">Student</span></th>
-            {shown.filter(p=>p!=='course').flatMap(p=>[...byPeriod(p).map(c=><th key={c.id}><Link state={here} to={`/faculty/offerings/${offering.id}/assessments/${c.id}/scores`} title="Open this assessment's scores and attempts">{c.title}</Link><br/><span className="muted">{label(c.category_key)} · /{fmt(c.max_points)}</span></th>),<th key={p+'g'}>Grade</th>])}
+            {shown.filter(p=>p!=='course').flatMap(p=>[...byPeriod(p).map(c=><th key={c.id}><span className="gradebook-assessment-title"><span>{c.title}</span><Link className="icon-button" state={here} to={`/faculty/offerings/${offering.id}/assessments/${c.id}/scores`} aria-label={`Open ${c.title} scores and attempts`} title={`Open ${c.title} scores and attempts`}>↗</Link></span><br/><span className="muted">{label(c.category_key)} · /{fmt(c.max_points)}</span></th>),<th key={p+'g'}>Grade</th>])}
             <th>Grade</th></tr></thead>
-        <tbody>{rows.map(r=><tr key={r.student_id}>
+        <tbody>{pageRows.map(r=><tr key={r.student_id}>
           <th className="sticky" scope="row"><button className="linklike" onClick={()=>setDetail(r)}>{r.display_name}</button><br/><span className="muted">{r.section??''}</span></th>
           {shown.filter(p=>p!=='course').flatMap(p=>[...byPeriod(p).map(c=><td key={c.id}><CellView cell={r.cells[c.id]} kind={c.kind} column={c.title} student={r.display_name} editing={editing&&editable(c.kind,r.cells[c.id])} value={edits[cellKey(c.id,r.student_id)]} problem={rejected[cellKey(c.id,r.student_id)]}
             onType={v=>typeScore(c.id,r.student_id,r.cells[c.id],v)}/></td>),
             <td key={p+'g'}><GradeCell row={r} period={p} onReview={setDetail}/></td>])}
-          <td><GradeCell row={r} period="course" onReview={setDetail}/></td></tr>)}</tbody></table></div></section>
+          <td><GradeCell row={r} period="course" onReview={setDetail}/></td></tr>)}</tbody></table></div>
+      <Pager page={currentPage} pageSize={pageSize} total={rows.length} onPage={setPage} onSize={size=>{setPageSize(size);setPage(1)}}/>
+    </section>
 
     {detail&&<DetailDialog row={detail} here={here} base={`/faculty/offerings/${offering.id}`} onClose={()=>setDetail(null)}/>}
     {publishing&&<PublishDialog offeringId={offering.id} period={publishing} stats={stats[publishing]} onClose={()=>setPublishing(null)} onPublished={refresh}/>}
