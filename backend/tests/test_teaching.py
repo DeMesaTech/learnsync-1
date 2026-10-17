@@ -78,6 +78,30 @@ def test_syllabus_draft_publish_and_student_visibility(course):
     assert st1.get(learn(course, "/syllabus")).json()["published"]["version"] == 2
 
 
+def test_subject_introduction_is_preserved_and_must_be_first(course):
+    fac = course["fac"]
+    draft = fac.post(t(course, "/syllabus/draft")).json()
+    outline, _, _ = make_outline()
+    introduction = {"id": uid(), "title": "Introduction to Entrepreneurship", "is_intro": True}
+    saved = fac.put(t(course, "/syllabus/draft"),
+                    {"expected_counter": draft["counter"],
+                     "outline": {**outline, "chapters": [introduction, *outline["chapters"]]}})
+    assert saved.status_code == 200, saved.text
+    state = fac.get(t(course, "/syllabus")).json()["draft"]
+    assert state["outline"]["chapters"][0]["is_intro"] is True
+
+    duplicate = {**introduction, "id": uid()}
+    refused = fac.put(t(course, "/syllabus/draft"),
+                      {"expected_counter": saved.json()["counter"],
+                       "outline": {**outline, "chapters": [introduction, duplicate, *outline["chapters"]]}})
+    assert refused.status_code == 422
+
+    out_of_order = fac.put(t(course, "/syllabus/draft"),
+                           {"expected_counter": saved.json()["counter"],
+                            "outline": {**outline, "chapters": [*outline["chapters"], introduction]}})
+    assert out_of_order.status_code == 422
+
+
 def test_second_tab_cannot_silently_overwrite(course):
     fac_a, fac_b = course["fac"], Api("faculty@example.com")     # two browser tabs
     draft = fac_a.post(t(course, "/syllabus/draft")).json()

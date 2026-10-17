@@ -39,12 +39,12 @@ export function ClassStandingPage(){
         <p className="muted">Ties share a rank (1, 2, 2, 4). A student without a {basis==='published'?'published':'complete'} grade is not ranked, which is different from a grade of zero. Search only filters this list; it never changes a rank.{mixed&&' Releases here were made under different grading policy versions and are ranked as recorded.'}</p>
         <label>Find a student<input type="search" value={find} onChange={e=>setFind(e.target.value)} placeholder="Name or student number"/></label>
         {rows.length===0?<p className="muted">No students match.</p>:
-        <div className="table-wrap" role="region" tabIndex={0} aria-label="Class standing, scrolls sideways"><table>
-          <thead><tr><th scope="col">Rank</th><th scope="col" className="sticky">Student</th><th scope="col">Section</th>{d.columns.slice(4,grade).map(c=><th key={c} scope="col">{c}</th>)}<th scope="col">Grade</th><th scope="col">Remark</th><th scope="col">Status</th></tr></thead>
+        <div className="table-wrap" role="region" tabIndex={0} aria-label="Class standing, scrolls sideways"><table className="class-standing-table">
+          <thead><tr><th scope="col">Rank</th><th scope="col">Section</th><th scope="col">Student number</th><th scope="col">Student</th>{d.columns.slice(4,grade).map(c=><th key={c} scope="col">{c}</th>)}<th scope="col">Grade</th><th scope="col">Remark</th><th scope="col">Status</th></tr></thead>
           <tbody>{rows.map(({r,id})=><tr key={id}>
-            <td><strong>{r[0]===null?'—':r[0]}</strong></td>
-            <th scope="row" className="sticky"><Link state={here} to={`/faculty/offerings/${offering.id}/students/${id}`}>{r[2]}</Link><br/><span className="muted">{r[1]}</span></th>
-            <td>{r[3]}</td>{r.slice(4,grade).map((v,i)=><td key={i}>{typeof v==='number'?fmt(v):v??'—'}</td>)}
+            <td><strong>{r[0]===null?'—':r[0]}</strong></td><td>{r[3]??'—'}</td><td className="student-number">{r[1]}</td>
+            <th scope="row" className="student-name"><Link state={here} to={`/faculty/offerings/${offering.id}/students/${id}`}>{r[2]}</Link></th>
+            {r.slice(4,grade).map((v,i)=><td key={i}>{typeof v==='number'?fmt(v):v??'—'}</td>)}
             <td><strong>{typeof r[grade]==='number'?fmt(r[grade] as number):'—'}</strong></td><td>{r[grade+1]||'—'}</td><td className="muted">{r[grade+2]}</td></tr>)}</tbody></table></div>}
       </section>}
     <ExportPanel offering={offering} periods={periods} initial={{period,basis,section}} ranked/>

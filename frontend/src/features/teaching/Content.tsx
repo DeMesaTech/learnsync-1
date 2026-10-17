@@ -12,7 +12,7 @@ import {RichEditor} from './RichEditor';
 import {ReferenceText} from '../study/ReferenceText';
 import {nodeLabels,type FileRef,type Item,type ItemDraftContent,type SyllabusState} from './types';
 
-export const KIND={lesson:'Lesson',file:'File',reference:'Link'} as const;
+export const KIND={lesson:'Lesson',file:'Module',reference:'Link'} as const;
 export const itemTitle=(i:Item)=>i.draft?.title||i.published?.title||'Untitled';
 export const stateLabel=(i:Item)=>i.archived?'Archived':i.published?(i.draft?`Published v${i.published.version} with newer draft`:`Published v${i.published.version}`):'Draft · not visible to students';
 

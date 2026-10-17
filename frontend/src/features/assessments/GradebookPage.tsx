@@ -110,12 +110,12 @@ export function GradebookPage(){
       {editing&&<div className="actions sticky-bar"><button className="primary" disabled={changed===0||saving} onClick={saveAll}>{saving?'Saving…':changed===0?'Save scores':`Save ${changed} changed score${changed===1?'':'s'}`}</button><button disabled={saving} onClick={leaveEditing}>Cancel</button><span className="muted">{changed===0?'No changes yet.':'Nothing is saved until you press Save.'}</span></div>}
       <div className="table-wrap gradebook" role="region" aria-label="Gradebook, scrolls sideways" tabIndex={0}><table>
         <thead>
-          <tr><th className="sticky">Student</th>{shown.filter(p=>p!=='course').map(p=><th key={p} colSpan={byPeriod(p).length+1}>{PERIOD_LABEL[p]??p}</th>)}<th>Course</th></tr>
-          <tr><th className="sticky"><span className="sr-only">Student</span></th>
+          <tr><th scope="col" className="sticky" rowSpan={2}>Section</th><th scope="col" rowSpan={2}>Student number</th><th scope="col" rowSpan={2}>Student</th>{shown.filter(p=>p!=='course').map(p=><th key={p} colSpan={byPeriod(p).length+1}>{PERIOD_LABEL[p]??p}</th>)}<th>Course</th></tr>
+          <tr>
             {shown.filter(p=>p!=='course').flatMap(p=>[...byPeriod(p).map(c=><th key={c.id}><span className="gradebook-assessment-title"><span>{c.title}</span><Link className="icon-button" state={here} to={`/faculty/offerings/${offering.id}/assessments/${c.id}/scores`} aria-label={`Open ${c.title} scores and attempts`} title={`Open ${c.title} scores and attempts`}>↗</Link></span><br/><span className="muted">{label(c.category_key)} · /{fmt(c.max_points)}</span></th>),<th key={p+'g'}>Grade</th>])}
             <th>Grade</th></tr></thead>
         <tbody>{pageRows.map(r=><tr key={r.student_id}>
-          <th className="sticky" scope="row"><button className="linklike" onClick={()=>setDetail(r)}>{r.display_name}</button><br/><span className="muted">{r.section??''}</span></th>
+          <td className="sticky">{r.section??'—'}</td><td className="student-number">{r.student_number}</td><th className="student-name" scope="row"><button className="linklike" onClick={()=>setDetail(r)}>{r.display_name}</button></th>
           {shown.filter(p=>p!=='course').flatMap(p=>[...byPeriod(p).map(c=><td key={c.id}><CellView cell={r.cells[c.id]} kind={c.kind} column={c.title} student={r.display_name} editing={editing&&editable(c.kind,r.cells[c.id])} value={edits[cellKey(c.id,r.student_id)]} problem={rejected[cellKey(c.id,r.student_id)]}
             onType={v=>typeScore(c.id,r.student_id,r.cells[c.id],v)}/></td>),
             <td key={p+'g'}><GradeCell row={r} period={p} onReview={setDetail}/></td>])}

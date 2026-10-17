@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState,type KeyboardEvent,type MutableRefObject} from 'react';
+import {useEffect,useLayoutEffect,useRef,useState,type KeyboardEvent,type MutableRefObject} from 'react';
 import {useOutletContext} from 'react-router-dom';
 import {useQuery,type UseQueryResult} from '@tanstack/react-query';
 import {api,send,errorText} from '../../app/api';
@@ -42,12 +42,19 @@ export function AttendancePage(){
   const [selection,setSelection]=useState({offeringId:offering.id,sectionId:offering.sections[0]?.id??''});
   const activeSectionId=selection.offeringId===offering.id?selection.sectionId:offering.sections[0]?.id??'';
   const sectionId=offering.sections.some(s=>s.id===activeSectionId)?activeSectionId:offering.sections[0]?.id??'';
-  const setSectionId=(id:string)=>setSelection({offeringId:offering.id,sectionId:id});
+  const scrollPosition=useRef<number|null>(null);
+  const setSectionId=(id:string)=>{scrollPosition.current=window.scrollY;setSelection({offeringId:offering.id,sectionId:id})};
   const [mode,setMode]=useState<Mode>(()=>window.matchMedia('(min-width:768px)').matches?'grid':'day');   // a grid needs room; phones start with one day
   const [date,setDate]=useState(today);
   const [range,setRange]=useState<'week'|'month'>('week');
   const query=useQuery({queryKey:['attendance',offering.id,sectionId],enabled:!!sectionId,
     queryFn:()=>api<Data>(`/teach/offerings/${offering.id}/attendance?section_id=${sectionId}`)});
+  useLayoutEffect(()=>{
+    if(scrollPosition.current!==null&&!query.isFetching){
+      window.scrollTo(0,scrollPosition.current);
+      scrollPosition.current=null;
+    }
+  },[sectionId,query.isFetching]);
   if(offering.sections.length===0)return <section className="panel"><h2>No sections</h2><p>This subject has no sections yet.</p></section>;
   const props={offering,sectionId,setSectionId,query,setMode,date,setDate,range,setRange};
   return <>
@@ -185,6 +192,12 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
     timers.current[d]=window.setTimeout(()=>void flush(d),600);
   }
   const markRest=(d:string)=>setMarks(d,Object.fromEntries(roster.filter(r=>valueOf(d,r.student_id)===null).map(r=>[r.student_id,'present' as Status])));
+  async function unmarkDate(d:string){
+    const marked=roster.filter(r=>valueOf(d,r.student_id)!==null);
+    if(marked.length===0)return;
+    if(!await ask({title:`Unmark all attendance for ${pretty(d)}?`,message:`This clears attendance for ${marked.length} student${marked.length===1?'':'s'} on this date, across every page.`,yes:'Unmark all',danger:true}))return;
+    setMarks(d,Object.fromEntries(marked.map(r=>[r.student_id,null])));
+  }
 
   function move(r:number,c:number){
     const rr=Math.max(0,Math.min(roster.length-1,r)),cc=Math.max(0,Math.min(dates.length-1,c));
@@ -257,15 +270,16 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
         </select></label>}
         <div className="table-wrap" role="region" aria-label="Attendance grid, scrolls sideways" tabIndex={0}>
         <table className="att-grid" ref={table}><caption className="sr-only">Attendance: students down, dates across. Use the arrow keys to move between cells, then P, L, A or E to mark and Delete to clear. Enter or Space changes the status. Use the unmark buttons to clear a selected mark or every mark for its date.</caption>
-          <thead><tr><th scope="col" className="sticky">Student</th>{dates.map(d=>{const rec=byDate.get(d);const marked=roster.filter(r=>valueOf(d,r.student_id)!==null).length;
+          <thead><tr><th scope="col" className="sticky">Student</th><th scope="col">Student number</th>{dates.map(d=>{const rec=byDate.get(d);const marked=roster.filter(r=>valueOf(d,r.student_id)!==null).length;
+            const allMarked=roster.length>0&&marked===roster.length;
             const full=range==='week'||isClass(d)||!!rec;      // a month is wide: only class days and recorded days carry the controls
             return <th scope="col" key={d} className={meeting>0&&!isClass(d)&&!rec?'att-off':undefined}><div className="att-head"><strong>{DAY[dayOf(d)]} {parse(d).getDate()}</strong>
               {meeting>0&&!isClass(d)&&!rec&&<span className="muted">no class</span>}
               {full&&(rec?<span className="muted">{PERIOD_LABEL[rec.period]}</span>
                 :<select aria-label={`Grading period for ${pretty(d)}`} value={periodOf(d)} disabled={closed} onChange={e=>setPeriods(p=>({...p,[d]:e.target.value as Period}))}><option value="midterm">Midterm</option><option value="finals">Finals</option></select>)}
               {(marked>0||full)&&<span className="muted">{marked}/{roster.length} marked</span>}
-              {full&&<button type="button" className="icon-button" aria-label={`Mark unmarked students present for ${pretty(d)}`} title={`Mark rest present for ${pretty(d)}`} disabled={closed||marked===roster.length} onClick={()=>markRest(d)}>✓</button>}</div></th>})}</tr></thead>
-          <tbody>{pageRoster.map((r,ri)=>{const rowIndex=(currentPage-1)*PAGE_SIZE+ri;return <tr key={r.student_id}><th scope="row" className="sticky">{r.display_name}<br/><span className="muted">{r.student_number}</span></th>
+              {full&&<button type="button" className="icon-button" aria-label={allMarked?`Unmark all attendance for ${pretty(d)}`:`Mark unmarked students present for ${pretty(d)}`} title={allMarked?'Unmark all':`Mark rest present for ${pretty(d)}`} disabled={closed||(!allMarked&&marked===roster.length)} onClick={()=>allMarked?void unmarkDate(d):markRest(d)}>{allMarked?'×':'✓'}</button>}</div></th>})}</tr></thead>
+          <tbody>{pageRoster.map((r,ri)=>{const rowIndex=(currentPage-1)*PAGE_SIZE+ri;return <tr key={r.student_id}><th scope="row" className="sticky">{r.display_name}</th><td className="student-number">{r.student_number}</td>
             {dates.map((d,ci)=>{const v=valueOf(d,r.student_id);const failed=!!errors[d]&&edits[d]?.[r.student_id]!==undefined;
               return <td key={d}><button type="button" className={`att-cell ${v??'none'}${failed?' err':''}`} data-r={rowIndex} data-c={ci} tabIndex={active.r===rowIndex&&active.c===ci?0:-1} disabled={closed}
                 aria-label={`${r.display_name}, ${pretty(d)}: ${v?LABEL[v]:'not marked'}${failed?' (not saved)':''}`}

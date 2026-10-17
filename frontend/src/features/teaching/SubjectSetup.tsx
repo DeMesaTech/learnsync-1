@@ -314,6 +314,7 @@ function Flow({offering,draft,published,warnings,onChanged,onFinished}:{offering
   const [counts,setCounts]=useState<Counts>({online_quiz:{midterm:2,finals:2},activity:{midterm:1,finals:1},exam:{midterm:1,finals:1}});
   const [planned,setPlanned]=useState(0);
   const [days,setDays]=useState(offering.meeting_days??0);
+  const [templateIntro,setTemplateIntro]=useState(false);
   const existing=useQuery({queryKey:['assessments',offering.id],queryFn:()=>api<{id:string}[]>(`/teach/offerings/${offering.id}/assessments`)});
   const set=(next:Partial<SyllabusDraftContent>)=>auto.setValue({outline,grading_policy,...next});
   const index=STEPS.findIndex(s=>s[0]===step);
@@ -341,7 +342,10 @@ function Flow({offering,draft,published,warnings,onChanged,onFinished}:{offering
     catch(e){setMessage(errorText(e))}
   }
   async function reload(){const s=await api<SyllabusState>(url);if(!s.draft)throw new Error('The draft no longer exists.');return {value:{outline:s.draft.outline,grading_policy:s.draft.grading_policy},counter:s.draft.counter}}
-  const starter=()=>set({outline:{...outline,chapters:STARTER_CHAPTERS.map(title=>({...emptyChapter(),title}))}});
+  const starter=()=>set({outline:{...outline,chapters:[
+    ...(templateIntro?[{...emptyChapter(),title:`Introduction to ${offering.subject.title}`,is_intro:true}]:[]),
+    ...STARTER_CHAPTERS.map(title=>({...emptyChapter(),title})),
+  ]}});
   const topics=outline.chapters.reduce((n,c)=>n+c.topics.length,0);
   const total=(grading_policy?.categories??[]).reduce((a,c)=>a+Number(c.weight||0),0);
   const policyOk=!grading_policy||grading_policy.categories.length===0||Math.abs(total-100)<=0.01;
@@ -358,6 +362,7 @@ function Flow({offering,draft,published,warnings,onChanged,onFinished}:{offering
 
     {step==='outline'&&<>
       {outline.chapters.length===0&&<section className="panel"><h3>Start with a starter outline?</h3><p className="muted">Four chapters that you can rename and fill in. You can also add your own below.</p>
+        <label className="inline"><input type="checkbox" checked={templateIntro} onChange={event=>setTemplateIntro(event.target.checked)}/> Include a subject introduction chapter</label>
         <button className="primary" onClick={starter}>Use the starter outline</button></section>}
       <ChaptersStep outline={outline} onChange={(o:Outline)=>set({outline:o})}/></>}
 

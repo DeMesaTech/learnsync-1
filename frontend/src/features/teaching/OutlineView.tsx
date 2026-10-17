@@ -14,7 +14,7 @@ export function OutlineView({outline,policy,coveredOn,extra}:{outline:Outline;po
     <section className="panel"><h2>Course coverage</h2>
       {outline.chapters.length===0&&<p className="muted">No chapters yet.</p>}
       {outline.chapters.map(ch=><article className="chapter" key={ch.id}>
-        <h3>{ch.title||'Untitled'} {ch.weeks&&<span className="muted">· {ch.weeks}</span>} {tag(ch.id)}</h3>
+        <h3>{ch.is_intro?'Subject introduction: ':''}{ch.title||'Untitled'} {ch.weeks&&<span className="muted">· {ch.weeks}</span>} {tag(ch.id)}</h3>
         {extra?.(ch.id)}
         {ch.topics.length>0&&<ul>{ch.topics.map(t=><li key={t.id}>{t.title} {tag(t.id)} {extra?.(t.id)}</li>)}</ul>}
         </article>)}</section>

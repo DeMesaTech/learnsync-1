@@ -20,6 +20,7 @@ class Chapter(BaseModel):
     id: uuid.UUID
     title: str = Field(default="", max_length=300)
     weeks: str = Field(default="", max_length=60)
+    is_intro: bool = False
     topics: list[Topic] = Field(default_factory=list, max_length=100)
     subsections: list[Subsection] = Field(default_factory=list, max_length=50)
 
@@ -51,6 +52,11 @@ class Outline(BaseModel):
     @model_validator(mode="after")
     def unique_ids(self):
         ids = [o.id for o in self.outcomes]
+        introductions = [index for index, chapter in enumerate(self.chapters) if chapter.is_intro]
+        if len(introductions) > 1:
+            raise ValueError("An outline can have only one subject introduction.")
+        if introductions and introductions[0] != 0:
+            raise ValueError("The subject introduction must be the first chapter.")
         for chapter in self.chapters:
             ids.append(chapter.id)
             ids += [t.id for t in chapter.topics]

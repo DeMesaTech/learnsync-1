@@ -1,3 +1,9 @@
+/**This page contains:
+ * - a header with the school logo, the user's name and role, a theme selector, and a sign-out button
+ * - a sidebar with navigation links, grouped by function, and a toggle button for small screens
+ * - a main content area where the current route's component is rendered
+ * - a StudyBuddy component for students, which shows study chat notifications
+ */
 import {useEffect,useRef,useState} from 'react';
 import {Link,NavLink,Outlet,Navigate} from 'react-router-dom';
 import {useAuth,useTheme,queryClient} from '../app/providers';
@@ -48,11 +54,11 @@ export function Shell(){
     queryFn:async():Promise<ClassLink[]>=>{
       if(session?.user?.role==='faculty'){
         const offerings=await api<OfferingSummary[]>('/me/offerings');
-        return offerings.map(o=>({to:`/faculty/offerings/${o.id}`,label:o.subject.code,icon:'↳'}));
+        return offerings.map(o=>({to:`/faculty/offerings/${o.id}/classwork`,label:o.subject.code,icon:'↳'}));
       }
       if(session?.user?.role==='student'){
         const subjects=await api<MySubject[]>('/me/subjects');
-        return subjects.map(s=>({to:`/student/offerings/${s.offering_id}`,label:s.subject.code,icon:'↳'}));
+        return subjects.map(s=>({to:`/student/offerings/${s.offering_id}/classwork`,label:s.subject.code,icon:'↳'}));
       }
       return [];
     }});
@@ -98,14 +104,17 @@ export function Shell(){
           <p className="nav-label">{group.label}</p>
           {group.items.map(i=>i.children?
             <div className="nav-subgroup" key={i.to}>
+              {/* Change this link's destination in the navigation() function above (the item's to value). */}
               <NavLink to={i.to} end={i.end} className={({isActive})=>isActive?'active':undefined}>
                 <span className="nav-icon" aria-hidden="true">{i.icon}</span>{i.label}
               </NavLink>
+              {/* Change class-link destinations in the classes query above (the ClassLink to value). */}
               {i.children.map(child=><NavLink key={child.to} to={child.to} className={({isActive})=>isActive?'active nav-child':'nav-child'}>
                 <span className="nav-icon" aria-hidden="true">{child.icon}</span>{child.label}
               </NavLink>)}
             </div> :
             <NavLink key={i.to} to={i.to} end={i.end} className={({isActive})=>isActive?'active':''}>
+              {/* Change this link's destination in the navigation() function above (the item's to value). */}
               <span className="nav-icon" aria-hidden="true">{i.icon}</span>{i.label}{i.dot&&<UpdatesDot userId={user.id}/>}
             </NavLink>) }
         </div>)}

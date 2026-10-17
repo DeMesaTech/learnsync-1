@@ -1,6 +1,6 @@
 import type React from 'react';
 import {useEffect,useRef,useState} from 'react';
-import {Link,useNavigate,useOutletContext,useSearchParams} from 'react-router-dom';
+import {Link,useOutletContext,useSearchParams} from 'react-router-dom';
 import {ClassworkTypes,catOf,CATS} from '../../components/ClassworkTypes';
 import {Dialog} from '../../components/Dialog';
 import {useHere} from '../../components/origin';
@@ -15,21 +15,24 @@ import {AssessmentEditorDialog} from '../assessments/AssessmentEditor';
 import {detail as workDetail} from '../assessments/Work';
 import {KIND_LABEL,fmt,type Assessment,type Kind,type LearnItem as Work} from '../assessments/types';
 import {ItemEditorDialog,KIND,NewItemDialog,itemTitle,stateLabel,useNodes} from './Content';
+import {AnnouncementCreateDialog} from './Announcements';
 import {emptyChapter,newId,type Chapter,type Item,type LearnItem,type LearnSyllabus,type Outline,type SyllabusState} from './types';
 
-type Create={type:'item';kind:Item['kind']}|{type:'item-editor';itemId:string}|{type:'assessment';kind:Kind}|{type:'assessment-editor';assessmentId:string}|{type:'ai'}|null;
+type Create={type:'item';kind:Item['kind']}|{type:'item-editor';itemId:string}|{type:'assessment';kind:Kind}|{type:'assessment-editor';assessmentId:string}|{type:'ai'}|{type:'announcement'}|null;
 interface Row{canUnpublish:boolean;pending:boolean;key:string;type:'item'|'assessment';kind:string;sectionIds:string[];id:string;title:string;label:string;anchor:string|null;archived:boolean;status:string;published:boolean;to:string;meta:string}
-type MaterialFilter='all'|'lesson'|'module'|'activity'|'online_quiz'|'other';
+type MaterialFilter='all'|'lesson'|'quiz'|'activity'|'exam';
 
-const CREATE:[string,Create|'stream'][]=[['Lesson',{type:'item',kind:'lesson'}],['File',{type:'item',kind:'file'}],['Link',{type:'item',kind:'reference'}],
-  ['Quiz',{type:'assessment',kind:'online_quiz'}],['Paper quiz',{type:'assessment',kind:'offline_quiz'}],['Activity',{type:'assessment',kind:'activity'}],['Examination',{type:'assessment',kind:'exam'}],
-  ['Teacher-scored item',{type:'assessment',kind:'manual'}],['Quiz drafted by AI',{type:'ai'}],['Announcement','stream']];
+const CREATE_GROUPS:{label:string;options:[string,Create][]}[]=[
+  {label:'Lessons',options:[['Lesson',{type:'item',kind:'lesson'}],['Module',{type:'item',kind:'file'}],['Link',{type:'item',kind:'reference'}]]},
+  {label:'Quizzes',options:[['Online quiz',{type:'assessment',kind:'online_quiz'}],['Paper quiz',{type:'assessment',kind:'offline_quiz'}],['Quiz drafted by AI',{type:'ai'}]]},
+  {label:'Activities',options:[['Activity',{type:'assessment',kind:'activity'}],['Teacher-scored item',{type:'assessment',kind:'manual'}]]},
+  {label:'Exams',options:[['Examination',{type:'assessment',kind:'exam'}]]},
+];
 
 /** Teachers: everything you teach and assign in one place, grouped by syllabus topic, with one Create menu. */
 export function FacultyClasswork(){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const closed=offering.term_status!=='active';
-  const navigate=useNavigate();
   const base=`/faculty/offerings/${offering.id}`;
   const items=useQuery({queryKey:['items',offering.id],queryFn:()=>api<Item[]>(`/teach/offerings/${offering.id}/items`)});
   const assessments=useQuery({queryKey:['assessments',offering.id],queryFn:()=>api<Assessment[]>(`/teach/offerings/${offering.id}/assessments`)});
@@ -40,6 +43,7 @@ export function FacultyClasswork(){
   const [addingChapter,setAddingChapter]=useState(false);
   const [search,setSearch]=useState('');const [archived,setArchived]=useState(false);
   const [materialFilter,setMaterialFilter]=useState<MaterialFilter>('all');
+  const [chapterDisplay,setChapterDisplay]=useState<'single'|'all'>('single');
   const [sectionId,setSectionId]=useState(offering.sections[0]?.id??'all');
   const [activeChapter,setActiveChapter]=useState('');
   const [reorder,setReorder]=useState<string|null>(null);const [moved,setMoved]=useState('');
@@ -54,7 +58,7 @@ export function FacultyClasswork(){
     document.addEventListener('click',outside);document.addEventListener('keydown',escape);
     return()=>{document.removeEventListener('click',outside);document.removeEventListener('keydown',escape)};
   },[]);
-  const choose=(c:Create|'stream')=>{if(menu.current)menu.current.open=false;if(c==='stream')navigate(`${base}/stream`);else setCreate(c)};
+  const choose=(c:Create)=>{if(menu.current)menu.current.open=false;setCreate(c)};
 
   const rows:Row[]=[
     ...(items.data??[]).map(i=>({canUnpublish:false,pending:!!i.draft,key:'i'+i.id,type:'item' as const,kind:i.kind,sectionIds:i.section_ids,id:i.id,title:itemTitle(i),label:KIND[i.kind],anchor:(i.published??i.draft)?.anchor_node_id??null,archived:i.archived,
@@ -65,10 +69,11 @@ export function FacultyClasswork(){
         meta:`${KIND_LABEL[a.kind]}${rev?.ai_generated?` · AI draft${rev.reviewed?' reviewed':' needs review'}`:''}${rev?.include_in_grade?` · ${fmt(rev.max_points??0)} pts`:' · not graded'}${a.published?.deadline?` · due ${new Date(a.published.deadline).toLocaleDateString()}`:''}`}})];
   const selectedSection=offering.sections.find(section=>section.id===sectionId);
   const isVisibleToSection=(r:Row)=>!selectedSection||!r.sectionIds.length||r.sectionIds.includes(selectedSection.id);
-  const matchesFilter=(r:Row)=>materialFilter==='all'||(materialFilter==='lesson'&&r.kind==='lesson')||
-    (materialFilter==='module'&&r.kind==='file')||(materialFilter==='activity'&&r.kind==='activity')||
-    (materialFilter==='online_quiz'&&r.kind==='online_quiz')||
-    (materialFilter==='other'&&!['lesson','file','activity','online_quiz'].includes(r.kind));
+  const matchesFilter=(r:Row)=>materialFilter==='all'||
+    (materialFilter==='lesson'&&r.type==='item')||
+    (materialFilter==='quiz'&&r.type==='assessment'&&['online_quiz','offline_quiz'].includes(r.kind))||
+    (materialFilter==='activity'&&r.type==='assessment'&&['activity','manual'].includes(r.kind))||
+    (materialFilter==='exam'&&r.kind==='exam');
   const match=(r:Row)=>r.title.toLowerCase().includes(search.trim().toLowerCase());
   const shown=(r:Row)=>isVisibleToSection(r)&&(archived||!r.archived)&&match(r)&&matchesFilter(r);
   const outline=syllabus.data?.draft?.outline??syllabus.data?.published?.outline;
@@ -79,6 +84,8 @@ export function FacultyClasswork(){
   const selectedChapter=chapters.find(chapter=>chapter.id===activeChapter)??chapters[0];
   const selectedChapterId=selectedChapter?.id??'other';
   const selectedTree=tree.find(node=>node.id===selectedChapterId);
+  const chapterTrees=chapters.map(chapter=>tree.find(node=>node.id===chapter.id)??{id:chapter.id,title:chapter.title||'Untitled chapter',rows:[],kids:[]} as TNode<Row>);
+  const otherTree=tree.find(node=>node.id==='other');
   const published=syllabus.data?.published;const draft=syllabus.data?.draft;
 
   const inNode=(n:TNode<Row>,r:Row)=>n.id==='other'?(!r.anchor||!known.has(r.anchor)):r.anchor===n.id;
@@ -137,34 +144,56 @@ export function FacultyClasswork(){
       <article><span aria-hidden="true">✓</span><div><strong>{publishedCount}</strong><small>Published</small></div></article>
       <article><span aria-hidden="true">✎</span><div><strong>{draftCount}</strong><small>Drafts</small></div></article>
     </section>
+    <div className="chapter-display-options">
+      <div className="segmented" role="group" aria-label="Chapter display">
+        <button type="button" className={chapterDisplay==='all'?'on':''} aria-label="Show all chapters" title="Show all chapters" aria-pressed={chapterDisplay==='all'} onClick={()=>setChapterDisplay('all')}>▤</button>
+        <button type="button" className={chapterDisplay==='single'?'on':''} aria-label="Show one chapter at a time" title="Show one chapter at a time" aria-pressed={chapterDisplay==='single'} onClick={()=>setChapterDisplay('single')}>▣</button>
+      </div>
+    </div>
     {!published&&!draft&&!closed&&<section className="panel" aria-labelledby="syl-h"><h3 id="syl-h">Set up this subject</h3><p className="muted">Not set up yet. A guided setup creates the syllabus, grading policy and first topics in a few steps.</p>
       <Link className="button primary" to={`${base}/setup`}>Set up this subject</Link></section>}
     {moved&&<p role="status" className="muted">{moved}</p>}
     {(items.isPending||assessments.isPending)?<p>Loading…</p>:items.error||assessments.error?<p role="alert">{(items.error??assessments.error)!.message}</p>:
       <div className="chapter-workspace">
-        <ChapterNavigation outline={outline} rows={visibleRows} selected={selectedChapterId} onSelect={setActiveChapter} onAdd={()=>setAddingChapter(true)} canAdd={!closed}/>
+        <ChapterNavigation outline={outline} rows={visibleRows} selected={selectedChapterId} onSelect={id=>{setActiveChapter(id);if(chapterDisplay==='all')document.getElementById(`chapter-${id}`)?.scrollIntoView({behavior:'smooth',block:'start'})}} onAdd={()=>setAddingChapter(true)} canAdd={!closed}/>
         <section className="chapter-detail panel">
           <header className="chapter-detail-heading">
-            <div><p className="eyebrow">{selectedChapter?`CHAPTER ${chapters.indexOf(selectedChapter)+1}`:'OTHER MATERIALS'}</p>
-              <h2>{selectedChapter?`Chapter ${chapters.indexOf(selectedChapter)+1}: ${selectedChapter.title||'Untitled'}`:'Other materials'}</h2>
-              <p className="muted">Manage learning resources for this chapter.</p></div>
-            {!closed&&<details className="dropdown" ref={menu}><summary className="button primary" aria-disabled={closed}>＋ Add material</summary>
-              <div className="menu-list" role="group" aria-label="Add material">{CREATE.map(([label,target],index)=><span key={label} className="menu-item">{(index===3||index===8)&&<hr/>}
-                <button type="button" onClick={()=>choose(target)}>{label}</button></span>)}</div></details>}
+            <div><p className="eyebrow">{chapterDisplay==='all'?'ALL CHAPTERS':selectedChapter?(selectedChapter.is_intro?'SUBJECT INTRODUCTION':`CHAPTER ${chapters.slice(0,chapters.indexOf(selectedChapter)).filter(chapter=>!chapter.is_intro).length+1}`):'OTHER MATERIALS'}</p>
+              <h2>{chapterDisplay==='all'?'All chapters':selectedChapter?(selectedChapter.is_intro?(selectedChapter.title||'Subject Introduction'):`Chapter ${chapters.slice(0,chapters.indexOf(selectedChapter)).filter(chapter=>!chapter.is_intro).length+1}: ${selectedChapter.title||'Untitled'}`):'Other materials'}</h2>
+              <p className="muted">{chapterDisplay==='all'?'Browse all chapters in syllabus order. Choose a chapter to add material there.':'Manage learning resources for this chapter.'}</p></div>
           </header>
           {stranded&&<p className="warn" role="status">Items cannot be reordered because some are attached to a topic that is no longer in the syllabus. <Link to={stranded.to}>Open “{stranded.title}”</Link> and choose a current topic.</p>}
           <div className="chapter-materials">
-            <div className="section-head"><h3>Learning materials</h3><span className="muted">{selectedTree?total(selectedTree):0} items</span></div>
+            <div className="section-head"><h3>Learning materials</h3><span className="muted">{chapterDisplay==='all'?`${visibleRows.length} items`:`${selectedTree?total(selectedTree):0} items`}</span></div>
             <div className="chapter-material-tools">
               <label className="chapter-material-search">Search chapter materials<input type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="Search chapter materials…"/></label>
               <div className="chapter-material-filters" role="group" aria-label="Filter chapter materials">
-                {([['all','All'],['lesson','Lesson'],['module','Module'],['activity','Activity'],['online_quiz','Online quiz'],['other','Other']] as const).map(([key,label])=>
-                  <button key={key} type="button" className={materialFilter===key?'active':''} aria-pressed={materialFilter===key} onClick={()=>setMaterialFilter(key)}>{label}</button>)}
+                {([['lesson','Lessons'],['quiz','Quizzes'],['activity','Activities'],['exam','Exams']] as const).map(([key,label])=>
+                  <button key={key} type="button" className={materialFilter===key?'active':''} aria-pressed={materialFilter===key} aria-label={materialFilter===key?`${label}; click again to show all`:label}
+                    onClick={()=>setMaterialFilter(materialFilter===key?'all':key)}>{label}</button>)}
               </div>
               <label className="inline chapter-archived"><input type="checkbox" checked={archived} onChange={event=>setArchived(event.target.checked)}/> Show archived</label>
             </div>
-            {selectedTree?branch(selectedTree,0,true):<p className="muted">{search||materialFilter!=='all'||archived?'Nothing matches the current filters.':'No learning materials in this chapter yet.'}</p>}
+            {chapterDisplay==='single'
+              ?selectedTree?branch(selectedTree,0,true):<p className="muted">{search||materialFilter!=='all'||archived?'Nothing matches the current filters.':'No learning materials in this chapter yet.'}</p>
+              :<div className="chapter-all-list">
+                {chapterTrees.map((node,index)=><details key={node.id} id={`chapter-${node.id}`} className="chapter-all-entry" open>
+                  <summary><h3>{chapters[index].is_intro?`Subject introduction · ${node.title}`:`Chapter ${chapters.slice(0,index).filter(chapter=>!chapter.is_intro).length+1}: ${node.title}`}</h3><span className="count">{total(node)}</span></summary>
+                  {total(node)>0?branch(node,0,true):<p className="muted">No learning materials in this chapter yet.</p>}
+                </details>)}
+                {otherTree&&<details id="chapter-other" className="chapter-all-entry" open><summary><h3>Other materials</h3><span className="count">{total(otherTree)}</span></summary>{branch(otherTree,0,true)}</details>}
+              </div>}
           </div>
+          {!closed&&<div className="chapter-material-actions">
+            <button type="button" className="icon-button announcement-add" aria-label="Create announcement" title="Create announcement" onClick={()=>setCreate({type:'announcement'})}>▤</button>
+            <details className="dropdown" ref={menu}><summary className="icon-button" aria-label="Add material" title="Add material">＋</summary>
+              <div className="menu-list chapter-create-menu" role="group" aria-label="Add material">
+                {CREATE_GROUPS.map(group=><div className="menu-category" key={group.label}><strong>{group.label}</strong>
+                  {group.options.map(([label,target])=><button key={label} type="button" onClick={()=>choose(target)}>{label}</button>)}
+                </div>)}
+              </div>
+            </details>
+          </div>}
         </section>
       </div>}
     {create?.type==='item'&&<NewItemDialog offering={offering} nodes={nodes} kind={create.kind} anchorNodeId={selectedChapter?.id} onClose={()=>setCreate(null)} onCreated={i=>{setCreate({type:'item-editor',itemId:i.id});queryClient.invalidateQueries({queryKey:['items',offering.id]})}}/>}
@@ -172,12 +201,13 @@ export function FacultyClasswork(){
     {create?.type==='assessment'&&<NewDialog offering={offering} kind={create.kind} onClose={()=>setCreate(null)} onCreated={assessmentCreated}/>}
     {create?.type==='assessment-editor'&&<AssessmentEditorDialog offering={offering} assessmentId={create.assessmentId} onClose={()=>{setCreate(null);queryClient.invalidateQueries({queryKey:['assessments',offering.id]})}}/>}
     {create?.type==='ai'&&<GenerateDialog offering={offering} onClose={()=>setCreate(null)} onCreated={assessmentCreated}/>}
-    {addingChapter&&<ChapterDialog offeringId={offering.id} onClose={()=>setAddingChapter(false)} onAdded={id=>{setAddingChapter(false);setActiveChapter(id)}}/>}
+    {create?.type==='announcement'&&<AnnouncementCreateDialog offering={offering} onClose={()=>setCreate(null)} onDone={()=>setCreate(null)}/>}
+    {addingChapter&&<ChapterDialog offering={offering} hasIntro={chapters.some(chapter=>chapter.is_intro)} onClose={()=>setAddingChapter(false)} onAdded={id=>{setAddingChapter(false);setActiveChapter(id)}}/>}
   </>;
 }
 
-function ChapterDialog({offeringId,onClose,onAdded}:{offeringId:string;onClose:()=>void;onAdded:(id:string)=>void}){
-  const url=`/teach/offerings/${offeringId}/syllabus`;
+function ChapterDialog({offering,hasIntro,onClose,onAdded}:{offering:OfferingSummary;hasIntro:boolean;onClose:()=>void;onAdded:(id:string)=>void}){
+  const url=`/teach/offerings/${offering.id}/syllabus`;
   const [chapter,setChapter]=useState<Chapter>(()=>emptyChapter());
   const [topics,setTopics]=useState<{id:string;title:string}[]>([]);
   const [message,setMessage]=useState('');
@@ -198,13 +228,15 @@ function ChapterDialog({offeringId,onClose,onAdded}:{offeringId:string;onClose:(
         state=await api<SyllabusState>(url);
       }
       if(!state.draft)throw new Error('A syllabus draft could not be created. Please try again.');
+      if(chapter.is_intro&&state.draft.outline.chapters.some(existing=>existing.is_intro))throw new Error('This subject already has an introductory chapter.');
       const nextChapter={...chapter,title:chapter.title.trim(),topics:topics.filter(topic=>topic.title.trim()).map(topic=>({...topic,title:topic.title.trim()}))};
+      const chapters=chapter.is_intro?[nextChapter,...state.draft.outline.chapters]:[...state.draft.outline.chapters,nextChapter];
       await send('PUT',`${url}/draft`,{
         expected_counter:state.draft.counter,
-        outline:{...state.draft.outline,chapters:[...state.draft.outline.chapters,nextChapter]},
+        outline:{...state.draft.outline,chapters},
         grading_policy:state.draft.grading_policy,
       });
-      await queryClient.invalidateQueries({queryKey:['syllabus',offeringId]});
+      await queryClient.invalidateQueries({queryKey:['syllabus',offering.id]});
       onAdded(nextChapter.id);
     }catch(error){setMessage(errorText(error))}
     finally{setSaving(false)}
@@ -212,6 +244,12 @@ function ChapterDialog({offeringId,onClose,onAdded}:{offeringId:string;onClose:(
 
   return <Dialog title="Add chapter" onClose={onClose}>
     <form onSubmit={save}>
+      <label>Chapter type<select value={chapter.is_intro?'intro':'chapter'} onChange={event=>{
+        const isIntro=event.target.value==='intro';
+        setChapter({...chapter,is_intro:isIntro,title:isIntro?(chapter.title||`Introduction to ${offering.subject.title}`):chapter.title});
+      }}>
+        <option value="chapter">Regular chapter</option><option value="intro" disabled={hasIntro}>Subject introduction</option>
+      </select></label>
       <div className="grid-2">
         <label>Title<input value={chapter.title} maxLength={300} required onChange={event=>setChapter({...chapter,title:event.target.value})}/></label>
         <label>Time allotment<input value={chapter.weeks} maxLength={60} placeholder="Week 2" onChange={event=>setChapter({...chapter,weeks:event.target.value})}/></label>
@@ -274,10 +312,11 @@ function ChapterNavigation({outline,rows,selected,onSelect,onAdd,canAdd}:{outlin
         const ids=chapterNodeIds(chapter);
         const count=rows.filter(row=>row.anchor!==null&&ids.has(row.anchor)).length;
         const title=chapter.title||'Untitled chapter';
+        const number=chapters.slice(0,index).filter(item=>!item.is_intro).length+1;
         return <button key={chapter.id} type="button" className={`chapter-choice${selected===chapter.id?' active':''}`}
           aria-pressed={selected===chapter.id} onClick={()=>onSelect(chapter.id)}>
-          <span className="chapter-index">{index+1}</span><span className="chapter-choice-copy">
-            <strong>Chapter {index+1}: {title}</strong>
+          <span className="chapter-index">{chapter.is_intro?'i':number}</span><span className="chapter-choice-copy">
+            <strong>{chapter.is_intro?title:`Chapter ${number}: ${title}`}</strong>
             <small>{count} learning {count===1?'item':'items'}</small>
           </span>
         </button>;
@@ -314,6 +353,7 @@ export function StudentClasswork(){
   const cat=catOf(useSearchParams()[0].get('type'));const here=useHere();
   const [filters,setFilters]=useState<Record<string,Filter>>({});const filter=filters[cat]??'all';      // each tab remembers its own filter
   const [activeChapter,setActiveChapter]=useState('');
+  const [chapterDisplay,setChapterDisplay]=useState<'single'|'all'>('single');
   const setFilter=(f:Filter)=>setFilters({...filters,[cat]:f});
   const error=items.error??work.error??syllabus.error;if(error)return <p role="alert">{error.message}</p>;
   if(!items.data||!work.data||!syllabus.data)return <p>Loading…</p>;
@@ -338,6 +378,8 @@ export function StudentClasswork(){
   const selectedChapter=chapters.find(chapter=>chapter.id===activeChapter)??chapters[0];
   const selectedChapterId=selectedChapter?.id??'other';
   const selectedTree=tree.find(node=>node.id===selectedChapterId);
+  const chapterTrees=chapters.map(chapter=>tree.find(node=>node.id===chapter.id)??{id:chapter.id,title:chapter.title||'Untitled chapter',rows:[],kids:[]} as TNode<SRow>);
+  const otherTree=tree.find(node=>node.id==='other');
   const count=(k:Filter)=>rows.filter(r=>r.cat===cat&&(k==='all'||(k==='todo'?r.todo:r.done))).length;
   return <>
     <div className="type-row"><ClassworkTypes base={base} current={cat} counts={Object.fromEntries(CATS.map(([k])=>[k,rows.filter(r=>r.cat===k).length]))}/></div>
@@ -347,18 +389,33 @@ export function StudentClasswork(){
       <div className="segmented" role="group" aria-label="Show">{([['all','Everything'],['todo',cat==='lesson'?'Not completed':'To do'],['done',cat==='lesson'?'Completed':'Done']] as const).map(([k,l])=>
         <button key={k} type="button" className={filter===k?'on':''} aria-pressed={filter===k} onClick={()=>setFilter(k)}>{l} <span className="muted">{count(k)}</span></button>)}</div>
     </div>
+    <div className="chapter-display-options">
+      <div className="segmented" role="group" aria-label="Chapter display">
+        <button type="button" className={chapterDisplay==='all'?'on':''} aria-label="Show all chapters" title="Show all chapters" aria-pressed={chapterDisplay==='all'} onClick={()=>setChapterDisplay('all')}>▤</button>
+        <button type="button" className={chapterDisplay==='single'?'on':''} aria-label="Show one chapter at a time" title="Show one chapter at a time" aria-pressed={chapterDisplay==='single'} onClick={()=>setChapterDisplay('single')}>▣</button>
+      </div>
+    </div>
     <div className="chapter-workspace">
-      <ChapterNavigation outline={outline} rows={shownRows} selected={selectedChapterId} onSelect={setActiveChapter}/>
+      <ChapterNavigation outline={outline} rows={shownRows} selected={selectedChapterId} onSelect={id=>{setActiveChapter(id);if(chapterDisplay==='all')document.getElementById(`chapter-${id}`)?.scrollIntoView({behavior:'smooth',block:'start'})}}/>
       <section className="chapter-detail panel">
         <header className="chapter-detail-heading">
-          <div><p className="eyebrow">{selectedChapter?`CHAPTER ${chapters.indexOf(selectedChapter)+1}`:'OTHER MATERIALS'}</p>
-            <h2>{selectedChapter?`Chapter ${chapters.indexOf(selectedChapter)+1}: ${selectedChapter.title||'Untitled'}`:'Other materials'}</h2>
-            <p className="muted">Learning resources published for this chapter.</p></div>
+          <div><p className="eyebrow">{chapterDisplay==='all'?'ALL CHAPTERS':selectedChapter?(selectedChapter.is_intro?'SUBJECT INTRODUCTION':`CHAPTER ${chapters.slice(0,chapters.indexOf(selectedChapter)).filter(chapter=>!chapter.is_intro).length+1}`):'OTHER MATERIALS'}</p>
+            <h2>{chapterDisplay==='all'?'All chapters':selectedChapter?(selectedChapter.is_intro?(selectedChapter.title||'Subject Introduction'):`Chapter ${chapters.slice(0,chapters.indexOf(selectedChapter)).filter(chapter=>!chapter.is_intro).length+1}: ${selectedChapter.title||'Untitled'}`):'Other materials'}</h2>
+            <p className="muted">{chapterDisplay==='all'?'Browse all chapters in syllabus order.':'Learning resources published for this chapter.'}</p></div>
         </header>
         <div className="chapter-materials">
-          <div className="section-head"><h3>Learning materials</h3><span className="muted">{selectedTree?total(selectedTree):0} items</span></div>
-          {selectedTree?<Branch node={selectedTree} depth={0} here={here} bare/>:
-            <p className="muted">{filter==='todo'?'You are up to date.':filter==='done'?'Completed lessons and finished work appear here.':'No published learning materials or activities in this chapter yet.'}</p>}
+          <div className="section-head"><h3>Learning materials</h3><span className="muted">{chapterDisplay==='all'?`${shownRows.length} items`:`${selectedTree?total(selectedTree):0} items`}</span></div>
+          {chapterDisplay==='single'
+            ?selectedTree?<Branch node={selectedTree} depth={0} here={here} bare/>:
+              <p className="muted">{filter==='todo'?'You are up to date.':filter==='done'?'Completed lessons and finished work appear here.':'No published learning materials or activities in this chapter yet.'}</p>
+            :<div className="chapter-all-list">
+              {chapterTrees.map((node,index)=><details key={node.id} id={`chapter-${node.id}`} className="chapter-all-entry" open>
+                <summary><h3>{chapters[index].is_intro?`Subject introduction · ${node.title}`:`Chapter ${chapters.slice(0,index).filter(chapter=>!chapter.is_intro).length+1}: ${node.title}`}</h3><span className="count">{total(node)}</span></summary>
+                {total(node)>0?<Branch node={node} depth={0} here={here} bare/>:
+                  <p className="muted">{filter==='todo'?'You are up to date.':filter==='done'?'Completed lessons and finished work appear here.':'No published learning materials or activities in this chapter yet.'}</p>}
+              </details>)}
+              {otherTree&&<details id="chapter-other" className="chapter-all-entry" open><summary><h3>Other materials</h3><span className="count">{total(otherTree)}</span></summary><Branch node={otherTree} depth={0} here={here} bare/></details>}
+            </div>}
         </div>
       </section>
     </div>

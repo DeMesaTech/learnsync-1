@@ -88,8 +88,10 @@ try{
   s=await sessions();
   const fullyMarkedDate=s.sessions.find(x=>Object.keys(x.marks).length===3)?.date;
   check('Mark rest present marks everyone not yet marked on that date',s.sessions.length===2&&!!fullyMarkedDate);
-  await cell(0,2).focus();
-  await page.getByRole('button',{name:/^Unmark all attendance for/}).click();
+  const wednesday=page.locator('table.att-grid thead th').nth(3);
+  await wednesday.getByRole('button',{name:/^Unmark all attendance for/}).waitFor();
+  check('the date action switches to Unmark all when every student is marked',await wednesday.getByRole('button',{name:/^Unmark all attendance for/}).count()===1);
+  await wednesday.getByRole('button',{name:/^Unmark all attendance for/}).click();
   await page.getByRole('button',{name:'Unmark all',exact:true}).click();
   await page.getByText('All changes saved.').waitFor();
   s=await sessions();

@@ -1,6 +1,6 @@
 export interface Topic{id:string;title:string}
 export interface Subsection{id:string;title:string;topics:Topic[]}
-export interface Chapter{id:string;title:string;weeks:string;topics:Topic[];subsections:Subsection[]}
+export interface Chapter{id:string;title:string;weeks:string;topics:Topic[];subsections:Subsection[];is_intro?:boolean}
 export interface Outcome{id:string;text:string}
 export interface Course{code:string;name:string;description:string;units:string;contact_hours:string;prerequisite:string;values:string;references:string;requirements:string;evaluation_note:string}
 export interface Outline{course:Course;outcomes:Outcome[];chapters:Chapter[]}
@@ -17,7 +17,7 @@ export interface Coverage{section_id:string;node_id:string;covered_on:string}
 export interface LearnItem{id:string;kind:'lesson'|'file'|'reference';title:string;anchor_node_id:string|null;published_at:string;file:FileRef|null;body_html?:string;reference_url?:string|null;reference_note?:string;completed?:boolean|null;up_next?:boolean;next_lesson?:{id:string;title:string;kind?:'lesson'|'file'|'reference'}|null;all_completed?:boolean;first_incomplete?:{id:string;title:string;kind?:'lesson'|'file'|'reference'}|null;lesson_number?:number;lesson_total?:number}
 export interface LearnSyllabus{published:{version:number;published_at:string;outline:Outline;grading_policy:GradingPolicy|null}|null;covered:{node_id:string;covered_on:string}[]}
 export const newId=()=>crypto.randomUUID();
-export const emptyChapter=():Chapter=>({id:newId(),title:'',weeks:'',topics:[],subsections:[]});
+export const emptyChapter=():Chapter=>({id:newId(),title:'',weeks:'',topics:[],subsections:[],is_intro:false});
 export const nodeLabels=(o:Outline)=>{const out:{id:string;label:string}[]=[];for(const c of o.chapters){out.push({id:c.id,label:c.title||'Untitled chapter'});c.topics.forEach(t=>out.push({id:t.id,label:`${c.title||'Chapter'} › ${t.title||'Untitled topic'}`}));c.subsections.forEach(s=>{out.push({id:s.id,label:`${c.title||'Chapter'} › ${s.title||'Untitled section'}`});s.topics.forEach(t=>out.push({id:t.id,label:`${s.title||'Section'} › ${t.title||'Untitled topic'}`}))})}return out};
 export interface Group<T>{id:string|null;label:string;items:T[]}
 /** Items under the syllabus chapter/topic they are attached to, in syllabus order; the rest go last as "Other materials". */

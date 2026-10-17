@@ -1,5 +1,11 @@
 # Acceptance status
 
+### Classwork controls and navigation (2026-10-17)
+- Grouped creation options and material filters into Lessons (lessons, modules, and links), Quizzes, Activities, and Exams. Added icon actions for announcement creation and Add material; embedded announcement rows no longer show Archive.
+- Made All chapters sections collapsible and the chapter-display controls icon-only. Faculty and student subject links now open the subject's Classwork tab.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk advisory), `npm run lint`, and `git diff --check`.
+- Not browser-verified: no dedicated automated component tests cover these controls, and an authenticated interaction flow was not run.
+
 ### 2026-10-17 (Faculty Classwork and gradebook refinements)
 - Replaced the Classwork chapter link with an accessible add-chapter dialog using syllabus chapter fields; saving creates/updates a compare-and-swap syllabus draft while preserving the published revision. Removed the assigned-subject selector. Stream published items now use the Classwork material-row styling, and offering headers use a more compact shared layout.
 - Gradebook now pages filtered student rows (25 per page by default), uses accessible icon controls for score editing and assessment-score links, and narrows score inputs to 70px. Editing an online quiz from its scores page now requires explicit confirmation. The sticky save bar is shorter.
@@ -1071,3 +1077,18 @@ Note: another process (started from Codex's Python runtime) was already serving 
 - Embedded announcement articles in the published-content stream panel while retaining a distinct Announcements subsection, and removed the redundant announcements page-heading on the stream view. The separate Announcements page keeps its heading and card layout.
 - Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk advisory), `npm run lint`, and `git diff --check`.
 - Not browser-verified: the shared browser was on Classwork rather than Stream when inspected; no data-changing browser flow was run.
+
+### Subject introduction and chapter browsing (2026-10-17)
+- Added a subject-introduction chapter option to Classwork's Add chapter dialog, syllabus chapter editing, and the guided setup starter outline. The introduction is inserted first, appears before numbered chapters, and cannot be duplicated or reordered behind regular chapters; the API validates this invariant.
+- Added All chapters and One chapter at a time display options to faculty and student Classwork.
+- Reduced chapter-navigation width and title size; styled the chapter aside with a theme-aware border/background and sticky position on wider screens.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk advisory), `npm run lint`, backend Ruff for `schemas.py` and `test_teaching.py`, the focused introduction regression test (1 passed), and `git diff --check`.
+- Backend teaching suite: 29 passed, 1 failed. The failure is the previously documented student syllabus projection mismatch: `test_upload_replaces_published_syllabus_only_after_review_and_keeps_policy` expects `published.id`, but the student projection intentionally returns version, publication time, outline, and grading policy without an ID. This is outside the chapter change and was not modified.
+- Not browser-verified: no authenticated browser flow was run for the chapter display toggle or sticky chapter navigation.
+
+### Attendance and grading table refinements; unified Stream list (2026-10-17)
+- Attendance date controls switch from “Mark rest present” to a confirmed “Unmark all” action when every student has a mark; attendance tables display student numbers in a separate column. Switching sections now restores the page scroll position after the new roster finishes loading.
+- Gradebook and Class standing show section and student number in distinct columns before the student name. Class-standing table width follows its content inside the horizontally scrollable table region.
+- Removed the separate Stream announcements toolbar. The announcement creation action and announcement rows now use the existing published-content list styling; edit, publish, archive, and pagination behavior remain available.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk advisory), `npm run lint`, `node --check e2e\\attendance-grid.mjs`, and `git diff --check`.
+- Not browser-verified: the shared browser displayed attendance data but returned 403s for requests; an attempted section-scroll check lost its attendance route, and the gradebook route did not load its table. No data-changing browser action was performed.

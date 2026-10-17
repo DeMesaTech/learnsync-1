@@ -13,7 +13,7 @@ const uploadedAt=(iso:string)=>new Date(iso).toLocaleString(undefined,{dateStyle
 const KIND:Record<string,string>={lesson:'Lesson',file:'File',reference:'Link',online_quiz:'Quiz',offline_quiz:'Paper quiz',activity:'Activity',exam:'Examination',manual:'Teacher-scored item'};
 const ICON:Record<string,string>={lesson:'▱',file:'▣',reference:'↗',online_quiz:'☷',offline_quiz:'▤',activity:'▧',exam:'▤',manual:'✎'};
 
-/** Teachers: announcements to the sections, then every published classwork item, newest first. */
+/** Teachers: published materials, assessments, and section announcements in one subject stream. */
 export function FacultyStream(){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const items=useQuery({queryKey:['items',offering.id],queryFn:()=>api<Item[]>(`/teach/offerings/${offering.id}/items`)});
@@ -25,12 +25,13 @@ export function FacultyStream(){
   ].filter(r=>r.at).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)||a.key.localeCompare(b.key));
   return <>
     <section className="panel stream-classwork-panel" aria-labelledby="published-content-heading"><h3 id="published-content-heading">Published materials and assessments</h3>
-      {classwork.length===0?<p className="muted">Nothing published yet. Lessons, files, links and assessments you publish appear here.</p>
-        :<ul className="seq compact manager-material-list">{classwork.map(r=><li className="manager-material-row" key={r.key}>
+      {classwork.length===0&&<p className="muted">Nothing published yet. Lessons, files, links and assessments you publish appear here.</p>}
+      <FacultyAnnouncements embedded>
+        {classwork.map(r=><li className="manager-material-row" key={r.key}>
           <span className={`material-kind-icon kind-${r.icon}`} aria-hidden="true">{ICON[r.icon]??'▣'}</span>
           <span className="grow"><Link to={r.to}>{r.title}</Link><span className="muted">{r.kind} · <time dateTime={r.at}>{uploadedAt(r.at)}</time></span></span>
-        </li>)}</ul>}
-      <FacultyAnnouncements embedded/>
+        </li>)}
+      </FacultyAnnouncements>
     </section>
   </>;
 }

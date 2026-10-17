@@ -1,0 +1,2 @@
+- 
+- chapter display buttons turn to icon

@@ -1,5 +1,5 @@
 import {useToast} from '../../components/undo';
-import {useState,type FormEvent} from 'react';
+import {useState,type FormEvent,type ReactNode} from 'react';
 import {useOutletContext} from 'react-router-dom';
 import {useInfiniteQuery} from '@tanstack/react-query';
 import {api,post,send,errorText} from '../../app/api';
@@ -10,8 +10,9 @@ import type {OfferingSummary} from '../academics/types';
 import type {Announcement} from './types';
 
 const PAGE=25;   // newest first; "Load more" asks the server for the next page
+const uploadedAt=(iso:string)=>new Date(iso).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
 interface Page{items:Announcement[];has_more:boolean}
-export function FacultyAnnouncements({embedded=false}:{embedded?:boolean}={}){
+export function FacultyAnnouncements({embedded=false,children}:{embedded?:boolean;children?:ReactNode}={}){
   const ask=useConfirm();
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const closed=offering.term_status!=='active';
@@ -26,23 +27,48 @@ export function FacultyAnnouncements({embedded=false}:{embedded?:boolean}={}){
     try{await post(`${base}/${a.id}/${action}`,{});setMessage('');refresh()}catch(e){setMessage(errorText(e))}
   }
   const names=(ids:string[])=>ids.length===0?'All sections':ids.map(id=>offering.sections.find(s=>s.id===id)?.name??'').join(', ');
-  const cards=rows.map(a=><article className={embedded?'stream-announcement':'panel'} key={a.id}>
+  const cards=rows.map(a=><article className="panel" key={a.id}>
     <p className="eyebrow">{a.state} · {names(a.section_ids)}</p><h3>{a.title}</h3><p className="pre">{a.body}</p>
     <div className="actions">
       {a.state==='draft'&&<><button disabled={closed} onClick={()=>setEditing(a)}>Edit</button><button className="primary" disabled={closed} onClick={()=>act(a,'publish')}>Publish</button></>}
       {a.state==='published'&&<button disabled={closed} onClick={()=>act(a,'archive')}>Archive</button>}</div></article>);
+  if(embedded)return <>
+    <ul className="seq compact manager-material-list">
+      {children}
+      <li className="manager-material-row stream-announcement-create">
+        <span className="material-kind-icon kind-announcement" aria-hidden="true">▤</span>
+        <span className="grow"><button className="linklike" disabled={closed} onClick={()=>{setMessage('');setEditing('new')}}>New announcement</button></span>
+      </li>
+      {message&&<li className="manager-material-row stream-announcement-message" role="alert">{message}</li>}
+      {query.isPending?<li className="manager-material-row stream-announcement-message">Loading announcements…</li>
+        :query.error?<li className="manager-material-row stream-announcement-message" role="alert">{query.error.message}</li>
+          :rows.length===0?<li className="manager-material-row stream-announcement-message muted">No announcements yet.</li>
+            :rows.map(a=><li className="manager-material-row stream-announcement-row" key={a.id}>
+              <span className="material-kind-icon kind-announcement" aria-hidden="true">▤</span>
+              <span className="grow"><strong>{a.title}</strong><span className="muted">{a.state} · {names(a.section_ids)} · <time dateTime={a.published_at??a.created_at}>{uploadedAt(a.published_at??a.created_at)}</time></span>
+                <span className="pre stream-announcement-body">{a.body}</span></span>
+              {a.state==='draft'&&<span className="manager-material-actions">
+                <button disabled={closed} onClick={()=>setEditing(a)}>Edit</button><button className="primary" disabled={closed} onClick={()=>act(a,'publish')}>Publish</button>
+              </span>}
+            </li>)}
+      {query.hasNextPage&&<li className="manager-material-row stream-announcement-more"><button disabled={query.isFetchingNextPage} onClick={()=>query.fetchNextPage()}>{query.isFetchingNextPage?'Loading…':'Load more announcements'}</button></li>}
+    </ul>
+    {editing&&<Editor offering={offering} existing={editing==='new'?null:editing} onClose={()=>setEditing(null)} onDone={()=>{setEditing(null);refresh()}}/>}
+  </>;
   return <>
-    {embedded
-      ?<div className="actions stream-announcement-tools"><h4>Announcements</h4><button className="primary" disabled={closed} onClick={()=>{setMessage('');setEditing('new')}}>New announcement</button></div>
-      :<div className="page-heading"><div><h2>Announcements</h2><p className="muted">Short notices for your sections. Save a draft, then publish when ready.</p></div>
-        <button className="primary" disabled={closed} onClick={()=>{setMessage('');setEditing('new')}}>New announcement</button></div>}
+    <div className="page-heading"><div><h2>Announcements</h2><p className="muted">Short notices for your sections. Save a draft, then publish when ready.</p></div>
+        <button className="primary" disabled={closed} onClick={()=>{setMessage('');setEditing('new')}}>New announcement</button></div>
     {message&&<p role="alert">{message}</p>}
     {query.isPending?<p>Loading…</p>:query.error?<p role="alert">{query.error.message}</p>:
-      rows.length===0?<p className="muted">No announcements yet.</p>:
-      embedded?cards:<div className="cards">{cards}</div>}
+      rows.length===0?<p className="muted">No announcements yet.</p>:<div className="cards">{cards}</div>}
     {query.hasNextPage&&<button disabled={query.isFetchingNextPage} onClick={()=>query.fetchNextPage()}>{query.isFetchingNextPage?'Loading…':'Load more announcements'}</button>}
     {editing&&<Editor offering={offering} existing={editing==='new'?null:editing} onClose={()=>setEditing(null)} onDone={()=>{setEditing(null);refresh()}}/>}
   </>;
+}
+
+export function AnnouncementCreateDialog({offering,onClose,onDone}:{offering:OfferingSummary;onClose:()=>void;onDone:()=>void}){
+  const refresh=()=>queryClient.invalidateQueries({queryKey:['announcements',offering.id]});
+  return <Editor offering={offering} existing={null} onClose={onClose} onDone={()=>{refresh();onDone()}}/>;
 }
 
 function Editor({offering,existing,onClose,onDone}:{offering:OfferingSummary;existing:Announcement|null;onClose:()=>void;onDone:()=>void}){

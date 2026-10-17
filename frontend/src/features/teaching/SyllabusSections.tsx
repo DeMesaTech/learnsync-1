@@ -40,13 +40,14 @@ export function ChaptersStep({outline,onChange}:{outline:Outline;onChange:Change
   const set=(chapters:Chapter[])=>onChange({...outline,chapters});
   latestSet.current=set;
   const patch=(i:number,change:Partial<Chapter>)=>set(replace(outline.chapters,i,{...outline.chapters[i],...change}));
+  const hasIntro=outline.chapters.some(chapter=>chapter.is_intro);
   return <section><h2>Course coverage</h2>
     <p className="muted">Chapters and topics keep a stable identity when you rename or reorder them, so lessons attached to a topic stay attached.</p>
     {outline.chapters.length===0&&<p className="panel">No chapters yet. Add the first one below.</p>}
     {outline.chapters.map((c,i)=><article className="panel" key={c.id}>
-      <div className="page-heading"><h3>Chapter {i+1}</h3>
-        <div className="actions"><button type="button" aria-label={`Move chapter ${i+1} up`} disabled={i===0} onClick={()=>set(move(outline.chapters,i,-1))}>↑</button>
-          <button type="button" aria-label={`Move chapter ${i+1} down`} disabled={i===outline.chapters.length-1} onClick={()=>set(move(outline.chapters,i,1))}>↓</button>
+      <div className="page-heading"><h3>{c.is_intro?'Subject introduction':`Chapter ${outline.chapters.slice(0,i).filter(chapter=>!chapter.is_intro).length+1}`}</h3>
+        <div className="actions"><button type="button" aria-label={`Move chapter ${i+1} up`} disabled={i===0||outline.chapters[i-1]?.is_intro===true} onClick={()=>set(move(outline.chapters,i,-1))}>↑</button>
+          <button type="button" aria-label={`Move chapter ${i+1} down`} disabled={i===outline.chapters.length-1||c.is_intro===true} onClick={()=>set(move(outline.chapters,i,1))}>↓</button>
           <button type="button" onClick={()=>{const before=outline.chapters;set(remove(outline.chapters,i));undo(`Chapter ${i+1} removed (its topics too). Lessons attached to them must be re-attached or archived before publishing.`,()=>latestSet.current(before))}}>Remove</button></div></div>
       <div className="grid-2"><label>Title<input value={c.title} maxLength={300} onChange={e=>patch(i,{title:e.target.value})}/></label>
         <label>Time allotment<input value={c.weeks} maxLength={60} placeholder="Week 2" onChange={e=>patch(i,{weeks:e.target.value})}/></label></div>
@@ -58,7 +59,8 @@ export function ChaptersStep({outline,onChange}:{outline:Outline;onChange:Change
           <button type="button" aria-label="Remove topic" onClick={()=>patch(i,{topics:remove(c.topics,j)})}>✕</button></div>)}
         <button type="button" onClick={()=>patch(i,{topics:[...c.topics,{id:newId(),title:''}]})}>Add topic</button></fieldset>
     </article>)}
-    <div className="actions"><button type="button" onClick={()=>set([...outline.chapters,emptyChapter()])}>Add chapter</button></div>
+    <div className="actions"><button type="button" onClick={()=>set([...outline.chapters,emptyChapter()])}>Add chapter</button>
+      <button type="button" disabled={hasIntro} onClick={()=>set([{...emptyChapter(),title:'Subject Introduction',is_intro:true},...outline.chapters])}>Add subject introduction</button></div>
   </section>;
 }
 
