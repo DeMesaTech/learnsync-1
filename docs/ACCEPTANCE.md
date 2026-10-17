@@ -1,5 +1,33 @@
 # Acceptance status
 
+### Collapsible announcements and fixed gradebook columns (2026-10-17)
+- Made the Classwork announcements panel collapsible and changed draft Edit/Publish actions to icon buttons with accessible labels and tooltips. Pinned Section, Student number, and Student columns at the left edge of the gradebook while score columns scroll horizontally.
+- Passed: frontend production build/type-check (existing large-chunk advisory), ESLint, and `git diff --check`.
+- Browser-verified: the announcement panel starts expanded and collapses; both draft action icons have accessible labels; the gradebook has horizontal overflow, with the three identifying columns remaining sticky at consistent left offsets while scrolling.
+
+### Classwork placement and faculty dashboard (2026-10-17)
+- Placed the Classwork announcements panel across the chapter workspace directly above the chapter navigation aside. Removed Student progress from the faculty dashboard; subject-level progress remains reachable through class pages.
+- Passed: frontend production build/type-check (existing large-chunk advisory), ESLint, and `git diff --check`.
+- Not browser-verified.
+
+### Classwork and gradebook visibility (2026-10-17)
+- Moved the chapter-view selector to the top of the chapter panel and made its location clearer; increased chapter/material headings and moved each chapter's labeled Add material menu to the end of its materials. Added a direct All materials filter.
+- Stream announcements remain informational; draft Edit/Publish actions now appear in the Classwork announcements manager. Widened the grade-calculation dialog and kept its footer actions visible while scrolling. Gradebook's two-row header stays sticky within the scrollable table, with the second row offset below the first.
+- Passed: frontend production build/type-check (existing large-chunk advisory), ESLint, and `git diff --check`.
+- Not browser-verified: no authenticated visual check was run for chapter menus, announcement actions, or gradebook scrolling/dialog layout.
+
+### Faculty dashboard and chapter-scoped material creation (2026-10-17)
+- Removed the redundant “Prepare for your class” panel; placed dashboard stats and My Classes before the side column, moved the next-task hero into the side column, and moved Student progress beneath My Classes.
+- Ensured sidebar subject links are active only on their Classwork route. Moved the chapter display controls inside the chapter-detail panel and added chapter-specific Add material menus in both display modes. New items, assessments, and AI-drafted quizzes receive the chapter anchor at creation; dialogs identify the chapter hierarchy and no longer offer chapter selectors.
+- Added server validation for assessment chapter anchors, including AI-generated quizzes.
+- Passed: frontend production build/type-check (existing large-chunk advisory), ESLint, backend Ruff for changed files, focused assessment attachment test (1 passed), and `git diff --check`.
+- Browser: verified the sidebar subject link and Classwork tab are active on the Classwork route, and All chapters renders six chapter-specific Add material controls. No content was created; browser clicks were unreliable, so dialog submission was not exercised.
+
+### Global UI scale (2026-10-17)
+- Applied a 90% visual scale to the app root so the interface's text, controls, and layout spacing scale together.
+- Passed: frontend production build/type-check, ESLint, and `git diff --check`.
+- Browser-verified on the shared faculty Classwork page: computed app-root zoom is `0.9`; at a 958px viewport, the page has no horizontal overflow and the Classwork layout renders.
+
 ### Classwork controls and navigation (2026-10-17)
 - Grouped creation options and material filters into Lessons (lessons, modules, and links), Quizzes, Activities, and Exams. Added icon actions for announcement creation and Add material; embedded announcement rows no longer show Archive.
 - Made All chapters sections collapsible and the chapter-display controls icon-only. Faculty and student subject links now open the subject's Classwork tab.

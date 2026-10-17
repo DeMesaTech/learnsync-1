@@ -28,6 +28,7 @@ class AssessmentCreate(BaseModel):
     kind: Literal["online_quiz", "offline_quiz", "activity", "exam", "manual"]
     title: str = Field(min_length=1, max_length=200)
     section_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
+    anchor_node_id: uuid.UUID | None = None
 
 
 class AssessmentDraftSave(BaseModel):

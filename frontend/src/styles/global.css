@@ -2,6 +2,10 @@
   box-sizing: border-box
 }
 
+#root {
+  zoom: .9
+}
+
 body {
   margin: 0;
   background: var(--canvas);
@@ -530,6 +534,22 @@ dialog.item-editor-dialog,
 dialog.assessment-editor-dialog {
   width: min(920px, calc(100vw - 24px));
   max-height: 92dvh
+}
+
+dialog.gradebook-detail-dialog {
+  width: min(920px, calc(100vw - 24px));
+  max-height: 92dvh
+}
+
+.gradebook-detail-actions {
+  position: sticky;
+  bottom: -24px;
+  z-index: 1;
+  margin: 16px -24px -24px;
+  padding: 12px 24px;
+  justify-content: flex-end;
+  background: var(--surface);
+  border-top: 1px solid var(--border)
 }
 
 dialog::backdrop {
@@ -2139,14 +2159,45 @@ details>summary {
   text-align: left
 }
 
+.gradebook .sticky-section {
+  left: 0;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px
+}
+
+.gradebook .sticky-number {
+  position: sticky;
+  left: 100px;
+  z-index: 1;
+  width: 120px;
+  min-width: 120px;
+  background: var(--surface)
+}
+
+.gradebook .sticky-student {
+  position: sticky;
+  left: 220px;
+  z-index: 1;
+  width: 180px;
+  min-width: 180px;
+  background: var(--surface)
+}
+
+.gradebook thead .sticky-number,
+.gradebook thead .sticky-student {
+  z-index: 4
+}
+
+.gradebook tbody .sticky-student,
+.gradebook tbody .sticky-number {
+  z-index: 2
+}
+
 .gradebook .student-number,
 .class-standing-table .student-number,
 .att-grid .student-number {
   white-space: nowrap
-}
-
-.gradebook .student-number {
-  min-width: 120px
 }
 
 .gradebook .student-name {
@@ -2464,6 +2515,19 @@ a.touch {
   gap: 20px;
   min-width: 0;
   align-content: start
+}
+
+.dash-side .hero {
+  display: block;
+  padding: 18px
+}
+
+.dash-side .hero h2 {
+  font-size: 1.15rem
+}
+
+.dash-side .hero-art {
+  display: none
 }
 
 @media(min-width:1100px) {
@@ -2856,11 +2920,22 @@ a.touch {
   overflow: auto
 }
 
-.gradebook thead th {
+.gradebook thead tr:first-child th {
   position: sticky;
   top: 0;
   background: var(--surface);
   z-index: 2
+}
+
+.gradebook thead tr:first-child {
+  height: 36px
+}
+
+.gradebook thead tr:nth-child(2) th {
+  position: sticky;
+  top: 36px;
+  background: var(--surface);
+  z-index: 1
 }
 
 .gradebook thead th.sticky {
@@ -4881,6 +4956,10 @@ details.topic[open]>summary::before {
   min-width: 0
 }
 
+.chapter-workspace>.classwork-announcements {
+  grid-column: 1 / -1
+}
+
 .chapter-navigation {
   display: grid;
   align-content: start;
@@ -5021,10 +5100,14 @@ details.topic[open]>summary::before {
 .chapter-display-options {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   gap: 8px;
-  margin: 0 0 16px
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-alt)
 }
 
 .chapter-display-options .segmented {
@@ -5075,7 +5158,7 @@ details.topic[open]>summary::before {
 .chapter-all-entry>summary h3 {
   flex: 1;
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.2rem;
   overflow-wrap: anywhere
 }
 
@@ -5088,12 +5171,18 @@ details.topic[open]>summary::before {
   margin-top: 8px
 }
 
-.chapter-detail-heading .muted {
-  margin: 0
+.chapter-all-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border)
 }
 
-.chapter-detail-heading .button {
-  flex: none
+.chapter-detail-heading .muted {
+  margin: 0
 }
 
 .chapter-materials {
@@ -5109,7 +5198,8 @@ details.topic[open]>summary::before {
 }
 
 .chapter-materials .section-head h3 {
-  margin: 0
+  margin: 0;
+  font-size: 1.2rem
 }
 
 .chapter-material-tools {
@@ -5148,22 +5238,24 @@ details.topic[open]>summary::before {
   color: var(--action-text)
 }
 
-.chapter-material-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 18px
-}
-
-.chapter-material-actions .dropdown {
+.chapter-material-dropdown {
   display: flex
 }
 
-.chapter-material-actions .menu-list {
-  top: auto;
-  bottom: calc(100% + 6px);
+.chapter-material-dropdown>summary {
+  min-height: 44px
+}
+
+.chapter-material-dropdown .menu-list {
+  top: calc(100% + 6px);
+  bottom: auto;
   max-height: min(70vh, 560px);
   overflow-y: auto
+}
+
+.material-context-label {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border)
 }
 
 .chapter-create-menu {
@@ -5194,6 +5286,35 @@ details.topic[open]>summary::before {
 
 .manager-material-list {
   margin-top: 4px
+}
+
+.classwork-announcements {
+  margin-top: 20px
+}
+
+.classwork-announcements>summary {
+  justify-content: space-between;
+  list-style: none;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border)
+}
+
+.classwork-announcements>summary::-webkit-details-marker {
+  display: none
+}
+
+.classwork-announcements>summary::after {
+  content: '▸';
+  color: var(--muted);
+  font-size: 1.1rem
+}
+
+.classwork-announcements[open]>summary::after {
+  content: '▾'
+}
+
+.classwork-announcements>summary h3 {
+  margin: 0
 }
 
 .manager-material-list li {

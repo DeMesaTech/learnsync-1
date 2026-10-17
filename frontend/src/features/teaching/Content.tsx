@@ -28,18 +28,18 @@ function SectionChoice({offering,chosen,onChange}:{offering:OfferingSummary;chos
     {offering.sections.map(s=><label className="inline" key={s.id}><input type="checkbox" checked={chosen.includes(s.id)} onChange={e=>onChange(e.target.checked?[...chosen,s.id]:chosen.filter(x=>x!==s.id))}/> {s.name}</label>)}</fieldset>;
 }
 
-export function NewItemDialog({offering,nodes,kind,anchorNodeId,onClose,onCreated}:{offering:OfferingSummary;nodes:{id:string;label:string}[];kind?:Item['kind'];anchorNodeId?:string;onClose:()=>void;onCreated:(i:Item)=>void}){
+export function NewItemDialog({offering,kind,anchorNodeId,contextLabel,onClose,onCreated}:{offering:OfferingSummary;kind?:Item['kind'];anchorNodeId?:string|null;contextLabel:string;onClose:()=>void;onCreated:(i:Item)=>void}){
   const [chosen,setChosen]=useState<string[]>([]);const [error,setError]=useState('');
   async function submit(e:FormEvent<HTMLFormElement>){
     e.preventDefault();const f=new FormData(e.currentTarget);
-    try{onCreated(await post<Item>(`/teach/offerings/${offering.id}/items`,{kind:kind??f.get('kind'),title:f.get('title'),section_ids:chosen,anchor_node_id:f.get('anchor')||null}))}
+    try{onCreated(await post<Item>(`/teach/offerings/${offering.id}/items`,{kind:kind??f.get('kind'),title:f.get('title'),section_ids:chosen,anchor_node_id:anchorNodeId??null}))}
     catch(err){setError(errorText(err))}
   }
   const names={lesson:'New lesson',file:'New file',reference:'New link'} as const;
   return <Dialog title={kind?names[kind]:'New item'} onClose={onClose}><form onSubmit={submit}>
+    <p className="eyebrow material-context-label">{contextLabel}</p>
     {!kind&&<label>Type<select name="kind" defaultValue="lesson"><option value="lesson">Lesson (write it here)</option><option value="file">File (PDF, Word, PowerPoint, Excel, image)</option><option value="reference">Reference link</option></select></label>}
     <label>Title<input name="title" required maxLength={200}/></label>
-    <label>Attach to a syllabus topic (optional)<select name="anchor" defaultValue={anchorNodeId??''}><option value="">Not attached</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.label}</option>)}</select></label>
     <SectionChoice offering={offering} chosen={chosen} onChange={setChosen}/>
     {error&&<p role="alert">{error}</p>}
     <div className="actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary">Create and edit</button></div>
@@ -67,7 +67,7 @@ function useEditableItem(offering:OfferingSummary,itemId:string){
   return {closed,query,item};
 }
 
-export function ItemEditorDialog({itemId,onClose}:{itemId:string;onClose:()=>void}){
+export function ItemEditorDialog({itemId,contextLabel,onClose}:{itemId:string;contextLabel:string;onClose:()=>void}){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const [closeError,setCloseError]=useState('');
   const flushEditor=useRef<()=>Promise<boolean>>(async()=>true);
@@ -86,7 +86,7 @@ export function ItemEditorDialog({itemId,onClose}:{itemId:string;onClose:()=>voi
 
   return <Dialog title={item?`Edit ${KIND[item.kind].toLowerCase()}`:'Edit content'} className="item-editor-dialog" confirmOnClose={false} onClose={closeEditor}>
     {query.isPending?<p>Loading content…</p>:query.error||!item?<p role="alert">{query.error?.message??'Content is unavailable.'}</p>
-      :item.draft?<ItemEditor key={item.draft.version} offering={offering} item={item} refetch={()=>query.refetch()} onDone={onClose} onFlushReady={registerFlush}/>
+      :item.draft?<><p className="eyebrow material-context-label">{contextLabel}</p><ItemEditor key={item.draft.version} offering={offering} item={item} refetch={()=>query.refetch()} onDone={onClose} onFlushReady={registerFlush} hideAnchorSelector/></>
         :closed?<ReadOnlyItem offering={offering} item={item}/>:<p>Preparing a draft…</p>}
     {closeError&&<p role="alert">{closeError}</p>}
   </Dialog>;
@@ -106,7 +106,7 @@ function ReadOnlyItem({offering,item}:{offering:OfferingSummary;item:Item}){
     {item.published?.body_html&&<div className="rich-content" dangerouslySetInnerHTML={{__html:item.published.body_html}}/>}</section>;
 }
 
-function ItemEditor({offering,item,refetch,onDone,onFlushReady}:{offering:OfferingSummary;item:Item;refetch:()=>void;onDone?:()=>void;onFlushReady?:(flush:()=>Promise<boolean>)=>void}){
+function ItemEditor({offering,item,refetch,onDone,onFlushReady,hideAnchorSelector=false}:{offering:OfferingSummary;item:Item;refetch:()=>void;onDone?:()=>void;onFlushReady?:(flush:()=>Promise<boolean>)=>void;hideAnchorSelector?:boolean}){
   const ask=useConfirm();const toast=useToast();
   const draft=item.draft!;
   const {session}=useAuth();
@@ -180,7 +180,7 @@ function ItemEditor({offering,item,refetch,onDone,onFlushReady}:{offering:Offeri
         <button className="primary" onClick={async()=>{try{auto.overwrite((await serverDraft()).counter)}catch(e){setMessage(errorText(e))}}}>Keep my version (overwrites the newer one)</button></div></div>}
     <section className="panel">
       <label>Title<input value={v.title} maxLength={200} onChange={e=>set({title:e.target.value})}/></label>
-      <label>Attached syllabus topic<select value={v.anchor_node_id??''} onChange={e=>set({anchor_node_id:e.target.value||null})}><option value="">Not attached</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.label}</option>)}</select></label>
+      {!hideAnchorSelector&&<label>Attached syllabus topic<select value={v.anchor_node_id??''} onChange={e=>set({anchor_node_id:e.target.value||null})}><option value="">Not attached</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.label}</option>)}</select></label>}
       {item.kind==='lesson'&&<><p id="lesson-label" className="label">Lesson content</p><RichEditor html={v.body_html} onChange={html=>set({body_html:html})}/></>}
       {item.kind==='file'&&<><p>{selectedFile?<>Selected file: <strong>{selectedFile.name}</strong> ({Math.ceil(selectedFile.size/1024)} KB)</>:file?<>Current file: <strong>{file.name}</strong> ({Math.ceil(file.size/1024)} KB)</>:'No file uploaded yet.'}</p>
         <label>{file?'Replace the file':'Choose a file'} (PDF, Word, PowerPoint, Excel, PNG or JPEG, up to 20 MB)<input ref={fileInput} name="file" type="file" accept=".pdf,.docx,.pptx,.xlsx,.png,.jpg,.jpeg" onChange={e=>setSelectedFile(e.target.files?.[0]??null)}/></label>

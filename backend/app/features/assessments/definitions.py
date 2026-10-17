@@ -94,12 +94,17 @@ def faculty_list(db, offering):
 def create(db, actor, offering, data):
     section_ids = list(dict.fromkeys(data.section_ids))
     check_sections(db, offering, section_ids)
+    if data.anchor_node_id and str(data.anchor_node_id) not in outline_ids(
+            db, offering, ["draft", "published"]):
+        fail(422, "anchor_invalid", "Choose a chapter or topic from this subject's syllabus.")
     a = Assessment(offering_id=offering.id, kind=data.kind, created_by=actor.id)
     db.add(a)
     db.flush()
     defaults = {"max_attempts": 1, "include_in_grade": True}
     db.add(AssessmentRevision(assessment_id=a.id, version=1, title=data.title,
-                              created_by=actor.id, **defaults))
+                              created_by=actor.id,
+                              anchor_node_id=str(data.anchor_node_id) if data.anchor_node_id else None,
+                              **defaults))
     for section_id in section_ids:
         db.add(AssessmentSection(assessment_id=a.id, section_id=section_id))
     audit(db, actor, "assessment.created", "assessment", a.id, {"kind": data.kind})

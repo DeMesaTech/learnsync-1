@@ -15,14 +15,15 @@ export const assessmentTitle=(a:Assessment)=>a.draft?.title||a.published?.title|
 export const assessmentStatus=(a:Assessment)=>a.archived?'Archived':a.published?(a.draft?`Published v${a.published.version} with newer draft`:`Published v${a.published.version}`):'Draft · not in the gradebook yet';
 export const resultsLabel=(k:Kind)=>k==='online_quiz'?'Attempts & scores':k==='activity'?'Submissions & scores':'Enter scores';
 
-export function NewDialog({offering,kind,onClose,onCreated}:{offering:OfferingSummary;kind?:Kind;onClose:()=>void;onCreated:(a:Assessment)=>void}){
+export function NewDialog({offering,kind,anchorNodeId,contextLabel,onClose,onCreated}:{offering:OfferingSummary;kind?:Kind;anchorNodeId?:string|null;contextLabel?:string;onClose:()=>void;onCreated:(a:Assessment)=>void}){
   const [chosen,setChosen]=useState<string[]>([]);const [error,setError]=useState('');
   async function submit(e:FormEvent<HTMLFormElement>){
     e.preventDefault();const f=new FormData(e.currentTarget);   // read before awaiting
-    try{onCreated(await post<Assessment>(`/teach/offerings/${offering.id}/assessments`,{kind:kind??f.get('kind'),title:f.get('title'),section_ids:chosen}))}
+    try{onCreated(await post<Assessment>(`/teach/offerings/${offering.id}/assessments`,{kind:kind??f.get('kind'),title:f.get('title'),section_ids:chosen,anchor_node_id:anchorNodeId??null}))}
     catch(err){setError(errorText(err))}
   }
   return <Dialog title={kind?`New ${KIND_LABEL[kind].toLowerCase()}`:'New assessment'} onClose={onClose}><form onSubmit={submit}>
+    {contextLabel&&<p className="eyebrow material-context-label">{contextLabel}</p>}
     {!kind&&<label>Type<select name="kind" defaultValue="online_quiz">
       <option value="online_quiz">Online quiz (students answer here, scored automatically)</option>
       <option value="offline_quiz">Paper quiz (you enter the scores)</option>

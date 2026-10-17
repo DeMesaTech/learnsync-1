@@ -9,7 +9,7 @@ import {SimulatorNotice} from './Study';
 import type {AiStatus} from './types';
 
 /** Faculty ask the AI for a DRAFT quiz from their own published materials; nothing is visible to students until they review and publish it. */
-export function GenerateDialog({offering,onClose,onCreated}:{offering:OfferingSummary;onClose:()=>void;onCreated:(a:Assessment)=>void}){
+export function GenerateDialog({offering,anchorNodeId,contextLabel,onClose,onCreated}:{offering:OfferingSummary;anchorNodeId?:string|null;contextLabel?:string;onClose:()=>void;onCreated:(a:Assessment)=>void}){
   const status=useQuery({queryKey:['ai-status'],queryFn:()=>api<AiStatus>('/ai/status')});
   const items=useQuery({queryKey:['items',offering.id],queryFn:()=>api<Item[]>(`/teach/offerings/${offering.id}/items`)});
   const sources=(items.data??[]).filter(i=>i.published&&!i.archived&&(i.published.study_chunks??0)>0);
@@ -19,12 +19,13 @@ export function GenerateDialog({offering,onClose,onCreated}:{offering:OfferingSu
     const count=(k:string)=>Number(f.get(k)||0);
     if(chosen.length===0){setError('Choose at least one lesson or material.');return}
     setBusy(true);setError('');
-    try{onCreated(await post<Assessment>(`/teach/offerings/${offering.id}/assessments/generate`,{title:f.get('title'),source_item_ids:chosen,multiple_choice:count('mc'),true_false:count('tf'),short_answer:count('sa'),points:String(f.get('points')||1),language:f.get('language')}))}
+    try{onCreated(await post<Assessment>(`/teach/offerings/${offering.id}/assessments/generate`,{title:f.get('title'),source_item_ids:chosen,anchor_node_id:anchorNodeId??null,multiple_choice:count('mc'),true_false:count('tf'),short_answer:count('sa'),points:String(f.get('points')||1),language:f.get('language')}))}
     catch(err){setError(errorText(err))}
     finally{setBusy(false)}
   }
   const unavailable=status.data&&!status.data.configured;
   return <Dialog title="Draft a quiz with AI" onClose={busy?()=>{}:onClose}><form onSubmit={submit}>
+    {contextLabel&&<p className="eyebrow material-context-label">{contextLabel}</p>}
     <SimulatorNotice status={status.data}/>
     {unavailable&&<p className="warn" role="status">AI drafting is not set up on this server yet (no provider key). You can still write quizzes yourself.</p>}
     <p className="muted">The text of the materials you choose is sent to the AI provider. No student names, grades or answers are sent. The result is only a <strong>draft</strong>: you must read every question and mark it reviewed before it can be published.</p>

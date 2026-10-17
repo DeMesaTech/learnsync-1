@@ -121,6 +121,7 @@ def save_snapshot(offering_id: UUID, item_id: UUID, data: SnapshotSave, actor=De
 class GenerateQuiz(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     source_item_ids: list[uuid.UUID] = Field(min_length=1, max_length=10)
+    anchor_node_id: uuid.UUID | None = None
     multiple_choice: int = Field(default=0, ge=0, le=30)
     true_false: int = Field(default=0, ge=0, le=30)
     short_answer: int = Field(default=0, ge=0, le=30)

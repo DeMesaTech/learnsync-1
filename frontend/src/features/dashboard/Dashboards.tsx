@@ -105,8 +105,6 @@ export function FacultyHome(){
   return <Page query={query}>{d=>{
     return <>
       <Heading eyebrow="Staff dashboard" title={`${greeting()}, ${d.name}.`} line="Your subjects, teaching tasks and grading at a glance."/>
-      {d.task?<Hero eyebrow="Your next teaching task" title={d.task.headline} detail={d.task.detail} action={d.task.action} to={d.task.link} icon={d.task.icon}/>
-        :<Hero eyebrow="Your next teaching task" title="Nothing is waiting for you" detail="No activity submissions to grade, no grades to review and no drafts in progress." icon="✓"/>}
       <div className="dash-grid">
         <div className="dash-main">
           <Stats items={[[d.totals.subjects,'Assigned subjects in open terms'],[d.totals.students,'Subject enrollments'],[d.totals.to_grade,'Activity submissions to grade',d.queue[0]?.link],[d.totals.needs_review,'Students with grades to review',d.review_link??undefined]]}/>
@@ -117,15 +115,11 @@ export function FacultyHome(){
                 to={o} action="Teach" links={[['Classwork',`${o}/classwork`],['Gradebook',`${o}/gradebook`]]}/>})}</div>}</section>
         </div>
         <div className="dash-side">
+          {d.task?<Hero eyebrow="Your next teaching task" title={d.task.headline} detail={d.task.detail} action={d.task.action} to={d.task.link} icon={d.task.icon}/>
+            :<Hero eyebrow="Your next teaching task" title="Nothing is waiting for you" detail="No activity submissions to grade, no grades to review and no drafts in progress." icon="✓"/>}
           {d.queue.length>0&&<section className="panel"><h2>Activity submissions needing grading</h2><p className="muted">Top 5 by number awaiting grading. <Link state={here} className="touch" to="/faculty/review">See everything to review</Link></p><ul className="rows">{d.queue.map((q,i)=><li key={i}><Link state={here} to={q.link}>{q.title}</Link><span className="muted">{q.subject} · {plural(q.count,'submission')} waiting</span></li>)}</ul></section>}
           <section className="panel"><h2>Upcoming deadlines</h2>
             {d.deadlines.length===0?<p className="muted">No deadlines in the next two weeks.</p>:<ul className="rows">{d.deadlines.map((x,i)=><li key={i}><Link state={here} to={x.link}>{x.title}</Link><span className="muted">{x.subject} · {dateTime(x.deadline)}</span></li>)}</ul>}</section>
-          <section className="panel"><h2>Student progress</h2>
-            {d.subjects.length===0?<p className="muted">Appears when you have subjects.</p>:<ul className="rows">{d.subjects.map(s=><li key={s.offering_id}><Link state={here} to={`/faculty/offerings/${s.offering_id}/progress`}>{s.code}</Link>
-              <span className="muted">{s.average_progress===null?'No completable steps yet':`Average completion ${s.average_progress}%`}{s.quiet_students?` · ${plural(s.quiet_students,'enrolled student')} with no recorded learning activity in the last 7 days`:''}</span></li>)}</ul>}
-            <p className="muted">Average completion is the mean of each student’s completed steps out of the steps that apply to them. “No recorded activity” counts lesson completions and submissions only: it is not attendance, effort or risk, and it is not a grade.</p></section>
-          <section className="panel"><h2>Prepare for your class</h2><p className="muted">Create learning content or an assessment inside one of your subjects.</p>
-            <Link state={here} className="button" to="/faculty/subjects">Choose a subject</Link></section>
         </div>
       </div></>;
   }}</Page>;

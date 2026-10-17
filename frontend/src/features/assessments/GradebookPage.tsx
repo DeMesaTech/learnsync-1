@@ -108,14 +108,14 @@ export function GradebookPage(){
       <p className="muted" role="status">Showing {rows.length} of {book.rows.length} students.{editing?' Editing: type a score in any cell, then save once.':''}</p>
       {!editing&&<div className="actions"><button className="icon-button" type="button" aria-label="Edit scores" title="Edit scores" disabled={closed} onClick={()=>{setEditing(true);setMessage('')}}>✎</button><span className="muted">{closed?'This term is closed, so scores are read-only.':'Type scores straight into the table below.'}</span></div>}
       {editing&&<div className="actions sticky-bar"><button className="primary" disabled={changed===0||saving} onClick={saveAll}>{saving?'Saving…':changed===0?'Save scores':`Save ${changed} changed score${changed===1?'':'s'}`}</button><button disabled={saving} onClick={leaveEditing}>Cancel</button><span className="muted">{changed===0?'No changes yet.':'Nothing is saved until you press Save.'}</span></div>}
-      <div className="table-wrap gradebook" role="region" aria-label="Gradebook, scrolls sideways" tabIndex={0}><table>
+      <div className="table-wrap gradebook" role="region" aria-label="Gradebook; section and student details stay fixed while scores scroll horizontally" tabIndex={0}><table>
         <thead>
-          <tr><th scope="col" className="sticky" rowSpan={2}>Section</th><th scope="col" rowSpan={2}>Student number</th><th scope="col" rowSpan={2}>Student</th>{shown.filter(p=>p!=='course').map(p=><th key={p} colSpan={byPeriod(p).length+1}>{PERIOD_LABEL[p]??p}</th>)}<th>Course</th></tr>
+          <tr><th scope="col" className="sticky sticky-section" rowSpan={2}>Section</th><th scope="col" className="sticky-number" rowSpan={2}>Student number</th><th scope="col" className="sticky-student" rowSpan={2}>Student</th>{shown.filter(p=>p!=='course').map(p=><th key={p} colSpan={byPeriod(p).length+1}>{PERIOD_LABEL[p]??p}</th>)}<th>Course</th></tr>
           <tr>
             {shown.filter(p=>p!=='course').flatMap(p=>[...byPeriod(p).map(c=><th key={c.id}><span className="gradebook-assessment-title"><span>{c.title}</span><Link className="icon-button" state={here} to={`/faculty/offerings/${offering.id}/assessments/${c.id}/scores`} aria-label={`Open ${c.title} scores and attempts`} title={`Open ${c.title} scores and attempts`}>↗</Link></span><br/><span className="muted">{label(c.category_key)} · /{fmt(c.max_points)}</span></th>),<th key={p+'g'}>Grade</th>])}
             <th>Grade</th></tr></thead>
         <tbody>{pageRows.map(r=><tr key={r.student_id}>
-          <td className="sticky">{r.section??'—'}</td><td className="student-number">{r.student_number}</td><th className="student-name" scope="row"><button className="linklike" onClick={()=>setDetail(r)}>{r.display_name}</button></th>
+          <td className="sticky sticky-section">{r.section??'—'}</td><td className="student-number sticky-number">{r.student_number}</td><th className="student-name sticky-student" scope="row"><button className="linklike" onClick={()=>setDetail(r)}>{r.display_name}</button></th>
           {shown.filter(p=>p!=='course').flatMap(p=>[...byPeriod(p).map(c=><td key={c.id}><CellView cell={r.cells[c.id]} kind={c.kind} column={c.title} student={r.display_name} editing={editing&&editable(c.kind,r.cells[c.id])} value={edits[cellKey(c.id,r.student_id)]} problem={rejected[cellKey(c.id,r.student_id)]}
             onType={v=>typeScore(c.id,r.student_id,r.cells[c.id],v)}/></td>),
             <td key={p+'g'}><GradeCell row={r} period={p} onReview={setDetail}/></td>])}
@@ -169,12 +169,12 @@ function GradeCell({row,period,onReview}:{row:GradeRow;period:string;onReview:(r
 
 function DetailDialog({row,base,here,onClose}:{row:GradeRow;base:string;here:Origin;onClose:()=>void}){
   const flagged=Object.entries(row.published).filter(([,p])=>p.needs_review);
-  return <Dialog title={`${row.display_name}: how the grade is calculated`} onClose={onClose}>
+  return <Dialog title={`${row.display_name}: how the grade is calculated`} onClose={onClose} className="gradebook-detail-dialog">
     {flagged.length>0&&<div className="warn" role="status">{flagged.map(([k,p])=><p key={k}><strong>{PERIOD_LABEL[k]??k} needs review.</strong> Students see {fmt(p.grade)} (v{p.release_number}); the working grade is now {row.grades[k]?.grade==null?'pending':fmt(row.grades[k]?.grade)}. {p.review_reason??'Working data changed.'}</p>)}<p>Fix anything pending below (links beside each item), then close this and publish that period. Nothing changes for the student until you do.</p></div>}
     {Object.entries(row.grades).filter(([k])=>k!=='course').map(([period,g])=><section key={period}>
       <h3>{PERIOD_LABEL[period]??period}: {g.grade===null?'Pending':fmt(g.grade)}</h3>
       <ul>{g.categories.map(c=><li key={c.key}><strong>{c.label}</strong> ({c.weight}%): {c.status==='ok'?`${fmt(c.percent)}% (${fmt(c.earned)} of ${fmt(c.possible)})`:c.status==='pending'?`Pending: ${c.missing.join('; ')}`:c.missing.join('; ')}{c.status!=='ok'&&<> <Link to={c.key==='attendance'?`${base}/attendance`:`${base}/assessments`}>{c.key==='attendance'?'Open attendance':'Open assessments'}</Link></>}</li>)}</ul>
       {g.grade===null&&<p className="muted">The {PERIOD_LABEL[period]??period} grade cannot be republished until the pending items above are done.</p>}</section>)}
     <p className="muted">Course grade: {row.grades.course?.grade===null?'Pending (both periods must be ready)':fmt(row.grades.course?.grade)}</p>
-    <div className="actions"><Link className="button" state={here} to={`${base}/students/${row.student_id}`}>Open full standing</Link><button className="primary" onClick={onClose}>Close</button></div></Dialog>;
+    <div className="actions gradebook-detail-actions"><Link className="button" state={here} to={`${base}/students/${row.student_id}`}>Open full standing</Link><button className="primary" onClick={onClose}>Close</button></div></Dialog>;
 }

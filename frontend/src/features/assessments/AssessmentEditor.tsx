@@ -70,7 +70,7 @@ export function AssessmentEditorPage(){
   return <Editor key={item.draft.version} offering={offering} assessment={item} refetch={()=>query.refetch()}/>;
 }
 
-export function AssessmentEditorDialog({offering,assessmentId,onClose}:{offering:OfferingSummary;assessmentId:string;onClose:()=>void}){
+export function AssessmentEditorDialog({offering,assessmentId,contextLabel,onClose}:{offering:OfferingSummary;assessmentId:string;contextLabel:string;onClose:()=>void}){
   const base=`/teach/offerings/${offering.id}/assessments/${assessmentId}`;
   const closed=offering.term_status!=='active';
   const query=useQuery({queryKey:['assessment',assessmentId],queryFn:()=>api<Assessment>(base)});
@@ -103,7 +103,7 @@ export function AssessmentEditorDialog({offering,assessmentId,onClose}:{offering
   return <Dialog title={item?.draft?.title||item?.published?.title||'Edit assessment'} className="assessment-editor-dialog" confirmOnClose={false} onClose={closeEditor}>
     {query.isPending?<p>Loading assessment…</p>:query.error||!item?<p role="alert">{query.error?.message??'Assessment is unavailable.'}</p>
       :requiresQuizWarning&&!quizEditConfirmed?<p>{warningError?<span role="alert">{warningError}</span>:'Confirm both warnings to edit this auto-scored quiz.'}</p>
-      :item.draft?<Editor key={item.draft.version} offering={offering} assessment={item} refetch={()=>query.refetch()} modal onDone={onClose} onFlushReady={registerFlush}/>
+      :item.draft?<Editor key={item.draft.version} offering={offering} assessment={item} refetch={()=>query.refetch()} modal contextLabel={contextLabel} onDone={onClose} onFlushReady={registerFlush}/>
         :closed?<p className="muted">This term is closed, so the assessment cannot be edited.</p>
           :startError?<p role="alert">{startError}</p>:<p>Preparing a draft…</p>}
     {closeError&&<p role="alert">{closeError}</p>}
@@ -145,7 +145,7 @@ function PasteQuestions({offeringId,locked,onAdd}:{offeringId:string;locked:bool
   </details>;
 }
 
-function Editor({offering,assessment,refetch,modal=false,onDone,onFlushReady}:{offering:OfferingSummary;assessment:Assessment;refetch:()=>void;modal?:boolean;onDone?:()=>void;onFlushReady?:(flush:()=>Promise<boolean>)=>void}){
+function Editor({offering,assessment,refetch,modal=false,contextLabel,onDone,onFlushReady}:{offering:OfferingSummary;assessment:Assessment;refetch:()=>void;modal?:boolean;contextLabel?:string;onDone?:()=>void;onFlushReady?:(flush:()=>Promise<boolean>)=>void}){
   const ask=useConfirm();const offer=useUndo();
   const draft=assessment.draft!;
   const {session}=useAuth();
@@ -235,7 +235,7 @@ function Editor({offering,assessment,refetch,modal=false,onDone,onFlushReady}:{o
       {quiz&&<div className="grid-2">
         <label>Attempts allowed<select value={v.max_attempts} disabled={locked} onChange={e=>set({max_attempts:Number(e.target.value)})}>{[1,2,3,4,5,10].map(n=><option key={n} value={n}>{n}</option>)}</select></label>
         {v.max_attempts>1&&<label>Score used<select value={v.score_rule} disabled={locked} onChange={e=>set({score_rule:e.target.value as DraftContent['score_rule']})}><option value="highest">Highest attempt</option><option value="latest">Latest attempt</option></select></label>}</div>}
-      <label>Attached syllabus topic (optional)<select value={v.anchor_node_id??''} onChange={e=>set({anchor_node_id:e.target.value||null})}><option value="">Not attached</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.label}</option>)}</select></label>
+      {!modal&&<label>Attached syllabus topic (optional)<select value={v.anchor_node_id??''} onChange={e=>set({anchor_node_id:e.target.value||null})}><option value="">Not attached</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.label}</option>)}</select></label>}
       <fieldset><legend>Applies to</legend><p className="muted">Leave all unchecked for every section.</p>
         {offering.sections.map(s=><label className="inline" key={s.id}><input type="checkbox" checked={sections.includes(s.id)} onChange={e=>{const ids=e.target.checked?[...sections,s.id]:sections.filter(x=>x!==s.id);setSections(ids);void settings({section_ids:ids})}}/> {s.name}</label>)}</fieldset>
     </details></section>;
@@ -253,6 +253,7 @@ function Editor({offering,assessment,refetch,modal=false,onDone,onFlushReady}:{o
 
   return <>
     {!modal&&<p className="back"><Link to={back}>← Classwork</Link></p>}
+    {modal&&contextLabel&&<p className="eyebrow material-context-label">{contextLabel}</p>}
     <div className="page-heading"><div><p className="eyebrow">{KIND_LABEL[assessment.kind]}{quiz?` · step ${index+1} of ${QUIZ_STEPS.length}`:''}</p><h2>{v.title||'Untitled'}</h2>
       <p className="muted">{assessment.published?`Students see version ${assessment.published.version} until you ${assignLabel.toLowerCase()}.`:'Not visible to students or the gradebook until you assign it.'}</p></div>
       <SaveIndicator status={auto.status} message={auto.message} storageFailed={auto.storageFailed} onRetry={auto.retry}/></div>

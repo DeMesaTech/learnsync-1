@@ -1,5 +1,5 @@
 import type React from 'react';
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useState} from 'react';
 import {Link,useOutletContext,useSearchParams} from 'react-router-dom';
 import {ClassworkTypes,catOf,CATS} from '../../components/ClassworkTypes';
 import {Dialog} from '../../components/Dialog';
@@ -15,10 +15,11 @@ import {AssessmentEditorDialog} from '../assessments/AssessmentEditor';
 import {detail as workDetail} from '../assessments/Work';
 import {KIND_LABEL,fmt,type Assessment,type Kind,type LearnItem as Work} from '../assessments/types';
 import {ItemEditorDialog,KIND,NewItemDialog,itemTitle,stateLabel,useNodes} from './Content';
-import {AnnouncementCreateDialog} from './Announcements';
+import {FacultyAnnouncements} from './Announcements';
 import {emptyChapter,newId,type Chapter,type Item,type LearnItem,type LearnSyllabus,type Outline,type SyllabusState} from './types';
 
-type Create={type:'item';kind:Item['kind']}|{type:'item-editor';itemId:string}|{type:'assessment';kind:Kind}|{type:'assessment-editor';assessmentId:string}|{type:'ai'}|{type:'announcement'}|null;
+type Create={type:'item';kind:Item['kind']}|{type:'item-editor';itemId:string}|{type:'assessment';kind:Kind}|{type:'assessment-editor';assessmentId:string}|{type:'ai'}|null;
+interface MaterialContext{anchorNodeId:string|null;label:string}
 interface Row{canUnpublish:boolean;pending:boolean;key:string;type:'item'|'assessment';kind:string;sectionIds:string[];id:string;title:string;label:string;anchor:string|null;archived:boolean;status:string;published:boolean;to:string;meta:string}
 type MaterialFilter='all'|'lesson'|'quiz'|'activity'|'exam';
 
@@ -46,19 +47,23 @@ export function FacultyClasswork(){
   const [chapterDisplay,setChapterDisplay]=useState<'single'|'all'>('single');
   const [sectionId,setSectionId]=useState(offering.sections[0]?.id??'all');
   const [activeChapter,setActiveChapter]=useState('');
+  const [materialContext,setMaterialContext]=useState<MaterialContext>({anchorNodeId:null,label:'Other materials'});
   const [reorder,setReorder]=useState<string|null>(null);const [moved,setMoved]=useState('');
-  const menu=useRef<HTMLDetailsElement>(null);
   useEffect(()=>{
     setSectionId(offering.sections[0]?.id??'all');
     setActiveChapter('');
   },[offering.id,offering.sections]);
   useEffect(()=>{
-    const outside=(e:Event)=>{const d=menu.current;if(d?.open&&!(e.target instanceof Node&&d.contains(e.target)))d.open=false};
-    const escape=(e:KeyboardEvent)=>{const d=menu.current;if(e.key==='Escape'&&d?.open){d.open=false;d.querySelector('summary')?.focus()}};
+    const outside=(e:Event)=>{document.querySelectorAll<HTMLDetailsElement>('.chapter-material-dropdown[open]').forEach(d=>{if(!(e.target instanceof Node&&d.contains(e.target)))d.open=false})};
+    const escape=(e:KeyboardEvent)=>{if(e.key==='Escape'){document.querySelectorAll<HTMLDetailsElement>('.chapter-material-dropdown[open]').forEach(d=>{d.open=false;d.querySelector('summary')?.focus()})}};
     document.addEventListener('click',outside);document.addEventListener('keydown',escape);
     return()=>{document.removeEventListener('click',outside);document.removeEventListener('keydown',escape)};
   },[]);
-  const choose=(c:Create)=>{if(menu.current)menu.current.open=false;setCreate(c)};
+  const choose=(c:Create,context:MaterialContext,event:React.MouseEvent<HTMLButtonElement>)=>{
+    const dropdown=event.currentTarget.closest<HTMLDetailsElement>('details');
+    if(dropdown)dropdown.open=false;
+    setMaterialContext(context);setCreate(c);
+  };
 
   const rows:Row[]=[
     ...(items.data??[]).map(i=>({canUnpublish:false,pending:!!i.draft,key:'i'+i.id,type:'item' as const,kind:i.kind,sectionIds:i.section_ids,id:i.id,title:itemTitle(i),label:KIND[i.kind],anchor:(i.published??i.draft)?.anchor_node_id??null,archived:i.archived,
@@ -81,12 +86,27 @@ export function FacultyClasswork(){
   const visibleRows=rows.filter(shown);
   const tree=buildTree(outline,visibleRows);
   const chapters=outline?.chapters??[];
-  const selectedChapter=chapters.find(chapter=>chapter.id===activeChapter)??chapters[0];
+  const selectedChapter=activeChapter==='other'?undefined:chapters.find(chapter=>chapter.id===activeChapter)??chapters[0];
   const selectedChapterId=selectedChapter?.id??'other';
   const selectedTree=tree.find(node=>node.id===selectedChapterId);
   const chapterTrees=chapters.map(chapter=>tree.find(node=>node.id===chapter.id)??{id:chapter.id,title:chapter.title||'Untitled chapter',rows:[],kids:[]} as TNode<Row>);
   const otherTree=tree.find(node=>node.id==='other');
   const published=syllabus.data?.published;const draft=syllabus.data?.draft;
+  const contextFor=(chapter:Chapter|undefined,index=-1):MaterialContext=>{
+    if(!chapter)return {anchorNodeId:null,label:'Other materials'};
+    const title=chapter.title||'Untitled chapter';
+    const number=chapters.slice(0,index).filter(item=>!item.is_intro).length+1;
+    return {anchorNodeId:chapter.id,label:chapter.is_intro?`Subject introduction · ${title}`:`Chapter ${number} · ${title}`};
+  };
+  const createMenu=(context:MaterialContext)=><details className="dropdown chapter-material-dropdown">
+    <summary className="button primary" aria-label={`Add material to ${context.label}`}>＋ Add material</summary>
+    <div className="menu-list chapter-create-menu" role="group" aria-label={`Add material to ${context.label}`}>
+      <p className="eyebrow material-context-label">{context.label}</p>
+      {CREATE_GROUPS.map(group=><div className="menu-category" key={group.label}><strong>{group.label}</strong>
+        {group.options.map(([label,target])=><button key={label} type="button" onClick={event=>choose(target,context,event)}>{label}</button>)}
+      </div>)}
+    </div>
+  </details>;
 
   const inNode=(n:TNode<Row>,r:Row)=>n.id==='other'?(!r.anchor||!known.has(r.anchor)):r.anchor===n.id;
   async function move(n:TNode<Row>,visible:Row[],row:Row,step:number){
@@ -144,23 +164,30 @@ export function FacultyClasswork(){
       <article><span aria-hidden="true">✓</span><div><strong>{publishedCount}</strong><small>Published</small></div></article>
       <article><span aria-hidden="true">✎</span><div><strong>{draftCount}</strong><small>Drafts</small></div></article>
     </section>
-    <div className="chapter-display-options">
-      <div className="segmented" role="group" aria-label="Chapter display">
-        <button type="button" className={chapterDisplay==='all'?'on':''} aria-label="Show all chapters" title="Show all chapters" aria-pressed={chapterDisplay==='all'} onClick={()=>setChapterDisplay('all')}>▤</button>
-        <button type="button" className={chapterDisplay==='single'?'on':''} aria-label="Show one chapter at a time" title="Show one chapter at a time" aria-pressed={chapterDisplay==='single'} onClick={()=>setChapterDisplay('single')}>▣</button>
-      </div>
-    </div>
     {!published&&!draft&&!closed&&<section className="panel" aria-labelledby="syl-h"><h3 id="syl-h">Set up this subject</h3><p className="muted">Not set up yet. A guided setup creates the syllabus, grading policy and first topics in a few steps.</p>
       <Link className="button primary" to={`${base}/setup`}>Set up this subject</Link></section>}
     {moved&&<p role="status" className="muted">{moved}</p>}
     {(items.isPending||assessments.isPending)?<p>Loading…</p>:items.error||assessments.error?<p role="alert">{(items.error??assessments.error)!.message}</p>:
       <div className="chapter-workspace">
+        <details className="panel classwork-announcements" open>
+          <summary aria-labelledby="classwork-announcements-heading">
+            <h3 id="classwork-announcements-heading">Announcements</h3>
+          </summary>
+          <FacultyAnnouncements embedded manageActions/>
+        </details>
         <ChapterNavigation outline={outline} rows={visibleRows} selected={selectedChapterId} onSelect={id=>{setActiveChapter(id);if(chapterDisplay==='all')document.getElementById(`chapter-${id}`)?.scrollIntoView({behavior:'smooth',block:'start'})}} onAdd={()=>setAddingChapter(true)} canAdd={!closed}/>
         <section className="chapter-detail panel">
+          <div className="chapter-display-options">
+            <span className="muted">Chapter view</span>
+            <div className="segmented" role="group" aria-label="Chapter display">
+              <button type="button" className={chapterDisplay==='all'?'on':''} aria-label="Show all chapters" title="Show all chapters" aria-pressed={chapterDisplay==='all'} onClick={()=>setChapterDisplay('all')}>▤</button>
+              <button type="button" className={chapterDisplay==='single'?'on':''} aria-label="Show one chapter at a time" title="Show one chapter at a time" aria-pressed={chapterDisplay==='single'} onClick={()=>setChapterDisplay('single')}>▣</button>
+            </div>
+          </div>
           <header className="chapter-detail-heading">
             <div><p className="eyebrow">{chapterDisplay==='all'?'ALL CHAPTERS':selectedChapter?(selectedChapter.is_intro?'SUBJECT INTRODUCTION':`CHAPTER ${chapters.slice(0,chapters.indexOf(selectedChapter)).filter(chapter=>!chapter.is_intro).length+1}`):'OTHER MATERIALS'}</p>
               <h2>{chapterDisplay==='all'?'All chapters':selectedChapter?(selectedChapter.is_intro?(selectedChapter.title||'Subject Introduction'):`Chapter ${chapters.slice(0,chapters.indexOf(selectedChapter)).filter(chapter=>!chapter.is_intro).length+1}: ${selectedChapter.title||'Untitled'}`):'Other materials'}</h2>
-              <p className="muted">{chapterDisplay==='all'?'Browse all chapters in syllabus order. Choose a chapter to add material there.':'Manage learning resources for this chapter.'}</p></div>
+              <p className="muted">{chapterDisplay==='all'?'Browse all chapters in syllabus order.':'Manage learning resources for this chapter.'}</p></div>
           </header>
           {stranded&&<p className="warn" role="status">Items cannot be reordered because some are attached to a topic that is no longer in the syllabus. <Link to={stranded.to}>Open “{stranded.title}”</Link> and choose a current topic.</p>}
           <div className="chapter-materials">
@@ -168,40 +195,33 @@ export function FacultyClasswork(){
             <div className="chapter-material-tools">
               <label className="chapter-material-search">Search chapter materials<input type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="Search chapter materials…"/></label>
               <div className="chapter-material-filters" role="group" aria-label="Filter chapter materials">
-                {([['lesson','Lessons'],['quiz','Quizzes'],['activity','Activities'],['exam','Exams']] as const).map(([key,label])=>
-                  <button key={key} type="button" className={materialFilter===key?'active':''} aria-pressed={materialFilter===key} aria-label={materialFilter===key?`${label}; click again to show all`:label}
-                    onClick={()=>setMaterialFilter(materialFilter===key?'all':key)}>{label}</button>)}
+                {([['all','All'],['lesson','Lessons'],['quiz','Quizzes'],['activity','Activities'],['exam','Exams']] as const).map(([key,label])=>
+                  <button key={key} type="button" className={materialFilter===key?'active':''} aria-pressed={materialFilter===key} aria-label={key==='all'?'Show all materials':`Show ${label.toLowerCase()}`}
+                    onClick={()=>setMaterialFilter(key)}>{label}</button>)}
               </div>
               <label className="inline chapter-archived"><input type="checkbox" checked={archived} onChange={event=>setArchived(event.target.checked)}/> Show archived</label>
             </div>
             {chapterDisplay==='single'
               ?selectedTree?branch(selectedTree,0,true):<p className="muted">{search||materialFilter!=='all'||archived?'Nothing matches the current filters.':'No learning materials in this chapter yet.'}</p>
               :<div className="chapter-all-list">
-                {chapterTrees.map((node,index)=><details key={node.id} id={`chapter-${node.id}`} className="chapter-all-entry" open>
-                  <summary><h3>{chapters[index].is_intro?`Subject introduction · ${node.title}`:`Chapter ${chapters.slice(0,index).filter(chapter=>!chapter.is_intro).length+1}: ${node.title}`}</h3><span className="count">{total(node)}</span></summary>
+                {chapterTrees.map((node,index)=>{const context=contextFor(chapters[index],index);return <details key={node.id} id={`chapter-${node.id}`} className="chapter-all-entry" open>
+                  <summary><h3>{context.label}</h3><span className="count">{total(node)}</span></summary>
                   {total(node)>0?branch(node,0,true):<p className="muted">No learning materials in this chapter yet.</p>}
-                </details>)}
-                {otherTree&&<details id="chapter-other" className="chapter-all-entry" open><summary><h3>Other materials</h3><span className="count">{total(otherTree)}</span></summary>{branch(otherTree,0,true)}</details>}
+                  {!closed&&<div className="chapter-all-actions">{createMenu(context)}</div>}
+                </details>})}
+                {otherTree&&<details id="chapter-other" className="chapter-all-entry" open><summary><h3>Other materials</h3><span className="count">{total(otherTree)}</span></summary>
+                  {branch(otherTree,0,true)}
+                  {!closed&&<div className="chapter-all-actions">{createMenu(contextFor(undefined))}</div>}</details>}
               </div>}
+            {chapterDisplay==='single'&&!closed&&<div className="chapter-all-actions">{createMenu(contextFor(selectedChapter,selectedChapter?chapters.indexOf(selectedChapter):-1))}</div>}
           </div>
-          {!closed&&<div className="chapter-material-actions">
-            <button type="button" className="icon-button announcement-add" aria-label="Create announcement" title="Create announcement" onClick={()=>setCreate({type:'announcement'})}>▤</button>
-            <details className="dropdown" ref={menu}><summary className="icon-button" aria-label="Add material" title="Add material">＋</summary>
-              <div className="menu-list chapter-create-menu" role="group" aria-label="Add material">
-                {CREATE_GROUPS.map(group=><div className="menu-category" key={group.label}><strong>{group.label}</strong>
-                  {group.options.map(([label,target])=><button key={label} type="button" onClick={()=>choose(target)}>{label}</button>)}
-                </div>)}
-              </div>
-            </details>
-          </div>}
         </section>
       </div>}
-    {create?.type==='item'&&<NewItemDialog offering={offering} nodes={nodes} kind={create.kind} anchorNodeId={selectedChapter?.id} onClose={()=>setCreate(null)} onCreated={i=>{setCreate({type:'item-editor',itemId:i.id});queryClient.invalidateQueries({queryKey:['items',offering.id]})}}/>}
-    {create?.type==='item-editor'&&<ItemEditorDialog itemId={create.itemId} onClose={()=>{setCreate(null);queryClient.invalidateQueries({queryKey:['items',offering.id]})}}/>}
-    {create?.type==='assessment'&&<NewDialog offering={offering} kind={create.kind} onClose={()=>setCreate(null)} onCreated={assessmentCreated}/>}
-    {create?.type==='assessment-editor'&&<AssessmentEditorDialog offering={offering} assessmentId={create.assessmentId} onClose={()=>{setCreate(null);queryClient.invalidateQueries({queryKey:['assessments',offering.id]})}}/>}
-    {create?.type==='ai'&&<GenerateDialog offering={offering} onClose={()=>setCreate(null)} onCreated={assessmentCreated}/>}
-    {create?.type==='announcement'&&<AnnouncementCreateDialog offering={offering} onClose={()=>setCreate(null)} onDone={()=>setCreate(null)}/>}
+    {create?.type==='item'&&<NewItemDialog offering={offering} kind={create.kind} anchorNodeId={materialContext.anchorNodeId} contextLabel={materialContext.label} onClose={()=>setCreate(null)} onCreated={i=>{setCreate({type:'item-editor',itemId:i.id});queryClient.invalidateQueries({queryKey:['items',offering.id]})}}/>}
+    {create?.type==='item-editor'&&<ItemEditorDialog itemId={create.itemId} contextLabel={materialContext.label} onClose={()=>{setCreate(null);queryClient.invalidateQueries({queryKey:['items',offering.id]})}}/>}
+    {create?.type==='assessment'&&<NewDialog offering={offering} kind={create.kind} anchorNodeId={materialContext.anchorNodeId} contextLabel={materialContext.label} onClose={()=>setCreate(null)} onCreated={assessmentCreated}/>}
+    {create?.type==='assessment-editor'&&<AssessmentEditorDialog offering={offering} assessmentId={create.assessmentId} contextLabel={materialContext.label} onClose={()=>{setCreate(null);queryClient.invalidateQueries({queryKey:['assessments',offering.id]})}}/>}
+    {create?.type==='ai'&&<GenerateDialog offering={offering} anchorNodeId={materialContext.anchorNodeId} contextLabel={materialContext.label} onClose={()=>setCreate(null)} onCreated={assessmentCreated}/>}
     {addingChapter&&<ChapterDialog offering={offering} hasIntro={chapters.some(chapter=>chapter.is_intro)} onClose={()=>setAddingChapter(false)} onAdded={id=>{setAddingChapter(false);setActiveChapter(id)}}/>}
   </>;
 }

@@ -109,7 +109,7 @@ export function Shell(){
                 <span className="nav-icon" aria-hidden="true">{i.icon}</span>{i.label}
               </NavLink>
               {/* Change class-link destinations in the classes query above (the ClassLink to value). */}
-              {i.children.map(child=><NavLink key={child.to} to={child.to} className={({isActive})=>isActive?'active nav-child':'nav-child'}>
+              {i.children.map(child=><NavLink key={child.to} to={child.to} end className={({isActive})=>isActive?'active nav-child':'nav-child'}>
                 <span className="nav-icon" aria-hidden="true">{child.icon}</span>{child.label}
               </NavLink>)}
             </div> :

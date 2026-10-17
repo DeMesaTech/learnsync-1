@@ -19,7 +19,7 @@ from app.features.assessments.models import (
     QuizQuestion,
 )
 from app.features.teaching.access import teaching_offering
-from app.features.teaching.items import check_sections, revision
+from app.features.teaching.items import check_sections, outline_ids, revision
 from app.features.teaching.models import LearningItem
 
 from . import provider
@@ -132,6 +132,9 @@ def validate(raw, counts, source_ids, points):
 
 def generate(db, actor, offering_id, data):
     offering = teaching_offering(db, offering_id, actor)               # owner + term open
+    if data.anchor_node_id and str(data.anchor_node_id) not in outline_ids(
+            db, offering, ["draft", "published"]):
+        fail(422, "anchor_invalid", "Choose a chapter or topic from this subject's syllabus.")
     counts = {"multiple_choice": data.multiple_choice, "true_false": data.true_false,
               "short_answer": data.short_answer}
     total = sum(counts.values())
@@ -183,7 +186,8 @@ def generate(db, actor, offering_id, data):
     db.flush()
     rev = AssessmentRevision(assessment_id=assessment.id, version=1, title=data.title,
                              created_by=actor.id, ai_generated=True, ai_language=data.language, include_in_grade=True,
-                             max_points=Decimal(data.points) * len(questions))
+                             max_points=Decimal(data.points) * len(questions),
+                             anchor_node_id=str(data.anchor_node_id) if data.anchor_node_id else None)
     db.add(rev)
     db.flush()
     for position, q in enumerate(questions):

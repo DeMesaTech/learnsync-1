@@ -135,6 +135,20 @@ def test_assessment_api_roles(db, graded):
 
 # ---------------- definitions and publishing ----------------
 
+def test_new_assessment_can_be_attached_to_a_syllabus_chapter(course):
+    from helpers import make_outline
+
+    outline, chapter_id, _ = make_outline()
+    publish_syllabus(course, outline)
+    attached = create(course, "manual", "Chapter activity", anchor_node_id=chapter_id)
+    assert attached["draft"]["anchor_node_id"] == chapter_id
+
+    invalid = course["fac"].post(a(course), {
+        "kind": "manual", "title": "Invalid attachment", "anchor_node_id": uid()})
+    assert invalid.status_code == 422
+    assert invalid.json()["error"]["code"] == "anchor_invalid"
+
+
 def test_quiz_publish_needs_a_policy_and_a_complete_quiz(course):
     # no confirmed policy: graded work is refused with guidance
     publish_syllabus(course)                                         # syllabus without a policy
