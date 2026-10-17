@@ -73,7 +73,7 @@ export function StudentStanding(){
       <p className="muted"><strong>PDF for the student</strong> has only what the student can already see (released results and published grades) plus attendance and progress, so it is safe to hand over. The <strong>faculty copy</strong> and <strong>Print</strong> include working values and unreleased scores: the faculty copy is marked on every page, and a printed page carries a faculty-record notice.</p>
       {note&&<p role="status">{note}</p>}</section>
     {withdrawn&&<p className="warn" role="status"><strong>Withdrawn.</strong> {d.calculation_note}</p>}
-    {offering.term_status==='closed'&&<p className="warn" role="status">This term is closed, so records here are final.</p>}
+    {offering.term_status!=='active'&&<p className="warn" role="status">This semester is read-only, so records here are final.</p>}
     {!withdrawn&&d.calculation_note&&<p className="warn" role="status">{d.calculation_note}</p>}
 
     <section className="panel"><h3>Grades</h3>

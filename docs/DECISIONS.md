@@ -1,5 +1,11 @@
 # Implementation decisions
 
+2026-10-17 (academic calendar lifecycle; supersedes the 2026-10-06 M2 term defaults):
+- School-year labels are generated from a starting year and must match consecutive calendar years. Creation inserts one school year and exactly two draft semesters atomically, with ordered, contained, non-overlapping dates.
+- Semester lifecycle is `draft` -> `scheduled` -> `active` -> `inactive` (or `archived`). Draft is calendar configuration only; normal academic writes are allowed only in an active semester. At most one active semester exists institution-wide.
+- Activation is audited and requires the previous semester to be inactive/archived. Closing an active term makes it inactive. Generic reopening is refused; future correction overrides must be explicitly authorized, narrowly scoped, reasoned, and audited.
+- PostgreSQL exclusion constraints protect school-year and semester date ranges; a partial unique index protects the single-active invariant. Structure copying is only available after a semester is active, never during draft creation.
+
 2026-10-06: Begin approved rewrite in v2; old project remains unchanged. Product baseline is IMPLEMENTATION_PLAN.md. New technical defaults and deviations will be recorded here with their reason.
 
 - Python launcher is installed but has no registered interpreter; use the verified bundled Python 3.12.14 to create a fresh v2 environment.

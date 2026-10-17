@@ -26,8 +26,12 @@ def stage(db, actors, tmp_path, monkeypatch):
     year = admin.post("/api/school-years", {
         "label": "2026-2027", "start_date": "2026-06-01", "end_date": "2027-04-30",
         "terms": [{"name": "First Semester", "sequence": 1, "start_date": "2026-06-01",
-                   "end_date": "2026-10-31"}]}).json()
+                   "end_date": "2026-10-31"},
+                  {"name": "Second Semester", "sequence": 2, "start_date": "2026-11-01",
+                   "end_date": "2027-04-30"}]}).json()
     term = year["terms"][0]
+    assert admin.post(f"/api/terms/{term['id']}/schedule").status_code == 200
+    assert admin.post(f"/api/terms/{term['id']}/activate").status_code == 200
     sections = {n: admin.post(f"/api/terms/{term['id']}/sections",
                               {"name": n, "year_level": 1}).json() for n in ("1A", "1B")}
     return {"admin": admin, "college": college, "term": term, "sections": sections, "sent": sent,

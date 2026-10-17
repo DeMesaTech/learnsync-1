@@ -14,7 +14,7 @@ interface Page{items:Announcement[];has_more:boolean}
 export function FacultyAnnouncements(){
   const ask=useConfirm();
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
-  const closed=offering.term_status==='closed';
+  const closed=offering.term_status!=='active';
   const base=`/teach/offerings/${offering.id}/announcements`;
   const query=useInfiniteQuery({queryKey:['announcements',offering.id],initialPageParam:0,queryFn:({pageParam})=>api<Page>(`${base}?limit=${PAGE}&offset=${pageParam}`),getNextPageParam:(p,all)=>p.has_more?all.length*PAGE:undefined});
   const rows=query.data?.pages.flatMap(p=>p.items)??[];

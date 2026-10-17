@@ -2,6 +2,7 @@ import re
 
 from fastapi import HTTPException
 from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
 
 from app.errors import fail
 from app.features.accounts.commands import audit, issue_token, send_link, send_links
@@ -13,6 +14,7 @@ from app.features.teaching.models import (
     TeachingCoverage,
 )
 
+from .access import writable_term
 from .models import (
     AcademicTerm,
     College,
@@ -36,10 +38,7 @@ def get_or_404(db, model, ident, label):
 
 
 def open_term(db, term_id):
-    term = get_or_404(db, AcademicTerm, term_id, "Term")
-    if term.status == "closed":
-        fail(409, "term_closed", "This term is closed. Reopen it before making changes.")
-    return term
+    return writable_term(db, term_id)
 
 
 def account_with_role(db, account_id, role):
@@ -54,21 +53,41 @@ def account_with_role(db, account_id, role):
 def create_school_year(db, actor, data):
     if db.scalar(select(SchoolYear.id).where(SchoolYear.label == data.label)):
         fail(409, "school_year_exists", "A school year with this label already exists.")
-    if len({t.sequence for t in data.terms}) != len(data.terms):
-        fail(422, "term_sequence_duplicate", "Each term needs its own sequence number.")
-    year = SchoolYear(label=data.label, start_date=data.start_date, end_date=data.end_date)
-    db.add(year)
-    db.flush()
+    overlapping_year = db.scalar(select(SchoolYear.id).where(
+        SchoolYear.start_date <= data.end_date, SchoolYear.end_date >= data.start_date))
+    if overlapping_year:
+        fail(409, "school_year_dates_overlap",
+             "These dates overlap an existing school year.")
     for item in data.terms:
-        term = AcademicTerm(school_year_id=year.id, name=item.name, sequence=item.sequence,
-                            start_date=item.start_date, end_date=item.end_date)
-        db.add(term)
+        overlapping_term = db.scalar(select(AcademicTerm.id).where(
+            AcademicTerm.start_date <= item.end_date,
+            AcademicTerm.end_date >= item.start_date))
+        if overlapping_term:
+            fail(409, "academic_term_dates_overlap",
+                 "A semester cannot overlap another semester.")
+    year = SchoolYear(label=data.label, start_date=data.start_date, end_date=data.end_date)
+    try:
+        db.add(year)
         db.flush()
-        if item.copy_from_term_id:
-            copy_structure(db, actor, get_or_404(db, AcademicTerm, item.copy_from_term_id,
-                                                 "Source term"), term, offerings=item.copy_offerings)
-    audit(db, actor, "school_year.created", "school_year", year.id, {"label": year.label})
-    db.commit()
+        for item in data.terms:
+            term = AcademicTerm(school_year_id=year.id, name=item.name, sequence=item.sequence,
+                                start_date=item.start_date, end_date=item.end_date, status="draft")
+            db.add(term)
+            db.flush()
+        audit(db, actor, "school_year.created", "school_year", year.id, {"label": year.label})
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        constraint = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+        if constraint == "school_year_label_key":
+            fail(409, "school_year_exists", "A school year with this label already exists.")
+        if constraint == "school_year_dates_no_overlap":
+            fail(409, "school_year_dates_overlap",
+                 "These dates overlap an existing school year.")
+        if constraint == "academic_term_dates_no_overlap":
+            fail(409, "academic_term_dates_overlap",
+                 "A semester cannot overlap another semester.")
+        raise
     return year
 
 
@@ -108,22 +127,84 @@ def copy_term_structure(db, actor, term_id, source_term_id, offerings):
 
 
 def update_term(db, actor, term_id, data):
-    term = open_term(db, term_id)
+    term = get_or_404(db, AcademicTerm, term_id, "Term")
+    if term.status != "draft":
+        fail(409, "term_read_only", "Only draft semester calendar details can be changed.")
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(term, field, value)
-    if term.end_date < term.start_date:
-        fail(422, "term_dates", "End date must not be before the start date.")
+    if term.end_date <= term.start_date:
+        fail(422, "term_dates", "Semester end date must be after its start date.")
+    year = get_or_404(db, SchoolYear, term.school_year_id, "School year")
+    if term.start_date < year.start_date or term.end_date > year.end_date:
+        fail(422, "term_outside_school_year", "Semester dates must fall within the school-year dates.")
+    siblings = db.scalars(select(AcademicTerm).where(
+        AcademicTerm.school_year_id == year.id,
+        AcademicTerm.id != term.id).order_by(AcademicTerm.sequence)).all()
+    for sibling in siblings:
+        if term.start_date <= sibling.end_date and term.end_date >= sibling.start_date:
+            fail(422, "academic_term_dates_overlap", "Semester dates cannot overlap another semester.")
+        if (sibling.sequence < term.sequence and sibling.start_date >= term.start_date) \
+                or (sibling.sequence > term.sequence and sibling.start_date <= term.start_date):
+            fail(422, "term_sequence_order", "Semester dates must follow their sequence order.")
     audit(db, actor, "term.updated", "term", term.id, data.model_dump(mode="json",
                                                                     exclude_none=True))
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        constraint = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+        if constraint == "academic_term_dates_no_overlap":
+            fail(409, "academic_term_dates_overlap", "Semester dates overlap another semester.")
+        raise
+    return term
+
+
+def schedule_term(db, actor, term_id):
+    term = get_or_404(db, AcademicTerm, term_id, "Term")
+    if term.status != "draft":
+        fail(409, "term_not_draft", "Only a draft semester can be scheduled.")
+    term.status = "scheduled"
+    audit(db, actor, "term.scheduled", "term", term.id)
     db.commit()
     return term
 
 
+def activate_term(db, actor, term_id):
+    term = db.scalar(select(AcademicTerm).where(AcademicTerm.id == term_id).with_for_update())
+    if not term:
+        fail(404, "not_found", "Term not found.")
+    if term.status != "scheduled":
+        fail(409, "term_not_scheduled", "Only a scheduled semester can be activated.")
+    year = get_or_404(db, SchoolYear, term.school_year_id, "School year")
+    if term.start_date < year.start_date or term.end_date > year.end_date \
+            or term.end_date < term.start_date:
+        fail(409, "term_not_ready", "Semester dates must be valid and inside the school year.")
+    active_id = db.scalar(select(AcademicTerm.id).where(
+        AcademicTerm.status == "active").with_for_update())
+    if active_id:
+        fail(409, "active_term_exists", "Close the current active semester before activating another.")
+    previous = db.scalar(select(AcademicTerm).where(
+        AcademicTerm.end_date < term.start_date,
+        AcademicTerm.id != term.id).order_by(AcademicTerm.end_date.desc()).limit(1))
+    if previous and previous.status not in {"inactive", "archived"}:
+        fail(409, "previous_term_not_closed",
+             "The previous semester must be closed before this semester can be activated.")
+    term.status = "active"
+    try:
+        audit(db, actor, "term.activated", "term", term.id)
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        constraint = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+        if constraint == "one_active_academic_term":
+            fail(409, "active_term_exists", "Another semester became active. Close it before switching.")
+        raise
+    return term
+
+
 def close_term(db, actor, term_id):
-    term = get_or_404(db, AcademicTerm, term_id, "Term")
-    if term.status == "closed":
-        fail(409, "term_closed", "This term is already closed.")
-    term.status, term.closed_at, term.closed_by = "closed", now(), actor.id
+    term = open_term(db, term_id)
+    term.status, term.closed_at, term.closed_by = "inactive", now(), actor.id
     audit(db, actor, "term.closed", "term", term.id)
     db.commit()
     return term
@@ -131,12 +212,8 @@ def close_term(db, actor, term_id):
 
 def reopen_term(db, actor, term_id, reason):
     term = get_or_404(db, AcademicTerm, term_id, "Term")
-    if term.status != "closed":
-        fail(409, "term_open", "This term is already open.")
-    term.status, term.reopened_reason = "open", reason
-    audit(db, actor, "term.reopened", "term", term.id, {"reason": reason})
-    db.commit()
-    return term
+    fail(409, "term_reactivation_forbidden",
+         f"A {term.status} semester cannot be reopened for normal editing. Use an authorized, audited correction workflow.")
 
 
 # ---------- college catalog ----------

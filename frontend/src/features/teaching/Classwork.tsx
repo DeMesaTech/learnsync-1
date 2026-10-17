@@ -26,7 +26,7 @@ const CREATE:[string,Create|'stream'][]=[['Lesson',{type:'item',kind:'lesson'}],
 /** Teachers: everything you teach and assign in one place, grouped by syllabus topic, with one Create menu. */
 export function FacultyClasswork(){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
-  const closed=offering.term_status==='closed';
+  const closed=offering.term_status!=='active';
   const navigate=useNavigate();
   const base=`/faculty/offerings/${offering.id}`;
   const items=useQuery({queryKey:['items',offering.id],queryFn:()=>api<Item[]>(`/teach/offerings/${offering.id}/items`)});

@@ -43,7 +43,7 @@ def admin_dashboard(db, admin):
     terms = []
     for term, year in db.execute(select(AcademicTerm, SchoolYear)
                                  .join(SchoolYear, SchoolYear.id == AcademicTerm.school_year_id)
-                                 .where(AcademicTerm.status == "open").order_by(AcademicTerm.start_date)):
+                                 .where(AcademicTerm.status == "active").order_by(AcademicTerm.start_date)):
         terms.append({
             "id": term.id, "name": term.name, "school_year": year.label,
             "sections": count(db, select(func.count()).select_from(Section).where(Section.term_id == term.id)),

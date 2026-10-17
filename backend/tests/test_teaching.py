@@ -534,7 +534,7 @@ def test_announcements_are_targeted_and_locked_once_published(course):
 
 # ---------------- closed terms and withdrawn students ----------------
 
-def test_closed_term_blocks_every_teaching_write_but_not_reads(course):
+def test_inactive_term_blocks_every_teaching_write_but_not_reads(course):
     fac = course["fac"]
     item = new_item(course, "lesson", "Before close")
     counter = fac.get(t(course, f"/items/{item['id']}")).json()["draft"]["counter"]
@@ -550,8 +550,10 @@ def test_closed_term_blocks_every_teaching_write_but_not_reads(course):
     assert fac.get(t(course, "/syllabus")).status_code == 200
     assert fac.get(t(course, "/items")).status_code == 200
     assert course["st1"].get(learn(course, "/syllabus")).json()["published"]["version"] == 1
-    assert course["admin"].post(f"/api/terms/{term_id}/reopen", {"reason": "Fix typo"}).status_code == 200
-    assert fac.post(t(course, "/syllabus/draft")).status_code == 200
+    reopened = course["admin"].post(f"/api/terms/{term_id}/reopen", {"reason": "Fix typo"})
+    assert reopened.status_code == 409
+    assert reopened.json()["error"]["code"] == "term_reactivation_forbidden"
+    assert fac.post(t(course, "/syllabus/draft")).status_code == 409
 
 
 def test_withdrawn_student_gets_no_course_content(course):

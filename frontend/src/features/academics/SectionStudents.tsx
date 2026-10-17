@@ -27,7 +27,7 @@ export function SectionStudents(){
   const sections=useQuery({queryKey:['sections',termId],queryFn:()=>api<Section[]>(`/terms/${termId}/sections`)});
   const section=sections.data?.find(s=>s.id===sectionId);
   const term=years.data?.flatMap(y=>y.terms).find(t=>t.id===termId);
-  const closed=term?.status==='closed';
+  const closed=term?.status!=='active';
   const [tab,setTab]=useState<Tab>('current');
   const [find,setFind]=useState('');const search=useDebounced(find);
   const [status,setStatus]=useState<'active'|'withdrawn'|'all'>('active');

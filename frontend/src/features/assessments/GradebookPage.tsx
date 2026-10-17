@@ -24,7 +24,7 @@ const cellKey=(columnId:string,studentId:string)=>`${columnId}:${studentId}`;
 
 export function GradebookPage(){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
-  const closed=offering.term_status==='closed';
+  const closed=offering.term_status!=='active';
   const here=useHere();const toast=useToast();
   const query=useQuery({queryKey:['gradebook',offering.id],queryFn:()=>api<Gradebook>(`/teach/offerings/${offering.id}/gradebook`)});
   const [detail,setDetail]=useState<GradeRow|null>(null);

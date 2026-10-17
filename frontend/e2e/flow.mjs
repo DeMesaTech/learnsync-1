@@ -79,8 +79,9 @@ try{
   const who=await call(admin,'GET','/accounts?search=fresh');
   const teacher=who.data.find(a=>a.email==='fresh-teacher@example.com'),student=who.data.find(a=>a.email==='fresh-student@example.com');
   check('both accounts are active',teacher?.status==='active'&&student?.status==='active',`${teacher?.status}/${student?.status}`);
-  const year=(await call(admin,'POST','/school-years',{label:'2026-2027',start_date:'2026-06-01',end_date:'2027-04-30',terms:[{name:'First Semester',sequence:1,start_date:'2026-06-01',end_date:'2026-12-31'}]})).data;
+  const year=(await call(admin,'POST','/school-years',{label:'2026-2027',start_date:'2026-06-01',end_date:'2027-04-30',terms:[{name:'First Semester',sequence:1,start_date:'2026-06-01',end_date:'2026-12-31'},{name:'Second Semester',sequence:2,start_date:'2027-01-01',end_date:'2027-04-30'}]})).data;
   const term=year.terms[0];
+  await call(admin,'POST',`/terms/${term.id}/schedule`);await call(admin,'POST',`/terms/${term.id}/activate`);
   const subject=(await call(admin,'POST','/subjects',{code:'ENT 101',title:'Introduction to Entrepreneurship',units:'3',year_level:1,semester:1})).data;
   for(const [code,title,yearLevel] of [['ENT 201','Marketing',2],['ENT 301','Finance',3],['ENT 401','Strategy',4]]){
     const result=await call(admin,'POST','/subjects',{code,title,units:'3',year_level:yearLevel,semester:1});

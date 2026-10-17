@@ -11,26 +11,36 @@ class TermInput(BaseModel):
     sequence: int = Field(ge=1, le=4)
     start_date: date
     end_date: date
-    copy_from_term_id: uuid.UUID | None = None
-    copy_offerings: bool = False
 
     @model_validator(mode="after")
     def dates(self):
-        if self.end_date < self.start_date:
-            raise ValueError("End date must not be before the start date.")
+        if self.end_date <= self.start_date:
+            raise ValueError("Semester end date must be after its start date.")
         return self
 
 
 class SchoolYearInput(BaseModel):
-    label: str = Field(min_length=1, max_length=30)
+    label: str = Field(pattern=r"^\d{4}-\d{4}$", max_length=30)
     start_date: date
     end_date: date
-    terms: list[TermInput] = Field(min_length=1, max_length=4)
+    terms: list[TermInput] = Field(min_length=2, max_length=2)
 
     @model_validator(mode="after")
     def dates(self):
-        if self.end_date < self.start_date:
-            raise ValueError("End date must not be before the start date.")
+        start_year, end_year = map(int, self.label.split("-"))
+        if end_year != start_year + 1 or self.start_date.year != start_year \
+                or self.end_date.year != end_year:
+            raise ValueError("The label must match the start and end years of the school-year dates.")
+        if self.end_date <= self.start_date:
+            raise ValueError("The school-year end date must be after its start date.")
+        by_sequence = sorted(self.terms, key=lambda term: term.sequence)
+        if [term.sequence for term in by_sequence] != [1, 2]:
+            raise ValueError("A school year must have semester sequences 1 and 2.")
+        for term in by_sequence:
+            if term.start_date < self.start_date or term.end_date > self.end_date:
+                raise ValueError("Semester dates must fall within the school-year dates.")
+        if by_sequence[0].end_date >= by_sequence[1].start_date:
+            raise ValueError("The second semester must start after the first semester ends.")
         return self
 
 

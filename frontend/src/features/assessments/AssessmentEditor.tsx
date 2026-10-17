@@ -20,7 +20,7 @@ const toPayload=(v:DraftContent,counter:number)=>({expected_counter:counter,titl
 export function AssessmentEditorPage(){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const {assessmentId}=useParams();
-  const closed=offering.term_status==='closed';
+  const closed=offering.term_status!=='active';
   const base=`/teach/offerings/${offering.id}/assessments/${assessmentId}`;
   const query=useQuery({queryKey:['assessment',assessmentId],queryFn:()=>api<Assessment>(base)});
   const [starting,setStarting]=useState(false);
@@ -40,7 +40,7 @@ export function AssessmentEditorPage(){
 
 export function AssessmentEditorDialog({offering,assessmentId,onClose}:{offering:OfferingSummary;assessmentId:string;onClose:()=>void}){
   const base=`/teach/offerings/${offering.id}/assessments/${assessmentId}`;
-  const closed=offering.term_status==='closed';
+  const closed=offering.term_status!=='active';
   const query=useQuery({queryKey:['assessment',assessmentId],queryFn:()=>api<Assessment>(base)});
   const refetch=query.refetch;
   const [starting,setStarting]=useState(false);

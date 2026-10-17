@@ -17,7 +17,7 @@ type Step=typeof STEPS[number][0];
 
 export function SyllabusPage(){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
-  const closed=offering.term_status==='closed';
+  const closed=offering.term_status!=='active';
   const url=`/teach/offerings/${offering.id}/syllabus`;
   const query=useQuery({queryKey:['syllabus',offering.id],queryFn:()=>api<SyllabusState>(url)});
   const [message,setMessage]=useState('');

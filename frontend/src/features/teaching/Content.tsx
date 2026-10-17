@@ -53,7 +53,7 @@ export function ItemEditorPage(){
 }
 
 function useEditableItem(offering:OfferingSummary,itemId:string){
-  const closed=offering.term_status==='closed';
+  const closed=offering.term_status!=='active';
   const base=`/teach/offerings/${offering.id}/items/${itemId}`;
   const query=useQuery({queryKey:['item',itemId],queryFn:()=>api<Item>(base)});
   const [starting,setStarting]=useState(false);

@@ -436,7 +436,7 @@ def test_online_quiz_scores_are_only_typed_in_for_no_shows(graded):
 
 # ---------------- closed terms and withdrawn students ----------------
 
-def test_closed_term_blocks_assessment_work_but_not_own_results(graded):
+def test_inactive_term_blocks_assessment_work_but_not_own_results(graded):
     quiz = make_quiz(graded)
     manual = make_manual(graded, "exam", "Midterm exam")
     st1, fac = graded["st1"], graded["fac"]
@@ -455,8 +455,11 @@ def test_closed_term_blocks_assessment_work_but_not_own_results(graded):
     # reading is still fine for everyone involved
     assert st1.get(la(graded, "/results")).json()["results"][0]["score"] == 5.0
     assert fac.get(a(graded)).status_code == 200
-    graded["admin"].post(f"/api/terms/{graded['term']['id']}/reopen", {"reason": "Correction"})
-    assert start(st1, graded, second["aid"]).status_code in (200, 201)
+    reopened = graded["admin"].post(
+        f"/api/terms/{graded['term']['id']}/reopen", {"reason": "Correction"})
+    assert reopened.status_code == 409
+    assert reopened.json()["error"]["code"] == "term_reactivation_forbidden"
+    assert start(st1, graded, second["aid"]).status_code == 409
 
 
 def test_withdrawn_student_keeps_own_results_but_cannot_start_new_work(graded):
@@ -482,16 +485,12 @@ def test_policy_constants_are_what_the_grading_tests_assume():
 # ---------------- review findings: cross-offering attempts, no-shows, policy drift ----------------
 
 def second_offering(c):
-    """A second (open) term + offering for the same teacher, with s1 enrolled in it."""
+    """A second offering in the active term for the same teacher, with s1 enrolled in it."""
     admin = c["admin"]
-    year = admin.post("/api/school-years", {
-        "label": "2027-2028", "start_date": "2027-06-01", "end_date": "2028-04-30",
-        "terms": [{"name": "First Semester", "sequence": 1, "start_date": "2027-06-01",
-                   "end_date": "2027-10-31"}]}).json()
-    term = year["terms"][0]
     subject = admin.post("/api/subjects", {"code": "ENT 102", "title": "Another", "units": "3"}).json()
-    section = admin.post(f"/api/terms/{term['id']}/sections", {"name": "2A", "year_level": 2}).json()
-    offering = admin.post(f"/api/terms/{term['id']}/offerings", {
+    term_id = c["term"]["id"]
+    section = admin.post(f"/api/terms/{term_id}/sections", {"name": "2A", "year_level": 2}).json()
+    offering = admin.post(f"/api/terms/{term_id}/offerings", {
         "subject_id": subject["id"], "faculty_id": str(c["faculty"].id),
         "section_ids": [section["id"]], "placement_override_reason": "Test setup"})
     assert offering.status_code == 201, offering.text

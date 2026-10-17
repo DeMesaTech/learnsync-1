@@ -6,6 +6,10 @@ The user has accepted the requirements baseline and authorized you to implement 
 
 **Status:** This is a specification, not an implementation report. I have not created or edited files. Save this reply as `docs/IMPLEMENTATION_PLAN.md` in the new project and create the supporting documentation described below.
 
+### Current amendment (2026-10-17)
+
+The latest academic-calendar requirements supersede the earlier open/closed and generic-reopen workflow below. A school year is labeled from consecutive starting/ending years and is created atomically with exactly two semesters, all in `draft`. Draft permits calendar configuration only; `scheduled`, `inactive`, and `archived` are read-only for normal academic operations; only `active` permits role-authorized academic writes. Scheduling and activation are explicit audited transitions. Only one semester may be active institution-wide; switching requires the current semester to be closed and the next scheduled semester to pass readiness checks. There is no generic reopen for ordinary edits; any future administrative correction must be a narrowly scoped, reasoned, audited workflow. School-year and semester date ranges may not overlap.
+
 **Distinction:** Product decisions explicitly confirmed by the user are identified as **confirmed**. Concrete engineering choices added here are **implementation defaults**. They provide a buildable approach without claiming the user individually approved every package, column, or timeout.
 
 ---
@@ -803,8 +807,9 @@ Progress:
 - Keep the subject catalog.
 - Do not bulk-delete prior assignments/enrollments.
 - Historical grades, drafts, publications, attendance, attempts, submissions, and references survive.
-- Closed terms are read-only for faculty and students.
-- Admin may explicitly reopen a term with an audit reason.
+- Every non-active term is read-only for normal academic operations.
+- A term moves through draft, scheduled, active, and inactive/archived states; at most one term is active institution-wide.
+- Generic reopening is not available. An administrative correction must be a narrowly scoped, reasoned, audited workflow.
 - Reopening does not give admin teaching-content access.
 - Faculty corrections still require result/grade republication.
 

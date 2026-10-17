@@ -102,8 +102,13 @@ def world(db, actors):
     year = admin.post("/api/school-years", {
         "label": "2026-2027", "start_date": "2026-06-01", "end_date": "2027-04-30",
         "terms": [{"name": "First Semester", "sequence": 1, "start_date": "2026-06-01",
-                   "end_date": "2026-10-31"}]}).json()
+                   "end_date": "2026-10-31"},
+                  {"name": "Second Semester", "sequence": 2, "start_date": "2026-11-01",
+                   "end_date": "2027-04-30"}]}).json()
     term = year["terms"][0]
+    next_term = year["terms"][1]
+    assert admin.post(f"/api/terms/{term['id']}/schedule").status_code == 200
+    assert admin.post(f"/api/terms/{term['id']}/activate").status_code == 200
     subject = admin.post("/api/subjects", {
         "code": "ent 101", "title": "Intro to Entrepreneurship", "units": "3",
         "year_level": 1, "semester": 1}).json()
@@ -113,7 +118,8 @@ def world(db, actors):
         "subject_id": subject["id"], "faculty_id": str(faculty.id),
         "section_ids": [sections[0]["id"]]})
     assert offering.status_code == 201, offering.text
-    return {"admin": admin, "term": term, "subject": subject, "sections": sections,
+    return {"admin": admin, "term": term, "next_term": next_term,
+            "subject": subject, "sections": sections,
             "offering": offering.json(), "students": [s1, s2], "faculty": faculty}
 
 

@@ -328,7 +328,9 @@ def test_study_eligibility_ownership_and_privacy(db, course, ai):
     assert st1.post(base).status_code == 201                                            # a closed term does not stop study help
     assert ask(st1, course, cid, "What is a market?").status_code == 200
     assert st1.get(f"{base}/{cid}").status_code == 200
-    course["admin"].post(f"/api/terms/{course['term']['id']}/reopen", {"reason": "Test"})
+    reopened = course["admin"].post(
+        f"/api/terms/{course['term']['id']}/reopen", {"reason": "Test"})
+    assert reopened.status_code == 409
     s1 = course["students"][0]
     course["admin"].delete(f"/api/sections/{course['sec_a']['id']}/members/{s1.id}?reason=Left%20the%20programme")
     assert ask(st1, course, cid, "What is a market?").status_code == 404                # withdrawn: nothing new

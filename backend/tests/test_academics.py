@@ -1,8 +1,15 @@
+import uuid
+from datetime import date
+
+import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from helpers import Api, make_account
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
+from app.features.academics import commands
+from app.features.academics.models import AcademicTerm, SchoolYear
 from app.features.accounts.commands import issue_token
 from app.features.accounts.models import AccountToken, AuditEvent
 from app.main import app
@@ -17,6 +24,112 @@ def roster(api, offering_id):
 def add_member(w, section, student):
     return w["admin"].post(f"/api/sections/{section['id']}/members",
                            {"student_id": str(student.id)})
+
+
+def school_year_body(label="2032-2033", start="2032-08-01", end="2033-05-31"):
+    return {
+        "label": label,
+        "start_date": start,
+        "end_date": end,
+        "terms": [
+            {"name": "1st semester", "sequence": 1, "start_date": "2032-08-01",
+             "end_date": "2032-12-15"},
+            {"name": "2nd semester", "sequence": 2, "start_date": "2032-12-16",
+             "end_date": "2033-05-31"},
+        ],
+    }
+
+
+def close_school_year(admin, first, second):
+    assert admin.post(f"/api/terms/{first['id']}/close").status_code == 200
+    assert admin.post(f"/api/terms/{second['id']}/schedule").status_code == 200
+    assert admin.post(f"/api/terms/{second['id']}/activate").status_code == 200
+    assert admin.post(f"/api/terms/{second['id']}/close").status_code == 200
+
+
+def test_school_year_creation_creates_two_draft_semesters(actors):
+    admin = Api("admin@example.com")
+
+    response = admin.post("/api/school-years", school_year_body())
+
+    assert response.status_code == 201, response.text
+    year = response.json()
+    assert year["label"] == "2032-2033"
+    assert [term["sequence"] for term in year["terms"]] == [1, 2]
+    assert [term["status"] for term in year["terms"]] == ["draft", "draft"]
+
+
+def test_school_year_creation_rejects_duplicate_label(actors):
+    admin = Api("admin@example.com")
+    assert admin.post("/api/school-years", school_year_body()).status_code == 201
+
+    duplicate = admin.post("/api/school-years", school_year_body())
+
+    assert duplicate.status_code == 409
+    assert duplicate.json()["error"]["code"] == "school_year_exists"
+
+
+def test_school_year_creation_rejects_overlapping_year_dates(actors):
+    admin = Api("admin@example.com")
+    assert admin.post("/api/school-years", school_year_body()).status_code == 201
+    overlapping = school_year_body("2033-2034", "2033-05-01", "2034-04-30")
+    overlapping["terms"] = [
+        {"name": "1st semester", "sequence": 1, "start_date": "2033-05-01",
+         "end_date": "2033-09-30"},
+        {"name": "2nd semester", "sequence": 2, "start_date": "2033-10-01",
+         "end_date": "2034-04-30"},
+    ]
+
+    response = admin.post("/api/school-years", overlapping)
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "school_year_dates_overlap"
+
+
+def test_school_year_creation_rejects_invalid_term_dates_and_label(actors):
+    admin = Api("admin@example.com")
+    outside_year = school_year_body()
+    outside_year["terms"][0]["start_date"] = "2032-07-31"
+    response = admin.post("/api/school-years", outside_year)
+    assert response.status_code == 422
+
+    overlapping_terms = school_year_body()
+    overlapping_terms["terms"][1]["start_date"] = "2032-12-15"
+    response = admin.post("/api/school-years", overlapping_terms)
+    assert response.status_code == 422
+
+    zero_length_term = school_year_body()
+    zero_length_term["terms"][0]["end_date"] = zero_length_term["terms"][0]["start_date"]
+    response = admin.post("/api/school-years", zero_length_term)
+    assert response.status_code == 422
+
+    wrong_label = school_year_body("2031-2032")
+    response = admin.post("/api/school-years", wrong_label)
+    assert response.status_code == 422
+    assert "label must match" in response.json()["error"]["field_errors"][""].lower()
+
+    invalid_date = school_year_body()
+    invalid_date["start_date"] = "August 1, 2032"
+    response = admin.post("/api/school-years", invalid_date)
+    assert response.status_code == 422
+
+
+def test_school_year_creation_rolls_back_after_late_failure(db, actors, monkeypatch):
+    admin = Api("admin@example.com")
+    body = school_year_body("2032-2033")
+
+    def fail_audit(*_args, **_kwargs):
+        raise HTTPException(status_code=404, detail={"code": "test_failure", "message": "Injected failure."})
+
+    monkeypatch.setattr(commands, "audit", fail_audit)
+
+    response = admin.post("/api/school-years", body)
+
+    assert response.status_code == 404
+    db.expire_all()
+    assert db.scalar(select(SchoolYear.id).where(SchoolYear.label == "2032-2033")) is None
+    assert db.scalar(select(AcademicTerm.id).join(SchoolYear).where(
+        SchoolYear.label == "2032-2033")) is None
 
 
 def test_only_admin_can_administer(db, actors):
@@ -427,7 +540,7 @@ def test_excluded_student_without_prior_enrollment_is_visible_to_admin(world):
     assert str(s2.id) not in roster(Api("faculty@example.com"), oid)
 
 
-def test_closed_term_blocks_writes_and_reopen_needs_reason(world):
+def test_inactive_term_blocks_writes_and_cannot_be_reopened(world):
     admin, term = world["admin"], world["term"]
     s1 = world["students"][0]
     assert admin.post(f"/api/terms/{term['id']}/close").status_code == 200
@@ -435,26 +548,36 @@ def test_closed_term_blocks_writes_and_reopen_needs_reason(world):
     assert blocked.status_code == 409 and blocked.json()["error"]["code"] == "term_closed"
     assert admin.post(f"/api/terms/{term['id']}/sections",
                       {"name": "3A", "year_level": 3}).status_code == 409
-    assert admin.post(f"/api/terms/{term['id']}/reopen", {"reason": ""}).status_code == 422
-    assert admin.post(f"/api/terms/{term['id']}/reopen",
-                      {"reason": "Late grade correction"}).status_code == 200
-    assert add_member(world, world["sections"][0], s1).status_code == 204
+    reopened = admin.post(f"/api/terms/{term['id']}/reopen",
+                          {"reason": "Late grade correction"})
+    assert reopened.status_code == 409
+    assert reopened.json()["error"]["code"] == "term_reactivation_forbidden"
+    blocked_again = add_member(world, world["sections"][0], s1)
+    assert blocked_again.status_code == 409
     actions = [e["action"] for e in admin.get("/api/audit").json()]
-    assert "term.closed" in actions and "term.reopened" in actions
+    assert "term.closed" in actions and "term.reopened" not in actions
 
 
 def test_new_year_copies_structure_and_keeps_history(world):
     s1 = world["students"][0]
     admin, oid = world["admin"], world["offering"]["id"]
     add_member(world, world["sections"][0], s1)
-    admin.post(f"/api/terms/{world['term']['id']}/close")
+    close_school_year(admin, world["term"], world["next_term"])
     year = admin.post("/api/school-years", {
         "label": "2027-2028", "start_date": "2027-06-01", "end_date": "2028-04-30",
         "terms": [{"name": "First Semester", "sequence": 1, "start_date": "2027-06-01",
-                   "end_date": "2027-10-31", "copy_from_term_id": world["term"]["id"],
-                   "copy_offerings": True}]})
+                   "end_date": "2027-10-31"},
+                  {"name": "Second Semester", "sequence": 2, "start_date": "2027-11-01",
+                   "end_date": "2028-04-30"}]})
     assert year.status_code == 201, year.text
     new_term = year.json()["terms"][0]
+    assert new_term["status"] == "draft"
+    assert admin.get(f"/api/terms/{new_term['id']}/sections").json() == []
+    assert admin.post(f"/api/terms/{new_term['id']}/schedule").status_code == 200
+    assert admin.post(f"/api/terms/{new_term['id']}/activate").status_code == 200
+    copied = admin.post(f"/api/terms/{new_term['id']}/copy-structure"
+                        f"?source_term_id={world['term']['id']}&offerings=true")
+    assert copied.status_code == 204, copied.text
     offerings = admin.get(f"/api/terms/{new_term['id']}/offerings").json()
     assert len(offerings) == 1 and offerings[0]["enrolled"] == 0 and offerings[0]["id"] != oid
     assert [s["name"] for s in admin.get(f"/api/terms/{new_term['id']}/sections").json()] \
@@ -462,7 +585,7 @@ def test_new_year_copies_structure_and_keeps_history(world):
     # The closed term's roster and the student's history are untouched.
     assert roster(admin, oid)[str(s1.id)]["status"] == "enrolled"
     subjects = Api("s1@example.com").get("/api/me/subjects").json()
-    assert [s["offering_id"] for s in subjects] == [oid] and subjects[0]["term_status"] == "closed"
+    assert [s["offering_id"] for s in subjects] == [oid] and subjects[0]["term_status"] == "inactive"
 
 
 def test_duplicate_offering_and_invalid_assignees(world):
@@ -477,13 +600,82 @@ def test_duplicate_offering_and_invalid_assignees(world):
 
 def test_copy_without_offerings_brings_sections_only(world):
     admin = world["admin"]
+    close_school_year(admin, world["term"], world["next_term"])
     year = admin.post("/api/school-years", {
         "label": "2027-2028", "start_date": "2027-06-01", "end_date": "2028-04-30",
         "terms": [{"name": "First Semester", "sequence": 1, "start_date": "2027-06-01",
-                   "end_date": "2027-10-31", "copy_from_term_id": world["term"]["id"]}]}).json()
+                   "end_date": "2027-10-31"},
+                  {"name": "Second Semester", "sequence": 2, "start_date": "2027-11-01",
+                   "end_date": "2028-04-30"}]}).json()
     new_term = year["terms"][0]["id"]
+    assert admin.post(f"/api/terms/{new_term}/schedule").status_code == 200
+    assert admin.post(f"/api/terms/{new_term}/activate").status_code == 200
+    copied = admin.post(f"/api/terms/{new_term}/copy-structure"
+                        f"?source_term_id={world['term']['id']}")
+    assert copied.status_code == 204, copied.text
     assert admin.get(f"/api/terms/{new_term}/offerings").json() == []
     assert len(admin.get(f"/api/terms/{new_term}/sections").json()) == 2
+
+
+def test_semester_activation_requires_closure_and_only_one_active(actors):
+    admin = Api("admin@example.com")
+    year = admin.post("/api/school-years", school_year_body()).json()
+    first, second = year["terms"]
+    assert admin.post(f"/api/terms/{first['id']}/schedule").status_code == 200
+    assert admin.post(f"/api/terms/{second['id']}/schedule").status_code == 200
+    assert admin.post(f"/api/terms/{first['id']}/activate").status_code == 200
+
+    blocked = admin.post(f"/api/terms/{second['id']}/activate")
+    assert blocked.status_code == 409
+    assert blocked.json()["error"]["code"] == "active_term_exists"
+
+    assert admin.post(f"/api/terms/{first['id']}/close").json()["status"] == "inactive"
+    activated = admin.post(f"/api/terms/{second['id']}/activate")
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["status"] == "active"
+    actions = {row["action"] for row in admin.get("/api/audit").json()}
+    assert {"term.scheduled", "term.activated", "term.closed"}.issubset(actions)
+
+
+def test_scheduled_semester_is_read_only_for_normal_academic_operations(actors):
+    admin = Api("admin@example.com")
+    term = admin.post("/api/school-years", school_year_body()).json()["terms"][0]
+    assert admin.post(f"/api/terms/{term['id']}/schedule").status_code == 200
+
+    section = admin.post(f"/api/terms/{term['id']}/sections", {
+        "name": "1A", "year_level": 1})
+    assert section.status_code == 409
+    assert section.json()["error"]["code"] == "term_not_active"
+    update = admin.patch(f"/api/terms/{term['id']}", {"name": "Changed"})
+    assert update.status_code == 409
+    assert update.json()["error"]["code"] == "term_read_only"
+
+
+def test_database_prevents_overlapping_years_and_multiple_active_terms(db, actors):
+    admin = Api("admin@example.com")
+    year = admin.post("/api/school-years", school_year_body()).json()
+    first, second = year["terms"]
+
+    db.add(SchoolYear(label="2033-2034", start_date=date(2033, 5, 1),
+                      end_date=date(2034, 4, 30)))
+    with pytest.raises(IntegrityError):
+        db.flush()
+    db.rollback()
+
+    db.add(AcademicTerm(school_year_id=uuid.UUID(year["id"]), name="Overlapping",
+                        sequence=3, start_date=date(2032, 8, 10),
+                        end_date=date(2032, 8, 20), status="draft"))
+    with pytest.raises(IntegrityError):
+        db.flush()
+    db.rollback()
+
+    assert admin.post(f"/api/terms/{first['id']}/schedule").status_code == 200
+    assert admin.post(f"/api/terms/{first['id']}/activate").status_code == 200
+    second_term = db.scalar(select(AcademicTerm).where(AcademicTerm.id == uuid.UUID(second["id"])))
+    second_term.status = "active"
+    with pytest.raises(IntegrityError):
+        db.flush()
+    db.rollback()
 
 
 def test_placement_override_needs_reason_and_is_audited(world):

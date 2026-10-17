@@ -59,6 +59,16 @@ def update_term(term_id: UUID, data: TermUpdate, actor=Depends(admin),
     return queries.term_view(commands.update_term(db, actor, term_id, data))
 
 
+@router.post("/terms/{term_id}/schedule")
+def schedule_term(term_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):
+    return queries.term_view(commands.schedule_term(db, actor, term_id))
+
+
+@router.post("/terms/{term_id}/activate")
+def activate_term(term_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):
+    return queries.term_view(commands.activate_term(db, actor, term_id))
+
+
 @router.post("/terms/{term_id}/close")
 def close_term(term_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):
     return queries.term_view(commands.close_term(db, actor, term_id))

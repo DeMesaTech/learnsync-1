@@ -16,7 +16,7 @@ export function ScoresPage(){
   const ask=useConfirm();const toast=useToast();
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const {assessmentId}=useParams();
-  const closed=offering.term_status==='closed';
+  const closed=offering.term_status!=='active';
   const base=`/teach/offerings/${offering.id}/assessments/${assessmentId}`;
   const a=useQuery({queryKey:['assessment',assessmentId],queryFn:()=>api<Assessment>(base)});
   const origin=useOrigin(`/faculty/offerings/${offering.id}/classwork${a.data?`?type=${catOfKind(a.data.kind)}`:''}`,'Classwork');

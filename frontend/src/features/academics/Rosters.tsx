@@ -38,8 +38,8 @@ export function OfferingRoster({embedded=false,offeringId:providedOfferingId}:{e
   return <>
     {!embedded&&<p className="back"><Link to={back}>← Back to {parent.label}</Link></p>}
     {!embedded&&<div className="page-heading"><div><p className="eyebrow">{offering.data?.term}</p><h1>{offering.data?`${offering.data.subject.code} roster`:'Student roster'}</h1>{offering.data&&<p className="muted">{offering.data.subject.title} · {offering.data.faculty.display_name}</p>}</div>
-      {isAdmin&&offering.data?.term_status==='open'&&<button className="primary" onClick={()=>{setMessage('');setDialog(true)}}>Add exception</button>}</div>}
-    {embedded&&isAdmin&&offering.data?.term_status==='open'&&<div className="actions roster-dialog-actions">
+      {isAdmin&&offering.data?.term_status==='active'&&<button className="primary" onClick={()=>{setMessage('');setDialog(true)}}>Add exception</button>}</div>}
+    {embedded&&isAdmin&&offering.data?.term_status==='active'&&<div className="actions roster-dialog-actions">
       <button className="primary" onClick={()=>{setMessage('');setDialog(true)}}>Add exception</button>
     </div>}
     {!isAdmin&&<label className="inline"><input type="checkbox" checked={history} onChange={e=>setHistory(e.target.checked)}/> Show withdrawn students</label>}
@@ -96,7 +96,7 @@ export function FacultySubjects(){
     <h1>My Classes</h1><p className="muted">Subjects assigned to you, with their sections and enrolled students.</p>
     {query.isPending?<p>Loading…</p>:query.error?<p role="alert">{query.error.message}</p>:
       query.data.length===0?<section className="panel"><h2>Nothing assigned yet</h2><p>When an administrator assigns you a subject, it appears here.</p></section>:
-      <div className="cards">{query.data.map(o=><SubjectCard key={o.id} code={o.subject.code} title={o.subject.title} meta={o.term_status==='closed'?`${o.term} · closed`:o.term}
+      <div className="cards">{query.data.map(o=><SubjectCard key={o.id} code={o.subject.code} title={o.subject.title} meta={o.term_status==='active'?o.term:`${o.term} · ${o.term_status}`}
         detail={`${o.sections.map(x=>x.name).join(', ')||'No sections'} · ${o.enrolled} student${o.enrolled===1?'':'s'}`} to={`/faculty/offerings/${o.id}`} action="Open"
         links={[['Classwork',`/faculty/offerings/${o.id}/classwork`],['Gradebook',`/faculty/offerings/${o.id}/gradebook`]]}/>)}</div>}
   </>;
@@ -110,7 +110,7 @@ export function StudentSubjects(){
       query.data.length===0?<section className="panel"><h2>No subjects yet</h2><p>Your subjects appear here once you are enrolled in a section.</p></section>:
       <div className="cards">{query.data.map(s=>{const o=`/student/offerings/${s.offering_id}`;const active=s.enrollment_status==='enrolled';
         return <SubjectCard key={s.offering_id} code={s.subject.code} title={s.subject.title}
-          meta={s.enrollment_status==='withdrawn'?'Withdrawn':s.term_status==='closed'?`${s.term} · past term`:s.term}
+          meta={s.enrollment_status==='withdrawn'?'Withdrawn':s.term_status==='active'?s.term:`${s.term} · ${s.term_status}`}
           detail={`${s.subject.units} units · ${s.faculty.display_name}${active?'':' · course content is no longer available, but you can still see your own results'}`}
           to={active?`${o}/classwork`:`${o}/results`} action={active?'Open':'View results'}
           links={active?[['Progress',`${o}/progress`],['Grades & results',`${o}/results`],['Study buddy',`/student/study-buddy?subject=${s.offering_id}`]]:[]}/>})}</div>}

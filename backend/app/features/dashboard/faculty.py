@@ -81,12 +81,13 @@ def next_task(cards):
 def faculty_dashboard(db, teacher):
     rows = db.execute(select(Offering).join(AcademicTerm, AcademicTerm.id == Offering.term_id)
                       .join(Subject, Subject.id == Offering.subject_id)
-                      .where(Offering.faculty_id == teacher.id, AcademicTerm.status == "open")
+                      .where(Offering.faculty_id == teacher.id, AcademicTerm.status == "active")
                       .order_by(Subject.code)).scalars().all()
     summaries = {s["id"]: s for s in offering_summary(db, rows)}
     cards = [offering_card(db, o, summaries[o.id]) for o in rows]
     closed = db.scalar(select(func.count()).select_from(Offering).join(AcademicTerm, AcademicTerm.id == Offering.term_id)
-                       .where(Offering.faculty_id == teacher.id, AcademicTerm.status == "closed")) or 0
+                      .where(Offering.faculty_id == teacher.id,
+                          AcademicTerm.status.in_(("inactive", "archived")))) or 0
     deadlines = sorted((d for c in cards for d in c["deadlines"]), key=lambda d: d["deadline"])[:6]
     queue = sorted((q for c in cards for q in c["queue"]), key=lambda q: -q["count"])[:5]
     review = next(({"link": f"/faculty/offerings/{c['offering_id']}/gradebook"} for c in cards if c["needs_review"]), None)
@@ -103,7 +104,7 @@ def review_queue(db, teacher):
     The cross-subject 'To review' page; the dashboard card is the top of the same list."""
     rows = db.execute(select(Offering).join(AcademicTerm, AcademicTerm.id == Offering.term_id)
                       .join(Subject, Subject.id == Offering.subject_id)
-                      .where(Offering.faculty_id == teacher.id, AcademicTerm.status == "open")
+                      .where(Offering.faculty_id == teacher.id, AcademicTerm.status == "active")
                       .order_by(Subject.code)).scalars().all()
     summaries = {s["id"]: s for s in offering_summary(db, rows)}
     items = []

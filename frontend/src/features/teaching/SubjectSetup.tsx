@@ -107,11 +107,11 @@ export function SubjectSetup() {
         queryClient.invalidateQueries({ queryKey: [k] }),
       ),
     );
-  if (offering.term_status === 'closed') {
+  if (offering.term_status !== 'active') {
     return (
       <section className="panel">
         <h2>This term is closed</h2>
-        <p>A closed term cannot be set up. Ask an administrator to reopen it.</p>
+        <p>Teaching setup is available only while the semester is active.</p>
       </section>
     );
   }

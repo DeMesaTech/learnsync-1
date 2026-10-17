@@ -15,7 +15,8 @@ try{
   const A=await sessionFor(browser,'admin@example.com'),F=await sessionFor(browser,'faculty1@example.com');
   const admin=await newPage(browser,{state:A});await admin.goto('/admin');
   const people=(await call(admin,'GET','/accounts?search=example')).data;const id=e=>people.find(p=>p.email===e).id;
-  const year=(await call(admin,'POST','/school-years',{label:'2026-2027',start_date:'2026-06-01',end_date:'2027-04-30',terms:[{name:'First Semester',sequence:1,start_date:'2026-06-01',end_date:'2027-03-31'}]})).data;const term=year.terms[0];
+  const year=(await call(admin,'POST','/school-years',{label:'2026-2027',start_date:'2026-06-01',end_date:'2027-04-30',terms:[{name:'First Semester',sequence:1,start_date:'2026-06-01',end_date:'2026-12-31'},{name:'Second Semester',sequence:2,start_date:'2027-01-01',end_date:'2027-04-30'}]})).data;const term=year.terms[0];
+  await call(admin,'POST',`/terms/${term.id}/schedule`);await call(admin,'POST',`/terms/${term.id}/activate`);
   const subject=(await call(admin,'POST','/subjects',{code:'ENT 101',title:'Introduction to Entrepreneurship',units:'3',year_level:1,semester:1})).data;
   const section=(await call(admin,'POST',`/terms/${term.id}/sections`,{name:'1A',year_level:1})).data;
   const emptySection=(await call(admin,'POST',`/terms/${term.id}/sections`,{name:'1B',year_level:1})).data;

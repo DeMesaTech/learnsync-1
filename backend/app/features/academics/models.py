@@ -17,7 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID, ExcludeConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -30,6 +30,13 @@ def uid():
 
 class SchoolYear(Base):
     __tablename__ = "school_year"
+    __table_args__ = (
+        CheckConstraint("end_date > start_date", name="school_year_dates"),
+        ExcludeConstraint(
+            (text("daterange(start_date, end_date, '[]')"), "&&"),
+            name="school_year_dates_no_overlap",
+        ),
+    )
     id: Mapped[uuid.UUID] = uid()
     label: Mapped[str] = mapped_column(String(30), unique=True)
     start_date: Mapped[date] = mapped_column(Date)
@@ -41,8 +48,17 @@ class AcademicTerm(Base):
     __tablename__ = "academic_term"
     __table_args__ = (
         UniqueConstraint("school_year_id", "sequence", name="term_sequence_unique"),
-        CheckConstraint("status IN ('open','closed')", name="term_status"),
-        CheckConstraint("end_date >= start_date", name="term_dates"),
+        CheckConstraint("status IN ('draft','scheduled','active','inactive','archived')",
+                        name="term_status"),
+        CheckConstraint("end_date > start_date", name="term_dates"),
+        ExcludeConstraint(
+            (text("daterange(start_date, end_date, '[]')"), "&&"),
+            name="academic_term_dates_no_overlap",
+        ),
+    )
+    __table_args__ += (
+        Index("one_active_academic_term", "status", unique=True,
+              postgresql_where=text("status = 'active'")),
     )
     id: Mapped[uuid.UUID] = uid()
     school_year_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("school_year.id"), index=True)
@@ -50,7 +66,7 @@ class AcademicTerm(Base):
     sequence: Mapped[int] = mapped_column(Integer)
     start_date: Mapped[date] = mapped_column(Date)
     end_date: Mapped[date] = mapped_column(Date)
-    status: Mapped[str] = mapped_column(String(10), default="open")
+    status: Mapped[str] = mapped_column(String(10), default="draft", server_default="draft")
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     closed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("account.id"))
     reopened_reason: Mapped[str | None] = mapped_column(Text)

@@ -94,7 +94,7 @@ interface ViewProps{
 /** Students down, dates across. Each change is saved on its own (debounced per date); a failed save is flagged with Retry. */
 function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,range,setRange}:ViewProps){
   const toast=useToast();
-  const closed=offering.term_status==='closed';
+  const closed=offering.term_status!=='active';
   const [edits,setEdits]=useState<Record<string,Record<string,Status|null>>>({});     // typed but not yet confirmed saved
   const [periods,setPeriods]=useState<Record<string,Period>>({});
   const [errors,setErrors]=useState<Record<string,string>>({});
@@ -208,7 +208,7 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
           <button disabled={classDays===(offering.meeting_days??0)} onClick={saveDays}>Save class days</button></fieldset>
         {note&&<p role="status">{note}</p>}</details>
       <AttendanceExport offering={offering} sectionId={sectionId} from={first} to={last} label={range==='week'?'This week':'This month'}/>
-      <p role="status" className="muted">{closed?'This term is closed, so attendance is read-only.':status==='saved'?'All changes saved.':status==='saving'?'Saving…':status==='failed'?`${unsaved} change${unsaved===1?'':'s'} not saved. Use Retry below.`:'Saving in a moment…'}</p>
+      <p role="status" className="muted">{closed?'This semester is read-only until it is active.':status==='saved'?'All changes saved.':status==='saving'?'Saving…':status==='failed'?`${unsaved} change${unsaved===1?'':'s'} not saved. Use Retry below.`:'Saving in a moment…'}</p>
       {Object.entries(errors).map(([d,m])=><p key={d} role="alert" className="error">{pretty(d)}: {m} <button onClick={()=>void flush(d)}>Retry</button></p>)}
     </section>
     {query.isPending?<p>Loading…</p>:query.error?<p role="alert">{query.error.message}</p>:roster.length===0?<section className="panel"><p className="muted">No students are enrolled through this section.</p></section>:
@@ -271,7 +271,7 @@ function DayView({offering,sectionId,setSectionId,query,setMode,date,setDate,ran
           {range==='week'&&<span>{DAY[dow]}</span>}<strong>{parse(d).getDate()}</strong><span className="muted">{rec?`${marked}/${total}`:'—'}</span></button></li>})}</ul>
       <p className="muted">Green underline: everyone marked. Amber: some students still not marked. Dashed outline: today.</p></section>
     {query.isPending?<p>Loading…</p>:query.error?<p role="alert">{query.error.message}</p>:
-      <div ref={register} tabIndex={-1} aria-label="Attendance register" style={{outline:'none',scrollMarginTop:96}}><Register key={`${sectionId}|${date}|${existing?.id??'new'}|${query.dataUpdatedAt}`} offering={offering} sectionId={sectionId} date={date} period={existing?existing.period:period} roster={query.data.roster} initial={existing?.marks??{}} closed={offering.term_status==='closed'} setMessage={setMessage} unsaved={unsaved} sessionId={existing?.id}/></div>}
+      <div ref={register} tabIndex={-1} aria-label="Attendance register" style={{outline:'none',scrollMarginTop:96}}><Register key={`${sectionId}|${date}|${existing?.id??'new'}|${query.dataUpdatedAt}`} offering={offering} sectionId={sectionId} date={date} period={existing?existing.period:period} roster={query.data.roster} initial={existing?.marks??{}} closed={offering.term_status!=='active'} setMessage={setMessage} unsaved={unsaved} sessionId={existing?.id}/></div>}
     {message&&<p role="status">{message}</p>}
   </>;
 }

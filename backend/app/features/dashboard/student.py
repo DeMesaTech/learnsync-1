@@ -28,7 +28,7 @@ def current_enrollments(db, student):
         .join(Subject, Subject.id == Offering.subject_id)
         .join(AcademicTerm, AcademicTerm.id == Offering.term_id)
         .where(Enrollment.student_id == student.id, Enrollment.status == "enrolled",
-               AcademicTerm.status == "open").order_by(Subject.code)).all()
+               AcademicTerm.status == "active").order_by(Subject.code)).all()
 
 
 def week_strip(db, student):

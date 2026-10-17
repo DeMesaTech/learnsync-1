@@ -16,8 +16,9 @@ const browser=await launch();
 try{
   const A=await sessionFor(browser,'admin@example.com');
   const p=await newPage(browser,{state:A,width:1280,height:1000});await p.goto('/admin');await p.waitForLoadState('networkidle');
-  const year=(await call(p,'POST','/school-years',{label:'2026-2027',start_date:'2026-06-01',end_date:'2027-04-30',terms:[{name:'First Semester',sequence:1,start_date:'2026-06-01',end_date:'2027-03-31'}]})).data;
+  const year=(await call(p,'POST','/school-years',{label:'2026-2027',start_date:'2026-06-01',end_date:'2027-04-30',terms:[{name:'First Semester',sequence:1,start_date:'2026-06-01',end_date:'2026-12-31'},{name:'Second Semester',sequence:2,start_date:'2027-01-01',end_date:'2027-04-30'}]})).data;
   const term=year.terms[0];
+  await call(p,'POST',`/terms/${term.id}/schedule`);await call(p,'POST',`/terms/${term.id}/activate`);
   const college=(await call(p,'POST','/colleges',{code:'BSE',name:'College of Business and Entrepreneurship'})).data;
   await call(p,'POST',`/terms/${term.id}/sections/bulk`,{college_id:college.id,year_level:1,count:1});
   for(let i=1;i<=27;i++)await call(p,'POST','/accounts',{email:`list${i}@example.com`,display_name:`List Student ${String(i).padStart(2,'0')}`,role:'student',student_number:`L-${i}`});

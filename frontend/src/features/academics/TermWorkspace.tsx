@@ -24,7 +24,7 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
   const toast=useToast();
   const years=useQuery({queryKey:['school-years'],queryFn:()=>api<SchoolYear[]>('/school-years')});
   const fallbackTermId=useMemo(()=>{
-    const openTerm=years.data?.find(y=>y.terms.some(t=>t.status==='open'))?.terms.find(t=>t.status==='open') ?? years.data?.[0]?.terms[0];
+    const openTerm=years.data?.find(y=>y.terms.some(t=>t.status==='active'))?.terms.find(t=>t.status==='active') ?? years.data?.[0]?.terms[0];
     return openTerm?.id ?? '';
   },[years.data]);
   const termId=routeTermId ?? fallbackTermId;
@@ -76,7 +76,7 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
   const [leaving,setLeaving]=useState<SectionRosterRow|null>(null);
   const year=years.data?.find(y=>y.terms.some(t=>t.id===termId));
   const term=year?.terms.find(t=>t.id===termId);
-  const closed=term?.status==='closed';
+  const closed=!!term&&term.status!=='active';
   const teacherSearchValue=useDebouncedValue(teacherSearch);
   const facultyAccounts=useQuery({
     queryKey:['faculty-management-accounts',teacherSearchValue,facultyCollegeFilter],
@@ -353,7 +353,7 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
       <div><p className="eyebrow">{standalone ? 'Administration' : year?.label}</p><h1 className={activeTab==='sections'?'student-management-title':''}>{headingLabel}</h1>
         {!standalone&&<span className={`badge ${term.status}`}>{term.status}</span>}</div>
     </div>
-    {!standalone&&closed&&<p className="warn" role="status">This term is closed. Reopen it from Settings to make changes.</p>}
+    {!standalone&&closed&&<p className="warn" role="status">This semester is read-only until it is active.</p>}
     {!standalone&&<div className="stats-grid">
       <div className="stat-card"><span>Sections</span><strong>{totalSections}</strong></div>
       <div className="stat-card"><span>Students</span><strong>{totalStudents}</strong></div>

@@ -2,7 +2,8 @@
 from sqlalchemy import select
 
 from app.errors import fail
-from app.features.academics.models import AcademicTerm, Enrollment, Offering
+from app.features.academics.access import writable_term
+from app.features.academics.models import Enrollment, Offering
 
 
 def teaching_offering(db, offering_id, faculty, write=True):
@@ -10,8 +11,8 @@ def teaching_offering(db, offering_id, faculty, write=True):
     offering = db.get(Offering, offering_id)
     if not offering or offering.faculty_id != faculty.id:
         fail(404, "not_found", "Offering not found.")
-    if write and db.get(AcademicTerm, offering.term_id).status == "closed":
-        fail(409, "term_closed", "This term is closed. Ask an administrator to reopen it.")
+    if write:
+        writable_term(db, offering.term_id)
     return offering
 
 
@@ -27,8 +28,8 @@ def learner_offering(db, offering_id, student, write=False):
         Enrollment.status == "enrolled")) if offering else None
     if not offering or not enrollment:
         fail(404, "not_found", "Subject not found.")
-    if write and db.get(AcademicTerm, offering.term_id).status == "closed":
-        fail(409, "term_closed", "This term is closed. Your teacher can no longer accept work.")
+    if write:
+        writable_term(db, offering.term_id)
     return offering, enrollment
 
 

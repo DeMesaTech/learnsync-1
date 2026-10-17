@@ -41,12 +41,12 @@ export function OfferingLayout({role}:{role:'faculty'|'student'}){
   const setup=!!useMatch('/faculty/offerings/:offeringId/setup');
   // a teacher whose subject has no published syllabus yet is pointed at the guided setup (faculty only)
   const syllabus=useQuery({queryKey:['syllabus',offeringId],queryFn:()=>api<SyllabusState>(`/teach/offerings/${offeringId}/syllabus`),enabled:role==='faculty'});
-  const needsSetup=role==='faculty'&&!setup&&query.data?.term_status==='open'&&!!syllabus.data&&!syllabus.data.published;
+  const needsSetup=role==='faculty'&&!setup&&query.data?.term_status==='active'&&!!syllabus.data&&!syllabus.data.published;
   return <>
     <p className="back"><Link to={`/${role}/subjects`}>← My Classes</Link></p>
     {query.isPending?<p>Loading…</p>:query.error?<section className="panel"><h1>Subject unavailable</h1><p role="alert">{query.error.message}</p></section>:<>
       <div className="page-heading"><div>
-        <p className="eyebrow">{query.data.term}{query.data.term_status==='closed'?' · closed (read-only)':''}</p>
+        <p className="eyebrow">{query.data.term}{query.data.term_status!=='active'?` · ${query.data.term_status} (read-only)`:''}</p>
         <h1>{query.data.subject.code} · {query.data.subject.title}</h1>
         <p className="muted">{role==='faculty'?query.data.sections.map(s=>s.name).join(', ')||'No sections':query.data.faculty.display_name}</p>
       </div></div>
