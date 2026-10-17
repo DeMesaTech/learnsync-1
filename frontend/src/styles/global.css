@@ -2315,7 +2315,7 @@ a.touch {
 
 @media(min-width:1100px) {
   .dash-grid {
-    grid-template-columns: minmax(0, 1fr) 330px;
+    grid-template-columns: minmax(0, 1fr) 300px;
     align-items: start
   }
 }
@@ -2582,7 +2582,7 @@ a.touch {
 
 @media(min-width:1100px) {
   .dash-grid {
-    grid-template-columns: minmax(0, 1fr) 330px
+    grid-template-columns: minmax(0, 1fr) 300px
   }
 }
 
@@ -4605,6 +4605,348 @@ details.topic[open]>summary::before {
 .type-tabs a.active .muted {
   color: inherit;
   opacity: .85
+}
+
+.content-manager-header h2 {
+  margin: 0 0 6px
+}
+
+.content-manager-header .muted {
+  max-width: 52rem;
+  margin: 0
+}
+
+.content-manager-context {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0 18px
+}
+
+.content-manager-overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 20px
+}
+
+.content-manager-overview article {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface)
+}
+
+.content-manager-overview article>span {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--surface-alt);
+  color: var(--action);
+  font-weight: 700
+}
+
+.content-manager-overview article>div {
+  display: grid;
+  min-width: 0
+}
+
+.content-manager-overview strong {
+  font-size: 1.2rem;
+  line-height: 1.2
+}
+
+.content-manager-overview small {
+  color: var(--muted);
+  overflow-wrap: anywhere
+}
+
+.chapter-workspace {
+  display: grid;
+  grid-template-columns: minmax(150px, .36fr) minmax(0, .64fr);
+  align-items: start;
+  gap: 16px;
+  min-width: 0
+}
+
+.chapter-navigation {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0
+}
+
+.chapter-navigation-heading .eyebrow {
+  margin: 0 0 2px
+}
+
+.chapter-navigation-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px
+}
+
+.chapter-navigation-heading h2 {
+  margin: 0
+}
+
+.chapter-add-link {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: var(--action);
+  color: var(--action-text);
+  font-size: 1.25rem;
+  text-decoration: none
+}
+
+.chapter-navigation-list {
+  display: grid;
+  gap: 6px;
+  min-width: 0
+}
+
+.chapter-choice {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left
+}
+
+.chapter-choice:hover {
+  background: var(--surface-alt)
+}
+
+.chapter-choice.active {
+  border-color: var(--action);
+  background: var(--surface-alt)
+}
+
+.chapter-index {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  min-height: 34px;
+  border-radius: 8px;
+  background: var(--surface-alt);
+  color: var(--action);
+  font-weight: 700
+}
+
+.chapter-choice.active .chapter-index {
+  background: var(--action);
+  color: var(--action-text)
+}
+
+.chapter-choice-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0
+}
+
+.chapter-choice-copy strong,
+.chapter-choice-copy small {
+  overflow-wrap: anywhere
+}
+
+.chapter-choice-copy small {
+  color: var(--muted)
+}
+
+.chapter-detail {
+  min-width: 0
+}
+
+.chapter-detail-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px
+}
+
+.chapter-detail-heading>div {
+  min-width: 0
+}
+
+.chapter-detail-heading .eyebrow {
+  margin: 0 0 4px
+}
+
+.chapter-detail-heading h2 {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere
+}
+
+.chapter-detail-heading .muted {
+  margin: 0
+}
+
+.chapter-detail-heading .button {
+  flex: none
+}
+
+.chapter-materials {
+  min-width: 0;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border)
+}
+
+.chapter-materials .section-head {
+  align-items: center;
+  margin-bottom: 14px
+}
+
+.chapter-materials .section-head h3 {
+  margin: 0
+}
+
+.chapter-material-tools {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 4px
+}
+
+.chapter-material-search {
+  display: block;
+  margin: 0
+}
+
+.chapter-material-search input {
+  border-radius: 999px
+}
+
+.chapter-material-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px
+}
+
+.chapter-material-filters button {
+  min-height: 44px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text)
+}
+
+.chapter-material-filters button.active {
+  border-color: var(--action);
+  background: var(--action);
+  color: var(--action-text)
+}
+
+.chapter-archived {
+  margin: 0
+}
+
+.manager-material-list {
+  margin-top: 4px
+}
+
+.manager-material-list li {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border)
+}
+
+.manager-material-list .grow {
+  display: grid;
+  gap: 3px;
+  min-width: 0
+}
+
+.manager-material-list .grow>a {
+  font-weight: 600;
+  overflow-wrap: anywhere
+}
+
+.manager-material-list .grow>.muted {
+  display: block;
+  overflow-wrap: anywhere
+}
+
+.material-kind-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--surface-alt);
+  color: var(--action);
+  font-size: 1.1rem
+}
+
+.material-kind-icon.kind-online_quiz,
+.material-kind-icon.kind-activity {
+  background: #e4f5ed;
+  color: #14845b
+}
+
+.material-kind-icon.kind-reference {
+  background: #fff2d8;
+  color: #a8640b
+}
+
+.manager-material-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px
+}
+
+@media(max-width:620px) {
+  .content-manager-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr))
+  }
+
+  .chapter-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px
+  }
+
+  .chapter-navigation-list {
+    grid-auto-columns: minmax(180px, 76%);
+    grid-auto-flow: column;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scroll-snap-type: x proximity
+  }
+
+  .chapter-choice {
+    height: 100%;
+    scroll-snap-align: start
+  }
+
+  .chapter-detail-heading {
+    flex-wrap: wrap
+  }
+
+  .chapter-detail-heading .button {
+    width: 100%
+  }
 }
 
 /* confetti burst (components/celebrate.ts) */

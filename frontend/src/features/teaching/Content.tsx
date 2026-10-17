@@ -28,7 +28,7 @@ function SectionChoice({offering,chosen,onChange}:{offering:OfferingSummary;chos
     {offering.sections.map(s=><label className="inline" key={s.id}><input type="checkbox" checked={chosen.includes(s.id)} onChange={e=>onChange(e.target.checked?[...chosen,s.id]:chosen.filter(x=>x!==s.id))}/> {s.name}</label>)}</fieldset>;
 }
 
-export function NewItemDialog({offering,nodes,kind,onClose,onCreated}:{offering:OfferingSummary;nodes:{id:string;label:string}[];kind?:Item['kind'];onClose:()=>void;onCreated:(i:Item)=>void}){
+export function NewItemDialog({offering,nodes,kind,anchorNodeId,onClose,onCreated}:{offering:OfferingSummary;nodes:{id:string;label:string}[];kind?:Item['kind'];anchorNodeId?:string;onClose:()=>void;onCreated:(i:Item)=>void}){
   const [chosen,setChosen]=useState<string[]>([]);const [error,setError]=useState('');
   async function submit(e:FormEvent<HTMLFormElement>){
     e.preventDefault();const f=new FormData(e.currentTarget);
@@ -39,7 +39,7 @@ export function NewItemDialog({offering,nodes,kind,onClose,onCreated}:{offering:
   return <Dialog title={kind?names[kind]:'New item'} onClose={onClose}><form onSubmit={submit}>
     {!kind&&<label>Type<select name="kind" defaultValue="lesson"><option value="lesson">Lesson (write it here)</option><option value="file">File (PDF, Word, PowerPoint, Excel, image)</option><option value="reference">Reference link</option></select></label>}
     <label>Title<input name="title" required maxLength={200}/></label>
-    <label>Attach to a syllabus topic (optional)<select name="anchor" defaultValue=""><option value="">Not attached</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.label}</option>)}</select></label>
+    <label>Attach to a syllabus topic (optional)<select name="anchor" defaultValue={anchorNodeId??''}><option value="">Not attached</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.label}</option>)}</select></label>
     <SectionChoice offering={offering} chosen={chosen} onChange={setChosen}/>
     {error&&<p role="alert">{error}</p>}
     <div className="actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary">Create and edit</button></div>

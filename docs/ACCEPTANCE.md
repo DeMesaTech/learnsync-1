@@ -1,5 +1,12 @@
 # Acceptance status
 
+### 2026-10-17 (Faculty dashboard and chapter workspace)
+- Reduced the faculty dashboard side column from 330px to 300px and moved the next-teaching-task hero above the dashboard grid so it spans the available content width.
+- Refactored faculty Classwork into a subject content manager matching the supplied reference: subject/section selectors, chapter/resource/published/draft counts, chapter navigator, chapter-local search and type filters, and status-bearing material rows. Selectors and counts use live offering/item/assessment data; section selection filters section-targeted items. Faculty can add chapters through the syllabus editor, and Add material opens the existing creation menu with the selected chapter preattached for content items.
+- Student Classwork uses the same chapter navigator/materials pane while retaining its category tabs and completion/results controls.
+- Passed: frontend ESLint and production build (existing large-chunk advisory remains).
+- Authenticated faculty browser check: desktop hero spans 1269px of 1341px content, side column is 300px; manager selectors, summary cards, filters and chapter panel render without document overflow. At the reference-like narrow width, both chapter and detail panes remain side by side without horizontal overflow. The Module filter toggles, section selection changes, and Add material preselects the chapter; its dialog was canceled without saving. Student interaction was not browser-verified because the available session is faculty-only.
+
 ### 2026-10-17 (Academic calendar lifecycle)
 - The New school year dialog now takes a starting year and generates its consecutive label (for example, 2027 -> 2027-2028). The API validates ISO dates, label/year consistency, strictly chronological semester dates, containment, sequence order, and overlap; it inserts one school year and exactly two draft semesters atomically. Draft creation no longer copies sections or offerings.
 - Added `draft`, `scheduled`, `active`, `inactive`, and `archived` semester states. Only active semesters accept normal academic writes. Scheduling, activation, and closure are audited; a semester cannot activate while another is active or before a prior semester is closed. Generic reopening is refused. PostgreSQL exclusion constraints protect overlapping school-year/semester ranges, and a partial unique index protects the single-active invariant.

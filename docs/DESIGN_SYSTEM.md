@@ -32,7 +32,9 @@ Confirmations and undo (Phase 3): confirm only what cannot be undone or what stu
 
 ## Classwork pattern (Phase 5)
 - Three levels, each looking different: the subject tabs (underline), the Classwork type pills (rounded, the selected one filled), then a segmented status filter (soft grey track, white selected segment). Chapters are bold headings with an accent underline; topics are indented under a vertical line.
-- The type pills are links (`?type=lesson|quiz|activity|exam`), shared through `components/ClassworkTypes.tsx`, so lesson, work and syllabus pages keep them and Back returns to the same pill.
+- Faculty Classwork is a subject content manager with assigned-subject and section selectors, chapter/resource/published/draft counts, a chapter navigator, and chapter-local search/type filters. The selected chapter shows its materials and status; faculty can add material, edit the syllabus, reorder items, and manage drafts/publications.
+- Student Classwork uses the same responsive chapter navigator and selected-chapter materials layout while retaining its type pills (`?type=lesson|quiz|activity|exam`), completion filters, results, and next-step states. At narrow widths, chapter choices become a horizontally scrollable row above the materials.
+- Student type pills are links shared through `components/ClassworkTypes.tsx`, so lesson, work and syllabus pages keep them and Back returns to the same pill.
 - Route map: `/…/offerings/:id/stream | classwork | syllabus | people | grades`; old list addresses redirect into Classwork.
 - Faculty Grades stays visible while an offering has no published assessments. From Classwork, creating an assessment uses two dialog steps: set its title and audience, then edit/assign it in the assessment editor. Direct assessment edit links remain pages.
 
