@@ -60,7 +60,7 @@ export function GradebookPage(){
   const flaggedRows=book.rows.filter(r=>Object.values(r.published).some(p=>p.needs_review));
   const changed=Object.keys(edits).length;
 
-  const editable=(kind:string,cell?:Cell)=>!!cell&&!(kind==='online_quiz'&&cell.attempt_state==='submitted');
+  const editable=(kind:string,cell?:Cell)=>!!cell&&kind!=='online_quiz';
   function typeScore(column:string,student:string,original:Cell,value:string){
     const key=cellKey(column,student);const before=original.score===null?'':String(original.score);
     setEdits(prev=>{const n={...prev};if(value.trim()===before.trim())delete n[key];else n[key]=value;return n});
@@ -100,10 +100,11 @@ export function GradebookPage(){
 
     <section className="panel"><h3>Scores and grades</h3>
       <p className="muted">— means pending (not scored yet). 0.00 is a real recorded zero. “Unreleased change” means the student still sees an older result. Grades and ranks to share or download are on the Class standing tab.</p>
-      <details className="more"><summary>Filter students</summary>
-        <div className="actions"><label>Find a student<input type="search" value={find} onChange={e=>{setFind(e.target.value);setPage(1)}} placeholder="Name or student number"/></label>
-          <label>Section<select aria-label="Filter scores and grades by section" value={section} onChange={e=>{setSection(e.target.value);setPage(1)}}><option value="">All sections ({book.rows.length})</option>{offering.sections.map(s=><option key={s.id} value={s.name}>{s.name} ({s.enrolled})</option>)}</select></label>
-          <label>Period<select value={only} onChange={e=>setOnly(e.target.value)}><option value="">All periods</option>{book.policy.periods.map(p=><option key={p.key} value={p.key}>{PERIOD_LABEL[p.key]??p.key}</option>)}</select></label></div></details>
+      <div className="gradebook-filters actions" aria-label="Filter students">
+        <label>Find a student<input type="search" value={find} onChange={e=>{setFind(e.target.value);setPage(1)}} placeholder="Name or student number"/></label>
+        <label>Section<select aria-label="Filter scores and grades by section" value={section} onChange={e=>{setSection(e.target.value);setPage(1)}}><option value="">All sections ({book.rows.length})</option>{offering.sections.map(s=><option key={s.id} value={s.name}>{s.name} ({s.enrolled})</option>)}</select></label>
+        <label>Period<select value={only} onChange={e=>setOnly(e.target.value)}><option value="">All periods</option>{book.policy.periods.map(p=><option key={p.key} value={p.key}>{PERIOD_LABEL[p.key]??p.key}</option>)}</select></label>
+      </div>
       <p className="muted" role="status">Showing {rows.length} of {book.rows.length} students.{editing?' Editing: type a score in any cell, then save once.':''}</p>
       {!editing&&<div className="actions"><button className="icon-button" type="button" aria-label="Edit scores" title="Edit scores" disabled={closed} onClick={()=>{setEditing(true);setMessage('')}}>✎</button><span className="muted">{closed?'This term is closed, so scores are read-only.':'Type scores straight into the table below.'}</span></div>}
       {editing&&<div className="actions sticky-bar"><button className="primary" disabled={changed===0||saving} onClick={saveAll}>{saving?'Saving…':changed===0?'Save scores':`Save ${changed} changed score${changed===1?'':'s'}`}</button><button disabled={saving} onClick={leaveEditing}>Cancel</button><span className="muted">{changed===0?'No changes yet.':'Nothing is saved until you press Save.'}</span></div>}
@@ -155,7 +156,7 @@ function CellView({cell,kind,column,student,editing,value,problem,onType}:{cell?
     {editing?<input className="score-input" inputMode="decimal" aria-label={`${column}, score for ${student}`} aria-invalid={!!problem} value={shownValue} placeholder="—" onChange={e=>onType(e.target.value)}/>
       :<span>{cell.score===null?'—':fmt(cell.score)}</span>}
     {problem&&<span className="error" role="alert"> {problem}</span>}
-    {state&&<span className="muted"> {state}</span>}
+    {state&&<span className="muted" title={state==='Not attempted'?'No submitted attempt exists, so this online quiz has no automatically calculated score.':'The student has an active attempt that has not yet been submitted.'}> {state}</span>}
     {cell.unreleased_change&&<span className="badge"> Unreleased change</span>}</div>;
 }
 

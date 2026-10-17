@@ -48,11 +48,11 @@ export function Shell(){
     queryFn:async():Promise<ClassLink[]>=>{
       if(session?.user?.role==='faculty'){
         const offerings=await api<OfferingSummary[]>('/me/offerings');
-        return offerings.map(o=>({to:`/faculty/offerings/${o.id}`,label:`${o.subject.code} · ${o.subject.title} · ${o.term}`,icon:'↳'}));
+        return offerings.map(o=>({to:`/faculty/offerings/${o.id}`,label:o.subject.code,icon:'↳'}));
       }
       if(session?.user?.role==='student'){
         const subjects=await api<MySubject[]>('/me/subjects');
-        return subjects.map(s=>({to:`/student/offerings/${s.offering_id}`,label:`${s.subject.code} · ${s.subject.title} · ${s.term}`,icon:'↳'}));
+        return subjects.map(s=>({to:`/student/offerings/${s.offering_id}`,label:s.subject.code,icon:'↳'}));
       }
       return [];
     }});
@@ -82,7 +82,7 @@ export function Shell(){
   return <div className="app-shell">
     <a href="#main" className="skip">Skip to content</a>
     <header className="header">
-      <button ref={menuButton} className="menu" aria-label="Toggle navigation" aria-expanded={open} onClick={()=>setOpen(!open)}>☰</button>
+      <button ref={menuButton} className="menu" aria-label="Toggle navigation" aria-controls="main-navigation" aria-expanded={open} onClick={()=>setOpen(!open)}>☰</button>
       <Link to={home} className="brand"><img className="mark" src={logoUrl} alt="" aria-hidden="true"/>LearnSync</Link>
       <span className="school">GMVCC · BS Entrepreneurship</span>
       <div className="identity">
@@ -92,7 +92,7 @@ export function Shell(){
         <button onClick={logout}>Sign out</button>
       </div>
     </header>
-    <aside className={'sidebar '+(open?'open':'')}>
+    <aside id="main-navigation" className={'sidebar '+(open?'open':'')}>
       <nav aria-label="Main" onClick={()=>setOpen(false)}>
         {navigation(user.role, schoolYears.data, classes.data??[]).map(group=><div className="nav-group" key={group.label}>
           <p className="nav-label">{group.label}</p>
@@ -113,6 +113,7 @@ export function Shell(){
       {user.role!=='admin'&&classes.error&&<p className="sidebar-note" role="alert">Class links could not be loaded: {classes.error.message}</p>}
       <p className="sidebar-note">Governor Mariano E. Villafuerte Community College<br/>BS Entrepreneurship</p>
     </aside>
+    {open&&<button type="button" className="sidebar-backdrop" aria-label="Close navigation" onClick={()=>setOpen(false)}/>}
     <main id="main" className="content">{failure&&<p role="alert" className="error">{failure}</p>}<Outlet/></main>
     {user.role==='student'&&<StudyBuddy userId={user.id}/>}
   </div>;

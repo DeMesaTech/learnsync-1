@@ -1057,3 +1057,17 @@ Note: another process (started from Codex's Python runtime) was already serving 
 - Removed the fixed offerings-table cap and percentage column widths; the table now uses automatic content sizing. The add-section control follows the chips with a compact gap while remaining inside the section cell.
 - Verified in the shared browser: the table shrank from filling a 994px region to 809px for the current rows, the plus button is 5px after the last chip, and there is no page-wide horizontal overflow.
 - Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk warning), `npm run lint`, and `git diff --check`.
+
+### Faculty publishing, attendance, and assessment safeguards (2026-10-17)
+- File selection now uploads as part of Save draft or Publish, including the shared modal editor. Removed redundant classwork navigation and editor pills; class links show only the class code. The faculty stream groups all published materials and assessments separately from announcements.
+- Attendance grid now pages students, keeps Mark rest present scoped to the full roster, provides a confirmed Unmark all action for every student's marks on the selected date, moves section selection directly above the table, and opens export options in a modal.
+- Published online quizzes require two sequential confirmations before editing. Manual online-quiz score entry is blocked in both individual and batch APIs; the UI shows no-attempt students read-only, and gradebook quiz cells are not editable. Gradebook filters are visible without a disclosure; no-attempt status has an explanatory tooltip.
+- Navigation is a half-screen overlay with a backdrop at all viewport sizes. Updated the attendance E2E script for the icon action labels, clear-all confirmation, and export modal.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk advisory), `npm run lint`, `node --check e2e\\attendance-grid.mjs`, backend `python -m pytest tests\\test_gradebook_edit.py -q` (5 passed), and `git diff --check`.
+- Not browser-verified: the shared app returned 401 Unauthorized before rendering an authenticated workspace. The attendance E2E was not run because it provisions and mutates records and requires confirmation that its database is disposable.
+
+### Faculty stream layout and desktop navigation (2026-10-17)
+- Restored the desktop fixed sidebar and hid the hamburger at the 1024px desktop breakpoint; the hamburger-controlled half-screen overlay remains for smaller viewports.
+- Embedded announcement articles in the published-content stream panel while retaining a distinct Announcements subsection, and removed the redundant announcements page-heading on the stream view. The separate Announcements page keeps its heading and card layout.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk advisory), `npm run lint`, and `git diff --check`.
+- Not browser-verified: the shared browser was on Classwork rather than Stream when inspected; no data-changing browser flow was run.

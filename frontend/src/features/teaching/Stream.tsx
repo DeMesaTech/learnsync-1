@@ -24,13 +24,14 @@ export function FacultyStream(){
     ...(assessments.data??[]).filter(a=>a.published&&!a.archived).map(a=>({key:'a'+a.id,title:assessmentTitle(a),kind:KIND[a.kind],icon:a.kind,at:a.published!.published_at!,to:`${base}/assessments/${a.id}/scores`})),
   ].filter(r=>r.at).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)||a.key.localeCompare(b.key));
   return <>
-    <FacultyAnnouncements/>
-    <section className="panel stream-classwork-panel" aria-labelledby="classwork-stream-heading"><h3 id="classwork-stream-heading">Published classwork</h3>
+    <section className="panel stream-classwork-panel" aria-labelledby="published-content-heading"><h3 id="published-content-heading">Published materials and assessments</h3>
       {classwork.length===0?<p className="muted">Nothing published yet. Lessons, files, links and assessments you publish appear here.</p>
         :<ul className="seq compact manager-material-list">{classwork.map(r=><li className="manager-material-row" key={r.key}>
           <span className={`material-kind-icon kind-${r.icon}`} aria-hidden="true">{ICON[r.icon]??'▣'}</span>
           <span className="grow"><Link to={r.to}>{r.title}</Link><span className="muted">{r.kind} · <time dateTime={r.at}>{uploadedAt(r.at)}</time></span></span>
-        </li>)}</ul>}</section>
+        </li>)}</ul>}
+      <FacultyAnnouncements embedded/>
+    </section>
   </>;
 }
 

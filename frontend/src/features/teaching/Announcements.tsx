@@ -11,7 +11,7 @@ import type {Announcement} from './types';
 
 const PAGE=25;   // newest first; "Load more" asks the server for the next page
 interface Page{items:Announcement[];has_more:boolean}
-export function FacultyAnnouncements(){
+export function FacultyAnnouncements({embedded=false}:{embedded?:boolean}={}){
   const ask=useConfirm();
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const closed=offering.term_status!=='active';
@@ -26,17 +26,20 @@ export function FacultyAnnouncements(){
     try{await post(`${base}/${a.id}/${action}`,{});setMessage('');refresh()}catch(e){setMessage(errorText(e))}
   }
   const names=(ids:string[])=>ids.length===0?'All sections':ids.map(id=>offering.sections.find(s=>s.id===id)?.name??'').join(', ');
+  const cards=rows.map(a=><article className={embedded?'stream-announcement':'panel'} key={a.id}>
+    <p className="eyebrow">{a.state} · {names(a.section_ids)}</p><h3>{a.title}</h3><p className="pre">{a.body}</p>
+    <div className="actions">
+      {a.state==='draft'&&<><button disabled={closed} onClick={()=>setEditing(a)}>Edit</button><button className="primary" disabled={closed} onClick={()=>act(a,'publish')}>Publish</button></>}
+      {a.state==='published'&&<button disabled={closed} onClick={()=>act(a,'archive')}>Archive</button>}</div></article>);
   return <>
-    <div className="page-heading"><div><h2>Stream</h2><p className="muted">Short notices for your sections. Save a draft, then publish when ready.</p></div>
-      <button className="primary" disabled={closed} onClick={()=>{setMessage('');setEditing('new')}}>New announcement</button></div>
+    {embedded
+      ?<div className="actions stream-announcement-tools"><h4>Announcements</h4><button className="primary" disabled={closed} onClick={()=>{setMessage('');setEditing('new')}}>New announcement</button></div>
+      :<div className="page-heading"><div><h2>Announcements</h2><p className="muted">Short notices for your sections. Save a draft, then publish when ready.</p></div>
+        <button className="primary" disabled={closed} onClick={()=>{setMessage('');setEditing('new')}}>New announcement</button></div>}
     {message&&<p role="alert">{message}</p>}
     {query.isPending?<p>Loading…</p>:query.error?<p role="alert">{query.error.message}</p>:
-      rows.length===0?<section className="panel"><h2>No announcements yet</h2></section>:
-      <div className="cards">{rows.map(a=><article className="panel" key={a.id}>
-        <p className="eyebrow">{a.state} · {names(a.section_ids)}</p><h3>{a.title}</h3><p className="pre">{a.body}</p>
-        <div className="actions">
-          {a.state==='draft'&&<><button disabled={closed} onClick={()=>setEditing(a)}>Edit</button><button className="primary" disabled={closed} onClick={()=>act(a,'publish')}>Publish</button></>}
-          {a.state==='published'&&<button disabled={closed} onClick={()=>act(a,'archive')}>Archive</button>}</div></article>)}</div>}
+      rows.length===0?<p className="muted">No announcements yet.</p>:
+      embedded?cards:<div className="cards">{cards}</div>}
     {query.hasNextPage&&<button disabled={query.isFetchingNextPage} onClick={()=>query.fetchNextPage()}>{query.isFetchingNextPage?'Loading…':'Load more announcements'}</button>}
     {editing&&<Editor offering={offering} existing={editing==='new'?null:editing} onClose={()=>setEditing(null)} onDone={()=>{setEditing(null);refresh()}}/>}
   </>;

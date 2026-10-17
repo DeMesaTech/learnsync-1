@@ -41,16 +41,8 @@ def apply_score(db, actor, offering, assessment, student_id, data, submission_id
         fail(422, "student_invalid", "Choose a currently enrolled student this assessment "
                                      "applies to.")
     if assessment.kind == "online_quiz":
-        # Scores come from attempts. Faculty may only record one for a student who never
-        # attempted (a no-show); an open attempt must be closed first, a submitted one corrected.
-        states = set(db.scalars(select(QuizAttempt.state).where(
-            QuizAttempt.assessment_id == assessment.id, QuizAttempt.student_id == student_id)))
-        if "submitted" in states:
-            fail(422, "use_correction", "This student has a submitted attempt; correct an answer "
-                                        "instead.")
-        if "in_progress" in states:
-            fail(409, "attempt_open", "This student has an open attempt. Close open attempts "
-                                      "first.")
+        fail(409, "auto_scored", "Online quizzes are auto-scored from submitted attempts; "
+                                "faculty cannot enter scores manually.")
     if data.score is not None and Decimal(data.score) > Decimal(rev.max_points):
         fail(422, "score_exceeds_max", f"The score cannot be above {rev.max_points}.")
     row = score_row(db, assessment.id, student_id, create=True)

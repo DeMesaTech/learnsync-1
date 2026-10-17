@@ -83,10 +83,17 @@ try{
   check('the server holds exactly the keyboard result (A, L; the cleared one is gone)',day0[rid(1)]==='absent'&&day0[rid(2)]==='late'&&day0[rid(0)]===undefined,JSON.stringify(Object.values(day0)));
 
   // ---- Mark rest present on the second column
-  await page.getByRole('button',{name:'Mark rest present'}).nth(2).click();                       // the Wednesday column
+  await page.getByRole('button',{name:/Mark unmarked students present/}).nth(2).click();          // the Wednesday column
   await page.getByText('All changes saved.').waitFor();
   s=await sessions();
-  check('Mark rest present marks everyone not yet marked on that date',s.sessions.length===2&&Object.keys(s.sessions[0].marks).length===3);
+  const fullyMarkedDate=s.sessions.find(x=>Object.keys(x.marks).length===3)?.date;
+  check('Mark rest present marks everyone not yet marked on that date',s.sessions.length===2&&!!fullyMarkedDate);
+  await cell(0,2).focus();
+  await page.getByRole('button',{name:/^Unmark all attendance for/}).click();
+  await page.getByRole('button',{name:'Unmark all',exact:true}).click();
+  await page.getByText('All changes saved.').waitFor();
+  s=await sessions();
+  check('Unmark all clears every student for the selected date',!!fullyMarkedDate&&Object.keys(s.sessions.find(x=>x.date===fullyMarkedDate)?.marks??{}).length===0);
 
   // ---- a period per date, locked once recorded
   const friday=page.locator('table.att-grid thead th[scope=col]').nth(5);                        // th 0 is the student column
@@ -139,7 +146,8 @@ try{
   check('and the grid comes back',await page.locator('table.att-grid').count()===1);
 
   // ---- export: a real file downloads from the page
-  await page.locator('details.more summary',{hasText:'Export'}).first().click();
+  await page.getByRole('button',{name:'Export…'}).click();
+  await page.getByRole('dialog',{name:'Export attendance'}).waitFor();
   await page.getByRole('radio',{name:'All recorded dates'}).check();
   const [xlsx]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Download Excel'}).click()]);
   const [pdf]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Download PDF'}).click()]);

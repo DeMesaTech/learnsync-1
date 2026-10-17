@@ -14,6 +14,8 @@ Migration `4e6a81c0b932` backfills every existing faculty account to the adminis
 
 Files remain outside webroot and are delivered by an authorized API. Drafts use compare-and-swap revisions; published documents and grade snapshots are immutable.
 
+Online quiz scores are computed only from submitted attempts. Faculty may correct a submitted answer, which recomputes the score, but cannot enter or overwrite a quiz score through individual-score or gradebook batch APIs.
+
 When committing a reviewed prospectus, the admin confirms an active college. Newly created subjects inherit that college; existing catalog subjects are not overwritten. The API validates the college at commit time.
 
 Approved schema/lifecycles: IMPLEMENTATION_PLAN.md sections 3-4. AI retrieval restrictions: section 6.

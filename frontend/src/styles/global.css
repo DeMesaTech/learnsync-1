@@ -163,10 +163,26 @@ p {
   display: flex;
   flex-direction: column;
   position: fixed;
-  inset: 75px 0 0;
+  inset: var(--header-h, 77px) auto 0 0;
+  width: 50vw;
+  min-width: 0;
   z-index: 4;
   background: var(--surface);
-  padding: 24px
+  padding: 24px;
+  overflow-y: auto;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .2)
+}
+
+.sidebar-backdrop {
+  position: fixed;
+  inset: var(--header-h, 77px) 0 0;
+  z-index: 3;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: rgba(0, 0, 0, .42)
 }
 
 .sidebar nav {
@@ -660,6 +676,10 @@ dialog::backdrop {
     padding: 24px 18px;
     background: var(--surface);
     border-right: 1px solid var(--border)
+  }
+
+  .sidebar-backdrop {
+    display: none
   }
 
   .content {
@@ -4306,6 +4326,58 @@ dialog[data-confirm] {
   outline-offset: 1px
 }
 
+.attendance-tools {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px
+}
+
+.attendance-tools-row {
+  display: flex;
+  align-items: center;
+  min-width: 0
+}
+
+.attendance-tools-row .more {
+  width: 100%;
+  margin-top: 0
+}
+
+.attendance-tools-row .more fieldset {
+  margin-top: 8px
+}
+
+.attendance-grid-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 8px
+}
+
+.attendance-grid-actions p {
+  flex: 1 1 280px;
+  margin: 0
+}
+
+.att-head .icon-button {
+  width: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  height: 36px;
+  padding: 0
+}
+
+.gradebook-filters {
+  align-items: end
+}
+
+.gradebook-filters label {
+  flex: 1 1 200px;
+  max-width: 340px;
+  margin: 0
+}
+
 /* ---- Classroom-style navigation: sub tabs and the Create menu ---- */
 .subtabs {
   display: flex;
@@ -5032,6 +5104,28 @@ details.topic[open]>summary::before {
 
 .stream-classwork-panel>h3 {
   margin-bottom: 8px
+}
+
+.stream-announcement-tools {
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border)
+}
+
+.stream-announcement-tools h4 {
+  margin: 0
+}
+
+.stream-announcement {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border)
+}
+
+.stream-announcement h3 {
+  margin-bottom: 6px
 }
 
 @media(max-width:620px) {

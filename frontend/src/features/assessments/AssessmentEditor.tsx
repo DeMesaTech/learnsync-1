@@ -17,6 +17,32 @@ import {KIND_LABEL,toIso,toLocal,type Assessment,type AssessmentRev,type DraftCo
 const toContent=(r:AssessmentRev):DraftContent=>({title:r.title,instructions:r.instructions,category_key:r.category_key??'',period:r.period??'',max_points:String(r.max_points??0),available_from:toLocal(r.available_from),deadline:toLocal(r.deadline),allow_late:r.allow_late,max_attempts:r.max_attempts,score_rule:r.score_rule,include_in_grade:r.include_in_grade,anchor_node_id:r.anchor_node_id,questions:r.questions});
 const toPayload=(v:DraftContent,counter:number)=>({expected_counter:counter,title:v.title,instructions:v.instructions,category_key:v.category_key||null,period:v.period||null,max_points:v.max_points||'0',available_from:toIso(v.available_from),deadline:toIso(v.deadline),allow_late:v.allow_late,max_attempts:v.max_attempts,score_rule:v.score_rule,include_in_grade:v.include_in_grade,anchor_node_id:v.anchor_node_id,questions:v.questions.map(q=>({...q,points:String(q.points||0)}))});
 
+function useQuizEditWarning(item:Assessment|undefined,assessmentId:string|undefined,closed:boolean){
+  const ask=useConfirm();
+  const [confirmedFor,setConfirmedFor]=useState<string|null>(null);
+  const [warningError,setWarningError]=useState('');
+  const startedFor=useRef<string|null>(null);
+  const required=!!item?.published&&item.kind==='online_quiz'&&!closed;
+  const key=assessmentId??item?.id??'';
+  useEffect(()=>{
+    if(!required||confirmedFor===key||startedFor.current===key)return;
+    startedFor.current=key;
+    setWarningError('');
+    void (async()=>{
+      if(!await ask({title:'Edit this online quiz?',message:'Online quizzes are auto-scored. Editing can change the experience or scoring for students; review the draft carefully before updating it.',yes:'Continue to confirmation'})){
+        setWarningError('Quiz editing was cancelled.');
+        return;
+      }
+      if(!await ask({title:'Confirm online quiz edit',message:'This is the second confirmation. Continue only if you intend to change this auto-scored quiz.',yes:'Confirm and edit',danger:true})){
+        setWarningError('Quiz editing was cancelled.');
+        return;
+      }
+      setConfirmedFor(key);
+    })();
+  },[required,confirmedFor,key,ask]);
+  return {required,confirmed:!required||confirmedFor===key,warningError};
+}
+
 export function AssessmentEditorPage(){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const {assessmentId}=useParams();
@@ -24,16 +50,22 @@ export function AssessmentEditorPage(){
   const base=`/teach/offerings/${offering.id}/assessments/${assessmentId}`;
   const query=useQuery({queryKey:['assessment',assessmentId],queryFn:()=>api<Assessment>(base)});
   const [starting,setStarting]=useState(false);
+  const [startError,setStartError]=useState('');
   const item=query.data;
   const back=`/faculty/offerings/${offering.id}/classwork${item?`?type=${catOfKind(item.kind)}`:''}`;      // return to the pill this belongs to
-  const needsDraft=!!item&&!item.draft&&!closed;
+  const {required:requiresQuizWarning,confirmed:quizEditConfirmed,warningError}=useQuizEditWarning(item,assessmentId,closed);
+  const canEdit=!!item&&quizEditConfirmed;
+  const needsDraft=!!item&&!item.draft&&!closed&&canEdit;
   useEffect(()=>{
     if(!needsDraft||starting)return;
     setStarting(true);
-    post(`${base}/draft`,{}).then(()=>query.refetch()).finally(()=>setStarting(false));
+    setStartError('');
+    post(`${base}/draft`,{}).then(()=>query.refetch()).catch(e=>setStartError(errorText(e))).finally(()=>setStarting(false));
   },[needsDraft]); // eslint-disable-line react-hooks/exhaustive-deps
   if(query.isPending)return <p>Loading…</p>;
   if(query.error||!item)return <section className="panel"><h2>Assessment unavailable</h2><p role="alert">{query.error?.message}</p><Link to={back}>Back to classwork</Link></section>;
+  if(requiresQuizWarning&&!quizEditConfirmed)return <section className="panel"><h2>Confirm quiz edit</h2>{warningError&&<p role="alert">{warningError}</p>}{!warningError&&<p>Confirm the two warnings to open this auto-scored quiz for editing.</p>}<Link to={back}>Back to classwork</Link></section>;
+  if(startError)return <section className="panel"><h2>Assessment draft unavailable</h2><p role="alert">{startError}</p><Link to={back}>Back to classwork</Link></section>;
   if(!item.draft)return closed?<section className="panel"><p className="back"><Link to={back}>← Classwork</Link></p><h2>{item.published?.title}</h2><p className="muted">This term is closed, so it cannot be edited.</p></section>:<p>Preparing a draft…</p>;
   return <Editor key={item.draft.version} offering={offering} assessment={item} refetch={()=>query.refetch()}/>;
 }
@@ -49,7 +81,9 @@ export function AssessmentEditorDialog({offering,assessmentId,onClose}:{offering
   const flushEditor=useRef<()=>Promise<boolean>>(async()=>true);
   const registerFlush=useCallback((flush:()=>Promise<boolean>)=>{flushEditor.current=flush},[]);
   const item=query.data;
-  const needsDraft=!!item&&!item.draft&&!closed;
+  const {required:requiresQuizWarning,confirmed:quizEditConfirmed,warningError}=useQuizEditWarning(item,assessmentId,closed);
+  const canEdit=!!item&&quizEditConfirmed;
+  const needsDraft=!!item&&!item.draft&&!closed&&canEdit;
   useEffect(()=>{
     if(!needsDraft||starting||startError)return;
     setStarting(true);
@@ -68,6 +102,7 @@ export function AssessmentEditorDialog({offering,assessmentId,onClose}:{offering
 
   return <Dialog title={item?.draft?.title||item?.published?.title||'Edit assessment'} className="assessment-editor-dialog" confirmOnClose={false} onClose={closeEditor}>
     {query.isPending?<p>Loading assessment…</p>:query.error||!item?<p role="alert">{query.error?.message??'Assessment is unavailable.'}</p>
+      :requiresQuizWarning&&!quizEditConfirmed?<p>{warningError?<span role="alert">{warningError}</span>:'Confirm both warnings to edit this auto-scored quiz.'}</p>
       :item.draft?<Editor key={item.draft.version} offering={offering} assessment={item} refetch={()=>query.refetch()} modal onDone={onClose} onFlushReady={registerFlush}/>
         :closed?<p className="muted">This term is closed, so the assessment cannot be edited.</p>
           :startError?<p role="alert">{startError}</p>:<p>Preparing a draft…</p>}

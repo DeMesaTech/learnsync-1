@@ -10,7 +10,7 @@ import type {OfferingSummary} from '../academics/types';
 import {SaveIndicator,draftKey,useAutosave,useFlushOnLeave} from './autosave';
 import {RichEditor} from './RichEditor';
 import {ReferenceText} from '../study/ReferenceText';
-import {nodeLabels,type Item,type ItemDraftContent,type SyllabusState} from './types';
+import {nodeLabels,type FileRef,type Item,type ItemDraftContent,type SyllabusState} from './types';
 
 export const KIND={lesson:'Lesson',file:'File',reference:'Link'} as const;
 export const itemTitle=(i:Item)=>i.draft?.title||i.published?.title||'Untitled';
@@ -86,7 +86,7 @@ export function ItemEditorDialog({itemId,onClose}:{itemId:string;onClose:()=>voi
 
   return <Dialog title={item?`Edit ${KIND[item.kind].toLowerCase()}`:'Edit content'} className="item-editor-dialog" confirmOnClose={false} onClose={closeEditor}>
     {query.isPending?<p>Loading content…</p>:query.error||!item?<p role="alert">{query.error?.message??'Content is unavailable.'}</p>
-      :item.draft?<ItemEditor key={item.draft.version} offering={offering} item={item} refetch={()=>query.refetch()} modal onDone={onClose} onFlushReady={registerFlush}/>
+      :item.draft?<ItemEditor key={item.draft.version} offering={offering} item={item} refetch={()=>query.refetch()} onDone={onClose} onFlushReady={registerFlush}/>
         :closed?<ReadOnlyItem offering={offering} item={item}/>:<p>Preparing a draft…</p>}
     {closeError&&<p role="alert">{closeError}</p>}
   </Dialog>;
@@ -106,7 +106,7 @@ function ReadOnlyItem({offering,item}:{offering:OfferingSummary;item:Item}){
     {item.published?.body_html&&<div className="rich-content" dangerouslySetInnerHTML={{__html:item.published.body_html}}/>}</section>;
 }
 
-function ItemEditor({offering,item,refetch,modal=false,onDone,onFlushReady}:{offering:OfferingSummary;item:Item;refetch:()=>void;modal?:boolean;onDone?:()=>void;onFlushReady?:(flush:()=>Promise<boolean>)=>void}){
+function ItemEditor({offering,item,refetch,onDone,onFlushReady}:{offering:OfferingSummary;item:Item;refetch:()=>void;onDone?:()=>void;onFlushReady?:(flush:()=>Promise<boolean>)=>void}){
   const ask=useConfirm();const toast=useToast();
   const draft=item.draft!;
   const {session}=useAuth();
@@ -116,6 +116,8 @@ function ItemEditor({offering,item,refetch,modal=false,onDone,onFlushReady}:{off
   const [message,setMessage]=useState('');
   const [sections,setSections]=useState(item.section_ids);
   const [file,setFile]=useState(draft.file);
+  const [selectedFile,setSelectedFile]=useState<File|null>(null);
+  const fileInput=useRef<HTMLInputElement>(null);
   const auto=useAutosave<ItemDraftContent>({storageKey:draftKey(session?.user?.id,offering.id,`item-${item.id}`),counter:draft.counter,
     initial:{title:draft.title,body_html:draft.body_html??'',reference_url:draft.reference_url??'',reference_note:draft.reference_note,anchor_node_id:draft.anchor_node_id},
     save:(v,counter)=>send<{counter:number}>('PUT',`${base}/draft`,{expected_counter:counter,title:v.title,body_html:v.body_html,reference_url:v.reference_url||null,reference_note:v.reference_note,anchor_node_id:v.anchor_node_id||null})});
@@ -129,8 +131,17 @@ function ItemEditor({offering,item,refetch,modal=false,onDone,onFlushReady}:{off
   async function publish(){
     setMessage('');
     if(!await auto.flush()){setMessage('Resolve the save problem above before publishing.');return}
+    if(!await uploadSelectedFile())return;
     try{await post(`${base}/draft/publish`,{expected_counter:auto.counter()});auto.discardRecovered();queryClient.invalidateQueries({queryKey:['items',offering.id]});toast('Published. Students can see it now.');finish()}
     catch(e){setMessage(errorText(e))}
+  }
+  async function saveDraft(){
+    setMessage('');
+    if(!await auto.flush()){setMessage('Resolve the save problem above before saving the draft.');return}
+    if(!await uploadSelectedFile())return;
+    auto.discardRecovered();
+    toast('Draft saved.');
+    finish();
   }
   async function discard(){
     const published=!!item.published;
@@ -144,17 +155,20 @@ function ItemEditor({offering,item,refetch,modal=false,onDone,onFlushReady}:{off
   async function setSettings(patch:{section_ids?:string[];archived?:boolean}){
     try{await send('PATCH',base,patch);queryClient.invalidateQueries({queryKey:['items',offering.id]});refetch()}catch(e){setMessage(errorText(e))}
   }
-  async function uploadFile(e:FormEvent<HTMLFormElement>){
-    e.preventDefault();setMessage('');
-    const form=new FormData(e.currentTarget);   // read before awaiting: React clears currentTarget
-    if(!await auto.flush()){setMessage('Resolve the save problem above first.');return}
+  async function uploadSelectedFile():Promise<boolean>{
+    if(item.kind!=='file'||!selectedFile)return true;
+    const form=new FormData();
+    form.set('file',selectedFile);
     form.set('expected_counter',String(auto.counter()));
-    try{const r=await upload<{counter:number;file:typeof file}>(`${base}/draft/file`,form);auto.adoptCounter(r.counter);setFile(r.file)}
-    catch(err){setMessage(errorText(err))}
+    try{
+      const r=await upload<{counter:number;file:FileRef}>(`${base}/draft/file`,form);
+      auto.adoptCounter(r.counter);setFile(r.file);setSelectedFile(null);
+      if(fileInput.current)fileInput.current.value='';
+      return true;
+    }catch(err){setMessage(errorText(err));return false}
   }
 
   return <>
-    {!modal&&<p className="back"><Link to={back}>← Content</Link></p>}
     <div className="page-heading"><div><p className="eyebrow">{({lesson:'Lesson',file:'File',reference:'Link'})[item.kind]}</p><h2>{v.title||'Untitled'}</h2>
       <p className="muted">{item.published?`Students see version ${item.published.version} until you publish this draft.`:'Not visible to students until you publish.'}</p></div>
       <SaveIndicator status={auto.status} message={auto.message} storageFailed={auto.storageFailed} onRetry={auto.retry}/></div>
@@ -168,8 +182,8 @@ function ItemEditor({offering,item,refetch,modal=false,onDone,onFlushReady}:{off
       <label>Title<input value={v.title} maxLength={200} onChange={e=>set({title:e.target.value})}/></label>
       <label>Attached syllabus topic<select value={v.anchor_node_id??''} onChange={e=>set({anchor_node_id:e.target.value||null})}><option value="">Not attached</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.label}</option>)}</select></label>
       {item.kind==='lesson'&&<><p id="lesson-label" className="label">Lesson content</p><RichEditor html={v.body_html} onChange={html=>set({body_html:html})}/></>}
-      {item.kind==='file'&&<><p>{file?<>Current file: <strong>{file.name}</strong> ({Math.ceil(file.size/1024)} KB)</>:'No file uploaded yet.'}</p>
-        <form onSubmit={uploadFile}><label>{file?'Replace the file':'Upload a file'} (PDF, Word, PowerPoint, Excel, PNG or JPEG, up to 20 MB)<input name="file" type="file" required accept=".pdf,.docx,.pptx,.xlsx,.png,.jpg,.jpeg"/></label><button>Upload</button></form>
+      {item.kind==='file'&&<><p>{selectedFile?<>Selected file: <strong>{selectedFile.name}</strong> ({Math.ceil(selectedFile.size/1024)} KB)</>:file?<>Current file: <strong>{file.name}</strong> ({Math.ceil(file.size/1024)} KB)</>:'No file uploaded yet.'}</p>
+        <label>{file?'Replace the file':'Choose a file'} (PDF, Word, PowerPoint, Excel, PNG or JPEG, up to 20 MB)<input ref={fileInput} name="file" type="file" accept=".pdf,.docx,.pptx,.xlsx,.png,.jpg,.jpeg" onChange={e=>setSelectedFile(e.target.files?.[0]??null)}/></label>
         <label>Description (optional)<textarea value={v.reference_note} maxLength={5000} onChange={e=>set({reference_note:e.target.value})}/></label></>}
       {item.kind==='reference'&&<><label>Link address<input type="url" value={v.reference_url} maxLength={2000} placeholder="https://" onChange={e=>set({reference_url:e.target.value})}/></label>
         <label>Note for students (optional)<textarea value={v.reference_note} maxLength={5000} onChange={e=>set({reference_note:e.target.value})}/></label></>}
@@ -181,6 +195,6 @@ function ItemEditor({offering,item,refetch,modal=false,onDone,onFlushReady}:{off
       <button type="button" onClick={()=>setSettings({archived:!item.archived})}>{item.archived?'Restore item':'Archive item'}</button>
       <p className="muted">Archived items are hidden from students and kept in your records.</p></section>
     {message&&<p role="alert">{message}</p>}
-    <div className="actions"><button className="primary" onClick={publish}>Publish</button><button onClick={discard}>{item.published?'Discard draft':'Delete item'}</button></div>
+    <div className="actions"><button onClick={saveDraft}>Save draft</button><button className="primary" onClick={publish}>Publish</button><button onClick={discard}>{item.published?'Discard draft':'Delete item'}</button></div>
   </>;
 }

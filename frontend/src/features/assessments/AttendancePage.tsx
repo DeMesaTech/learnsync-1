@@ -4,6 +4,8 @@ import {useQuery,type UseQueryResult} from '@tanstack/react-query';
 import {api,send,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
 import {useConfirm} from '../../components/confirm';
+import {Dialog} from '../../components/Dialog';
+import {Pager} from '../../components/Pager';
 import {useToast} from '../../components/undo';
 import type {OfferingSummary} from '../academics/types';
 import {useFlushOnLeave,type SaveStatus} from '../teaching/autosave';
@@ -19,6 +21,7 @@ const SHORT:Record<Status,string>={present:'P',late:'L',absent:'A',excused:'E'};
 const LABEL:Record<Status,string>={present:'Present',late:'Late',absent:'Absent',excused:'Excused'};
 const CYCLE:(Status|null)[]=[null,'present','late','absent','excused'];
 const KEYS:Record<string,Status>={p:'present',l:'late',a:'absent',e:'excused'};
+const PAGE_SIZE=25;
 const iso=(d:Date)=>{const p=(n:number)=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`};
 const parse=(v:string)=>{const [y,m,d]=v.split('-').map(Number);return new Date(y,m-1,d)};
 const shift=(v:string,days:number)=>{const d=parse(v);d.setDate(d.getDate()+days);return iso(d)};
@@ -58,8 +61,10 @@ function AttendanceExport({offering,sectionId,from,to,label}:{offering:OfferingS
   const toast=useToast();
   const [range,setRange]=useState<'view'|'custom'|'all'>('view');
   const [start,setStart]=useState(from);const [end,setEnd]=useState(to);
+  const [open,setOpen]=useState(false);
   const invalid=range==='custom'&&(!start||!end||end<start);
   const [busy,setBusy]=useState('');const [message,setMessage]=useState('');
+  useEffect(()=>{setStart(from);setEnd(to)},[from,to]);
   async function download(format:'pdf'|'xlsx'){
     setBusy(format);setMessage('');
     try{
@@ -74,16 +79,22 @@ function AttendanceExport({offering,sectionId,from,to,label}:{offering:OfferingS
     }catch(e){setMessage(e instanceof Error?e.message:'The export could not be created.')}
     finally{setBusy('')}
   }
-  return <details className="more"><summary>Export</summary>
-    <fieldset><legend>Export attendance (recorded dates only)</legend>
-      <label className="inline"><input type="radio" name="att-export-range" checked={range==='view'} onChange={()=>setRange('view')}/> {label}</label>
-      <label className="inline"><input type="radio" name="att-export-range" checked={range==='custom'} onChange={()=>setRange('custom')}/> Custom range</label>
-      {range==='custom'&&<div className="grid-2"><label>From<input type="date" value={start} onChange={e=>setStart(e.target.value)}/></label><label>To<input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label></div>}
-      {invalid&&<p role="alert" className="error">Choose a start date and an end date that is not before it.</p>}
-      <label className="inline"><input type="radio" name="att-export-range" checked={range==='all'} onChange={()=>setRange('all')}/> All recorded dates</label>
-      <div className="actions"><button disabled={!!busy||invalid} onClick={()=>download('xlsx')}>{busy==='xlsx'?'Preparing…':'Download Excel'}</button>
-        <button disabled={!!busy||invalid} onClick={()=>download('pdf')}>{busy==='pdf'?'Preparing…':'Download PDF'}</button></div></fieldset>
-    {message&&<p role="status">{message}</p>}</details>;
+  return <>
+    <button type="button" onClick={()=>{setMessage('');setOpen(true)}}>Export…</button>
+    {open&&<Dialog title="Export attendance" confirmOnClose={false} onClose={()=>setOpen(false)}>
+      <fieldset><legend>Export attendance (recorded dates only)</legend>
+        <label className="inline"><input type="radio" name="att-export-range" checked={range==='view'} onChange={()=>setRange('view')}/> {label}</label>
+        <label className="inline"><input type="radio" name="att-export-range" checked={range==='custom'} onChange={()=>setRange('custom')}/> Custom range</label>
+        {range==='custom'&&<div className="grid-2"><label>From <input type="date" value={start} onChange={e=>setStart(e.target.value)}/></label><label>To <input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label></div>}
+        {invalid&&<p role="alert" className="error">Choose a start date and an end date that is not before it.</p>}
+        <label className="inline"><input type="radio" name="att-export-range" checked={range==='all'} onChange={()=>setRange('all')}/> All recorded dates</label>
+      </fieldset>
+      {message&&<p role="status">{message}</p>}
+      <div className="actions"><button type="button" onClick={()=>setOpen(false)}>Close</button>
+        <button disabled={!!busy||invalid} onClick={()=>download('xlsx')}>{busy==='xlsx'?'Preparing…':'Download Excel'}</button>
+        <button disabled={!!busy||invalid} onClick={()=>download('pdf')}>{busy==='pdf'?'Preparing…':'Download PDF'}</button></div>
+    </Dialog>}
+  </>;
 }
 
 interface ViewProps{
@@ -93,7 +104,7 @@ interface ViewProps{
 
 /** Students down, dates across. Each change is saved on its own (debounced per date); a failed save is flagged with Retry. */
 function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,range,setRange}:ViewProps){
-  const toast=useToast();
+  const toast=useToast();const ask=useConfirm();
   const closed=offering.term_status!=='active';
   const [edits,setEdits]=useState<Record<string,Record<string,Status|null>>>({});     // typed but not yet confirmed saved
   const [periods,setPeriods]=useState<Record<string,Period>>({});
@@ -101,6 +112,7 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
   const [saving,setSaving]=useState(0);
   const [active,setActive]=useState({r:0,c:0});
   const [hasActiveCell,setHasActiveCell]=useState(false);
+  const [page,setPage]=useState(1);
   const [classDays,setClassDays]=useState(offering.meeting_days??0);
   const [note,setNote]=useState('');
   const pending=useRef<Record<string,Record<string,Status|null>>>({});
@@ -122,6 +134,10 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
     return (before??after)?.period??'midterm'};
   const periodOf=(d:string):Period=>byDate.get(d)?.period??periods[d]??nearest(d);
   const valueOf=(d:string,s:string):Status|null=>{const e=edits[d]?.[s];return e!==undefined?e:((byDate.get(d)?.marks[s] as Status|undefined)??null)};
+  const pageCount=Math.max(1,Math.ceil(roster.length/PAGE_SIZE));
+  const currentPage=Math.min(page,pageCount);
+  const pageRoster=roster.slice((currentPage-1)*PAGE_SIZE,currentPage*PAGE_SIZE);
+  const activeDate=hasActiveCell?dates[active.c]:undefined;
   const unsaved=Object.values(edits).reduce((n,e)=>n+Object.keys(e).length,0);
   const status:SaveStatus=unsaved===0?'saved':saving>0?'saving':Object.keys(errors).length>0?'failed':'dirty';
 
@@ -174,7 +190,6 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
     const rr=Math.max(0,Math.min(roster.length-1,r)),cc=Math.max(0,Math.min(dates.length-1,c));
     setActive({r:rr,c:cc});
     setHasActiveCell(true);
-    table.current?.querySelector<HTMLButtonElement>(`[data-r="${rr}"][data-c="${cc}"]`)?.focus();
   }
   function onKey(e:KeyboardEvent<HTMLButtonElement>,r:number,c:number,d:string,s:string){
     const arrows:Record<string,[number,number]>={ArrowUp:[-1,0],ArrowDown:[1,0],ArrowLeft:[0,-1],ArrowRight:[0,1]};
@@ -194,26 +209,54 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
   const changeSection=(id:string)=>{if(id!==sectionId)go(()=>setSectionId(id))};
   const title=range==='week'?`Week of ${parse(first).toLocaleDateString(undefined,{month:'short',day:'numeric'})} – ${parse(last).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}`:parse(date).toLocaleDateString(undefined,{month:'long',year:'numeric'});
   const step=(n:number)=>go(()=>setDate(range==='week'?shift(date,7*n):addMonths(date,n)));
+  useEffect(()=>{
+    if(!hasActiveCell)return;
+    const targetPage=Math.floor(active.r/PAGE_SIZE)+1;
+    if(targetPage!==currentPage){setPage(targetPage);return}
+    const cell=table.current?.querySelector<HTMLButtonElement>(`[data-r="${active.r}"][data-c="${active.c}"]`);
+    if(cell&&document.activeElement!==cell)cell.focus();
+  },[active,currentPage,hasActiveCell]);
 
   return <>
     <section className="panel"><div className="page-heading"><h3>{title}</h3>
       <div className="actions"><ModeToggle mode="grid" onChange={m=>go(()=>setMode(m))}/>
         <div className="tabs" role="group" aria-label="Attendance calendar range">{(['week','month'] as const).map(v=><button key={v} className={range===v?'active':''} aria-pressed={range===v} onClick={()=>go(()=>setRange(v))}>{v==='week'?'Week':'Month'}</button>)}</div>
         <button onClick={()=>step(-1)}>← Previous {range}</button><button onClick={()=>go(()=>setDate(today()))}>Today</button><button onClick={()=>step(1)}>Next {range}</button></div></div>
-      {offering.sections.length>1&&<label>Section<select aria-label="Filter attendance by section" value={sectionId} onChange={e=>changeSection(e.target.value)}>
-        {offering.sections.map(s=><option key={s.id} value={s.id}>{s.name} ({s.enrolled})</option>)}
-      </select></label>}
-      <details className="more"><summary>Class days</summary>
-        <fieldset><legend>Class days (marked in the grid; every day is always shown)</legend><div className="chips">{DAY.map((n,i)=><label className="inline" key={n}><input type="checkbox" checked={(classDays&(1<<i))!==0} onChange={e=>setClassDays(e.target.checked?classDays|(1<<i):classDays&~(1<<i))}/> {n}</label>)}</div>
-          <button disabled={classDays===(offering.meeting_days??0)} onClick={saveDays}>Save class days</button></fieldset>
-        {note&&<p role="status">{note}</p>}</details>
-      <AttendanceExport offering={offering} sectionId={sectionId} from={first} to={last} label={range==='week'?'This week':'This month'}/>
+      <div className="attendance-tools" aria-label="Attendance settings">
+        <div className="attendance-tools-row"><details className="more"><summary>Class days</summary>
+          <fieldset><legend>Class days (marked in the grid; every day is always shown)</legend><div className="chips">{DAY.map((n,i)=><label className="inline" key={n}><input type="checkbox" checked={(classDays&(1<<i))!==0} onChange={e=>setClassDays(e.target.checked?classDays|(1<<i):classDays&~(1<<i))}/> {n}</label>)}</div>
+            <button disabled={classDays===(offering.meeting_days??0)} onClick={saveDays}>Save class days</button></fieldset>
+          {note&&<p role="status">{note}</p>}</details></div>
+        <div className="attendance-tools-row"><AttendanceExport offering={offering} sectionId={sectionId} from={first} to={last} label={range==='week'?'This week':'This month'}/></div>
+      </div>
       <p role="status" className="muted">{closed?'This semester is read-only until it is active.':status==='saved'?'All changes saved.':status==='saving'?'Saving…':status==='failed'?`${unsaved} change${unsaved===1?'':'s'} not saved. Use Retry below.`:'Saving in a moment…'}</p>
       {Object.entries(errors).map(([d,m])=><p key={d} role="alert" className="error">{pretty(d)}: {m} <button onClick={()=>void flush(d)}>Retry</button></p>)}
     </section>
     {query.isPending?<p>Loading…</p>:query.error?<p role="alert">{query.error.message}</p>:roster.length===0?<section className="panel"><p className="muted">No students are enrolled through this section.</p></section>:
-      <section className="panel"><div className="table-wrap" role="region" aria-label="Attendance grid, scrolls sideways" tabIndex={0}>
-        <table className="att-grid" ref={table}><caption className="sr-only">Attendance: students down, dates across. Use the arrow keys to move between cells, then P, L, A or E to mark and Delete to clear. Enter or Space changes the status. The Unmark selected attendance button clears the selected cell.</caption>
+      <section className="panel">
+        <p className="muted">P present · L late · A absent · E excused · · not marked. Click a cell to cycle, or focus it and type P, L, A, E (Delete clears). Each change is saved by itself.</p>
+        <div className="attendance-grid-actions">
+          <p className="muted" role="status">{activeDate?`Selected date: ${pretty(activeDate)}${roster[active.r]?` · ${roster[active.r].display_name}`:''}`:'Select an attendance cell to choose a date for attendance actions.'}</p>
+          <button type="button" className="icon-button" aria-label="Unmark selected attendance" title="Unmark selected attendance"
+            disabled={closed||!activeDate||!roster[active.r]||!valueOf(activeDate,roster[active.r].student_id)}
+            onClick={()=>{const student=roster[active.r];if(student&&activeDate)setMarks(activeDate,{[student.student_id]:null})}}>×</button>
+          <button type="button" title={activeDate?`Clear every attendance mark for ${pretty(activeDate)}`:'Select a date first'}
+            aria-label={activeDate?`Unmark all attendance for ${pretty(activeDate)}`:'Unmark all attendance for the selected date'}
+            disabled={closed||!activeDate||!roster.some(r=>activeDate&&valueOf(activeDate,r.student_id)!==null)}
+            onClick={async()=>{
+              if(!activeDate)return;
+              const marked=roster.filter(r=>valueOf(activeDate,r.student_id)!==null);
+              if(marked.length===0)return;
+              if(!await ask({title:`Unmark all attendance for ${pretty(activeDate)}?`,message:`This clears attendance for ${marked.length} student${marked.length===1?'':'s'} on this date, across every page.`,yes:'Unmark all',danger:true}))return;
+              setMarks(activeDate,Object.fromEntries(marked.map(r=>[r.student_id,null])));
+            }}>Unmark all</button>
+        </div>
+        <Pager page={currentPage} pageSize={PAGE_SIZE} total={roster.length} onPage={p=>{setHasActiveCell(false);setPage(p)}}/>
+        {offering.sections.length>1&&<label>Section<select aria-label="Filter attendance by section" value={sectionId} onChange={e=>changeSection(e.target.value)}>
+          {offering.sections.map(s=><option key={s.id} value={s.id}>{s.name} ({s.enrolled})</option>)}
+        </select></label>}
+        <div className="table-wrap" role="region" aria-label="Attendance grid, scrolls sideways" tabIndex={0}>
+        <table className="att-grid" ref={table}><caption className="sr-only">Attendance: students down, dates across. Use the arrow keys to move between cells, then P, L, A or E to mark and Delete to clear. Enter or Space changes the status. Use the unmark buttons to clear a selected mark or every mark for its date.</caption>
           <thead><tr><th scope="col" className="sticky">Student</th>{dates.map(d=>{const rec=byDate.get(d);const marked=roster.filter(r=>valueOf(d,r.student_id)!==null).length;
             const full=range==='week'||isClass(d)||!!rec;      // a month is wide: only class days and recorded days carry the controls
             return <th scope="col" key={d} className={meeting>0&&!isClass(d)&&!rec?'att-off':undefined}><div className="att-head"><strong>{DAY[dayOf(d)]} {parse(d).getDate()}</strong>
@@ -221,16 +264,12 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
               {full&&(rec?<span className="muted">{PERIOD_LABEL[rec.period]}</span>
                 :<select aria-label={`Grading period for ${pretty(d)}`} value={periodOf(d)} disabled={closed} onChange={e=>setPeriods(p=>({...p,[d]:e.target.value as Period}))}><option value="midterm">Midterm</option><option value="finals">Finals</option></select>)}
               {(marked>0||full)&&<span className="muted">{marked}/{roster.length} marked</span>}
-              {full&&<button disabled={closed||marked===roster.length} onClick={()=>markRest(d)}>Mark rest present</button>}</div></th>})}</tr></thead>
-          <tbody>{roster.map((r,ri)=><tr key={r.student_id}><th scope="row" className="sticky">{r.display_name}<br/><span className="muted">{r.student_number}</span></th>
+              {full&&<button type="button" className="icon-button" aria-label={`Mark unmarked students present for ${pretty(d)}`} title={`Mark rest present for ${pretty(d)}`} disabled={closed||marked===roster.length} onClick={()=>markRest(d)}>✓</button>}</div></th>})}</tr></thead>
+          <tbody>{pageRoster.map((r,ri)=>{const rowIndex=(currentPage-1)*PAGE_SIZE+ri;return <tr key={r.student_id}><th scope="row" className="sticky">{r.display_name}<br/><span className="muted">{r.student_number}</span></th>
             {dates.map((d,ci)=>{const v=valueOf(d,r.student_id);const failed=!!errors[d]&&edits[d]?.[r.student_id]!==undefined;
-              return <td key={d}><button type="button" className={`att-cell ${v??'none'}${failed?' err':''}`} data-r={ri} data-c={ci} tabIndex={active.r===ri&&active.c===ci?0:-1} disabled={closed}
+              return <td key={d}><button type="button" className={`att-cell ${v??'none'}${failed?' err':''}`} data-r={rowIndex} data-c={ci} tabIndex={active.r===rowIndex&&active.c===ci?0:-1} disabled={closed}
                 aria-label={`${r.display_name}, ${pretty(d)}: ${v?LABEL[v]:'not marked'}${failed?' (not saved)':''}`}
-                onFocus={()=>{setActive({r:ri,c:ci});setHasActiveCell(true)}} onClick={()=>cycle(d,r.student_id)} onKeyDown={e=>onKey(e,ri,ci,d,r.student_id)}>{v?SHORT[v]:'·'}</button></td>})}</tr>)}</tbody></table></div>
-        <p className="muted">P present · L late · A absent · E excused · · not marked. Click a cell to cycle, or focus it and type P, L, A, E (Delete clears). The Unmark selected attendance button clears the selected cell. Each change is saved by itself.</p></section>}
-    {roster.length>0&&dates.length>0&&(()=>{const student=hasActiveCell?roster[active.r]:undefined;const activeDate=hasActiveCell?dates[active.c]:undefined;const mark=student&&activeDate?valueOf(activeDate,student.student_id):null;
-      return <div className="actions"><p className="muted" role="status">{student&&activeDate?`Selected: ${student.display_name}, ${pretty(activeDate)} — ${mark?LABEL[mark]:'not marked'}`:'Select an attendance cell to unmark it.'}</p>
-        <button type="button" disabled={closed||!mark} onClick={()=>{if(student&&activeDate)setMarks(activeDate,{[student.student_id]:null})}}>Unmark selected attendance</button></div>})()}
+                onFocus={()=>{setActive({r:rowIndex,c:ci});setHasActiveCell(true)}} onClick={()=>cycle(d,r.student_id)} onKeyDown={e=>onKey(e,rowIndex,ci,d,r.student_id)}>{v?SHORT[v]:'·'}</button></td>})}</tr>})}</tbody></table></div></section>}
   </>;
 }
 

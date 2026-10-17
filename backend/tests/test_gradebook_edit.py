@@ -1,6 +1,6 @@
 """Edit-scores mode: many gradebook cells in one request, all or nothing."""
 from helpers import Api, make_account
-from test_assessments import make_manual, make_quiz, start, submit
+from test_assessments import make_manual, make_quiz
 
 
 def url(c, path=""):
@@ -69,14 +69,17 @@ def test_invalid_cells_are_named_and_save_nothing(graded):
     assert unknown.status_code == 409 and "not found" in next(iter(unknown.json()["error"]["field_errors"].values())).lower()
 
 
-def test_an_online_quiz_with_a_submitted_attempt_cannot_be_overwritten_by_hand(graded):
+def test_online_quizzes_cannot_be_scored_manually(graded):
     c = graded
     quiz = make_quiz(c, title="Quiz 1", category_key="quiz", period="midterm")
-    attempt = start(c["st1"], c, quiz["aid"]).json()
-    assert submit(c["st1"], c, attempt["id"], quiz["correct"]).status_code == 200
     s1 = c["students"][0]
-    refused = c["fac"].put(url(c, "/gradebook/scores"), {"cells": [cell(c, quiz["aid"], s1, "1", None)]})
-    assert refused.status_code == 409 and "correct an answer" in next(iter(refused.json()["error"]["field_errors"].values()))
+    refused = c["fac"].put(url(c, "/gradebook/scores"), {
+        "cells": [cell(c, quiz["aid"], s1, "1", None)]})
+    assert refused.status_code == 409
+    assert "auto-scored" in next(iter(refused.json()["error"]["field_errors"].values()))
+    single = c["fac"].put(url(c, f"/assessments/{quiz['aid']}/scores/{s1.id}"), {
+        "score": "1", "feedback": "", "expected_revision": None})
+    assert single.status_code == 409 and single.json()["error"]["code"] == "auto_scored"
 
 
 def test_only_the_teacher_can_batch_edit_and_limits_apply(db, graded):

@@ -42,11 +42,6 @@ export function ScoresPage(){
     catch(e){setMessage(errorText(e))}
   }
   async function editSettings(){
-    if(kind==='online_quiz'&&!closed&&!await ask({
-      title:'Edit this online quiz?',
-      message:'Editing is an explicit request to change this quiz. Review the draft carefully before updating what students see.',
-      yes:'Open quiz editor',
-    }))return;
     navigate(`/faculty/offerings/${offering.id}/assessments/${assessmentId}/edit`,{state:here});
   }
   return <>
@@ -63,10 +58,20 @@ export function ScoresPage(){
     </select></label><p className="muted">The section filter only changes the lists below; assessment actions still apply to all applicable students.</p></>}
     {kind==='online_quiz'&&<Attempts base={base} attempts={attempts} sections={offering.sections} sectionId={sectionId} closed={closed} onChanged={refresh} setMessage={setMessage}/>}
     {rows.isPending||(kind==='online_quiz'&&attempts.isPending)?<p>Loading students…</p>:rows.error?<p role="alert">{rows.error.message}</p>:kind==='online_quiz'&&attempts.error?<p role="alert">{attempts.error.message}</p>:
-      <ScoreTable key={assessmentId} rows={kind==='online_quiz'?visibleRows.filter(r=>!visibleAttempts.some(x=>x.student_id===r.student_id)):visibleRows}
-        sections={offering.sections} kind={kind} base={base} max={rev.max_points} closed={closed} onSaved={refresh} setMessage={setMessage} current={current}
-        heading={kind==='online_quiz'?'Students with no attempts':'Scores'}/>}
+      kind==='online_quiz'?<NoAttemptStudents rows={visibleRows.filter(r=>!visibleAttempts.some(x=>x.student_id===r.student_id))} sections={offering.sections}/>
+        :<ScoreTable key={assessmentId} rows={visibleRows} sections={offering.sections} kind={kind} base={base} max={rev.max_points} closed={closed} onSaved={refresh} setMessage={setMessage} current={current} heading="Scores"/>}
   </>;
+}
+
+function NoAttemptStudents({rows,sections}:{rows:ScoreRow[];sections:OfferingSummary['sections']}){
+  return <section className="panel"><h3>Students with no attempts</h3>
+    <p className="muted">Online quizzes are auto-scored from submitted attempts. A student with no attempt cannot be assigned a manual score.</p>
+    {rows.length===0?<p className="muted">All students in this section have attempted the quiz.</p>:
+      <div className="table-wrap" role="region" aria-label="Students with no quiz attempt" tabIndex={0}><table><thead><tr><th>Student</th><th>Section</th><th>Status</th></tr></thead>
+        <tbody>{rows.map(row=><tr key={row.student_id}><th scope="row">{row.student}<br/><span className="muted">{row.student_number}</span></th>
+          <td>{sections.find(section=>section.id===row.section_id)?.name??'—'}</td>
+          <td><span className="muted" title="No submission exists, so there is no automatically calculated quiz score.">Not attempted</span></td></tr>)}</tbody></table></div>}
+  </section>;
 }
 
 function ScoreTable({rows,sections,kind,base,max,closed,onSaved,setMessage,current,heading}:{rows:ScoreRow[];sections:OfferingSummary['sections'];kind:Assessment['kind'];base:string;max:number;closed:boolean;onSaved:()=>Promise<void>;setMessage:(m:string)=>void;current:()=>ScoreRow[];heading:string}){
@@ -80,7 +85,6 @@ function ScoreTable({rows,sections,kind,base,max,closed,onSaved,setMessage,curre
   const mark=(id:string,on:boolean)=>setSaved(prev=>{const n=new Set(prev);if(on)n.add(id);else n.delete(id);return n});
   if(rows.length===0)return <section className="panel"><h3>{heading}</h3><p className="muted">No students to show.</p></section>;
   return <section className="panel"><h3>{heading}</h3>
-    {kind==='online_quiz'&&<p className="muted">A student who never attempted this quiz has no score yet. Record one (zero is a real score) so their grade can be calculated.</p>}
     <label className="inline"><input id="ungraded-only" type="checkbox" checked={ungradedOnly} onChange={e=>setUngradedOnly(e.target.checked)}/> Show ungraded only</label>
     <p className="muted">{rows.filter(ungraded).length} of {rows.length} still ungraded. Press Enter in a score box to save and move to the next student.</p>
     {shown.length===0&&<p className="muted">Everyone listed has a score.</p>}
@@ -107,7 +111,6 @@ function ScoreRowEditor({row,section,kind,base,max,closed,onSaved,setMessage,onP
   const sub=row.latest;
   return <tr role="row">
     <td role="cell" data-label="Student">{row.student}<br/><span className="muted">{row.student_number}</span></td>
-    <td role="cell" data-label="Section">{section}</td>
     <td role="cell" data-label="Section">{section}</td>
     {kind==='activity'&&<td role="cell" data-label="Submission">{sub?<>
       <a className="touch" href={`/api/files/${sub.file.id}/download`}>{sub.file.name}</a><br/>
