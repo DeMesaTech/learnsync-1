@@ -163,7 +163,17 @@ try{
   check('a subject the faculty member already has is marked assigned and cannot be added',
     await d.locator('.bulk-assignment-subject-list li').filter({hasText:'LST 101'}).getByRole('button',{name:'Already assigned'}).isDisabled());
   check('axe finds no violations on the bulk dialog',(await axe(p)).length===0);
-  await d.getByRole('button',{name:'Close dialog'}).click();
+  await d.getByRole('button',{name:/Close subject list/}).click();
+  await d.getByRole('button',{name:'Cancel'}).click();
+  await p.getByRole('button',{name:'Assign subjects'}).click();await d.getByLabel('College / Program').selectOption(college.id);await d.getByLabel('Faculty member').selectOption({label:'Demo faculty 2'});
+  await d.getByRole('button',{name:/Add another subject/}).click();await d.getByLabel('Filter subjects').fill('LST 101');
+  await d.locator('.bulk-assignment-subject-list li').filter({hasText:'LST 101'}).getByRole('button',{name:'Add',exact:true}).click();
+  const partialAssignment=d.locator('.bulk-assignment-card').filter({hasText:'LST 101'});
+  check('a section already assigned to another teacher is disabled',
+    await partialAssignment.getByRole('checkbox',{name:/BSE 1A already assigned to Demo faculty 1/}).isDisabled()&&
+    await partialAssignment.getByRole('checkbox',{name:'BSE 1B'}).isEnabled());
+  await d.getByRole('button',{name:/Close subject list/}).click();
+  await d.getByRole('button',{name:'Cancel'}).click();
   await p.getByRole('button',{name:'Edit assignment for LST 101'}).first().click();
   const editAssignment=p.getByRole('dialog');
   check('editing an offering opens the subject-fixed assignment dialog',
@@ -186,6 +196,11 @@ try{
   const updatedSections=(await call(p,'GET',`/terms/${term.id}/offerings`)).data.find(o=>o.subject.code==='LST 101').sections.map(s=>s.name);
   check('adding a section preserves existing assignment sections and adds the selected section',
     updatedSections.includes('BSE 1A')&&updatedSections.includes('BSE 1B'));
+  await p.getByRole('button',{name:'Assign subjects'}).click();await d.getByLabel('College / Program').selectOption(college.id);await d.getByLabel('Faculty member').selectOption({label:'Demo faculty 2'});
+  await d.getByRole('button',{name:/Add another subject/}).click();await d.getByLabel('Filter subjects').fill('LST 101');
+  check('a subject with every program section assigned is disabled in the subject chooser',
+    await d.locator('.bulk-assignment-subject-list li').filter({hasText:'LST 101'}).getByRole('button',{name:'All sections assigned'}).isDisabled());
+  await d.getByRole('button',{name:/Close subject list/}).click();await d.getByRole('button',{name:'Cancel'}).click();
 }catch(e){console.log('SCRIPT ERROR:',e.message);results.push(false)}
 await browser.close();
 console.log(`${results.filter(Boolean).length}/${results.length} checks passed`);

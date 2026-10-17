@@ -48,6 +48,19 @@ class AccountStatus(BaseModel):
 class FacultyCollegeUpdate(BaseModel):
     college_id: UUID | None
 
+class FacultyProfileUpdate(BaseModel):
+    display_name: str = Field(min_length=1, max_length=150)
+    email: EmailStr = Field(max_length=254)
+    college_id: UUID | None
+
+    @model_validator(mode="after")
+    def clean_values(self):
+        self.display_name = self.display_name.strip()
+        self.email = str(self.email).strip().lower()
+        if not self.display_name:
+            raise ValueError("Name is required")
+        return self
+
 class BulkSendLinks(BaseModel):
     account_ids: list[UUID] = Field(min_length=1, max_length=25)
 

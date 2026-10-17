@@ -4916,6 +4916,11 @@ dialog.bulk-assignment-dialog {
   color: var(--success)
 }
 
+.bulk-assignment-chip:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: .72
+}
+
 .bulk-assignment-chip input {
   width: 14px;
   height: 14px;

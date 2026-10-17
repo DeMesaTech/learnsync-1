@@ -8,6 +8,8 @@ Opaque hashed server sessions, HttpOnly cookies and session CSRF tokens; Argon2 
 
 Teacher accounts carry an optional `account.college_id` foreign key to `college.id`. Admin account listing/count queries accept `college_id`; teacher invitations and reviewed imports store the selected active college. Admins can update or clear a faculty account's college through `PATCH /api/accounts/{id}/college`; this operation is audited. College deletion is refused while a teacher is assigned. Faculty assignment filters use this account association rather than deriving faculty college from their current offering sections.
 
+Admins edit teacher name, email, and college/program through `PATCH /api/accounts/{id}/profile`. Changing email revokes the teacher's sessions, invalidates outstanding links, and requires a new invitation verification. Taking over an existing offering updates its faculty in place; enrollment and academic records remain attached to the same offering, and `offering.faculty_transferred` audits the previous and replacement teacher. A replacement must be active, and duplicate subject assignments for the same teacher and term are refused.
+
 Migration `4e6a81c0b932` backfills every existing faculty account to the administrator-selected default college `d81b2a06-85a9-44d0-9f50-41d7fbc76f7f`.
 
 Files remain outside webroot and are delivered by an authorized API. Drafts use compare-and-swap revisions; published documents and grade snapshots are immutable.

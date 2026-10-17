@@ -447,6 +447,27 @@ def check_sections(db, offering_term_id, subject, section_ids, override_reason=N
     return overridden
 
 
+def check_section_availability(db, subject_id, section_ids, exclude_offering_id=None):
+    if not section_ids:
+        return
+    query = (
+        select(Section.name, Account.display_name, Offering.status)
+        .join(OfferingSection, OfferingSection.section_id == Section.id)
+        .join(Offering, Offering.id == OfferingSection.offering_id)
+        .join(Account, Account.id == Offering.faculty_id)
+        .where(OfferingSection.subject_id == subject_id,
+               OfferingSection.section_id.in_(section_ids))
+    )
+    if exclude_offering_id is not None:
+        query = query.where(Offering.id != exclude_offering_id)
+    assignment = db.execute(query.order_by(Section.name).limit(1)).first()
+    if assignment:
+        section_name, faculty_name, status = assignment
+        state = "archived" if status == "archived" else "active"
+        fail(409, "section_already_assigned",
+             f"{section_name} already has an {state} assignment with {faculty_name}.")
+
+
 def add_offering(db, actor, term, faculty_id, subject_id, section_ids, override_reason):
     """Create one offering inside the caller's transaction (the caller commits)."""
     subject = get_or_404(db, Subject, subject_id, "Subject")
@@ -454,6 +475,7 @@ def add_offering(db, actor, term, faculty_id, subject_id, section_ids, override_
         fail(422, "subject_archived", "Archived subjects cannot be offered.")
     section_ids = list(dict.fromkeys(section_ids))
     overridden = check_sections(db, term.id, subject, section_ids, override_reason)
+    check_section_availability(db, subject.id, section_ids)
     if db.scalar(select(Offering.id).where(Offering.subject_id == subject.id,
                                            Offering.term_id == term.id,
                                            Offering.faculty_id == faculty_id)):
@@ -512,7 +534,15 @@ def update_offering(db, actor, offering_id, data):
     open_term(db, offering.term_id)
     details = {}
     if data.faculty_id and data.faculty_id != offering.faculty_id:
-        account_with_role(db, data.faculty_id, "faculty")
+        replacement = account_with_role(db, data.faculty_id, "faculty")
+        if replacement.status != "active":
+            fail(422, "faculty_not_active", "Only an active teacher can take over an assignment.")
+        if db.scalar(select(Offering.id).where(
+                Offering.subject_id == offering.subject_id,
+                Offering.term_id == offering.term_id,
+                Offering.faculty_id == data.faculty_id,
+                Offering.id != offering.id)):
+            fail(409, "offering_exists", "This teacher already has this subject in this term.")
         details["previous_faculty_id"] = str(offering.faculty_id)
         details["faculty_id"] = str(data.faculty_id)
         offering.faculty_id = data.faculty_id
@@ -520,6 +550,7 @@ def update_offering(db, actor, offering_id, data):
         section_ids = list(dict.fromkeys(data.section_ids))
         overridden = check_sections(db, offering.term_id, db.get(Subject, offering.subject_id),
                                     section_ids, data.placement_override_reason)
+        check_section_availability(db, offering.subject_id, section_ids, offering.id)
         if overridden:
             details["placement_override"] = {"sections": overridden,
                                              "reason": data.placement_override_reason}
@@ -530,7 +561,8 @@ def update_offering(db, actor, offering_id, data):
         details["section_ids"] = [str(s) for s in section_ids]
     db.flush()
     recompute_offering(db, offering)
-    audit(db, actor, "offering.updated", "offering", offering.id, details)
+    action = "offering.faculty_transferred" if "faculty_id" in details else "offering.updated"
+    audit(db, actor, action, "offering", offering.id, details)
     db.commit()
     return offering
 

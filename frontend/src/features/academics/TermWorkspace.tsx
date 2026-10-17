@@ -16,6 +16,7 @@ interface SectionRosterRow{student_id:string;display_name:string;email:string;st
 interface SectionRosterPage{items:SectionRosterRow[];total:number;page:number;page_size:number;invitation_count:number}
 interface BulkInvitationResult{sent:number;failed:number;results:{id:string;email:string;status:'sent'|'failed';message:string}[]}
 interface StudentDraft{display_name:string;email:string;student_number:string}
+interface TeacherDraft{display_name:string;email:string;college_id:string}
 
 export function TermWorkspace({initialTab='sections',standalone=false}:{initialTab?:'sections'|'offerings';standalone?:boolean}={}){
   const {termId:routeTermId}=useParams();
@@ -41,8 +42,12 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
   const [teacherMessage,setTeacherMessage]=useState('');
   const [sendingTeacherId,setSendingTeacherId]=useState('');
   const [updatingTeacherId,setUpdatingTeacherId]=useState('');
+  const [editingTeacherId,setEditingTeacherId]=useState<string|null>(null);
+  const [teacherDraft,setTeacherDraft]=useState<TeacherDraft|null>(null);
+  const [savingTeacherId,setSavingTeacherId]=useState<string|null>(null);
   const [addingSubjectFacultyId,setAddingSubjectFacultyId]=useState('');
   const [editing,setEditing]=useState<OfferingSummary|null>(null);
+  const [transferringOffering,setTransferringOffering]=useState<OfferingSummary|null>(null);
   const [viewingRoster,setViewingRoster]=useState<OfferingSummary|null>(null);
   const [addingSection,setAddingSection]=useState<OfferingSummary|null>(null);
   const offeringsTableRef=useRef<HTMLDivElement>(null);
@@ -81,6 +86,11 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
   const facultyOptions=useQuery({
     queryKey:['faculty-assignment-options',facultyCollegeFilter],
     queryFn:()=>api<Account[]>(`/accounts?role=faculty&page_size=100${facultyCollegeFilter?`&college_id=${facultyCollegeFilter}`:''}`),
+    enabled:activeTab==='offerings',
+  });
+  const facultyTakeoverOptions=useQuery({
+    queryKey:['faculty-takeover-options'],
+    queryFn:()=>api<Account[]>('/accounts?role=faculty&status=active&page_size=100'),
     enabled:activeTab==='offerings',
   });
   const highestProgramYear=Math.max(0,...(subjects.data??[]).map(subject=>subject.year_level??0));
@@ -232,6 +242,56 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
     }catch(err){setTeacherMessage(errorText(err))}
     finally{setUpdatingTeacherId('')}
   }
+  async function removeTeacherCollege(account:Account){
+    if(!account.college_id||!await ask({
+      title:`Remove ${account.display_name}'s college/program assignment?`,
+      message:"This removes the teacher's college/program association. Existing subject assignments and academic history are preserved.",
+      yes:'Remove assignment',
+      danger:true,
+    }))return;
+    await changeTeacherCollege(account,null);
+  }
+  async function changeTeacherStatus(account:Account){
+    const status=account.status==='active'?'inactive':'active';
+    const action=status==='inactive'?'Deactivate':'Activate';
+    if(!await ask({
+      title:`${action} ${account.display_name}?`,
+      message:status==='inactive'
+        ?'The teacher will lose account access. Their teaching and audit history will be preserved.'
+        :'The teacher will regain account access.',
+      yes:action,
+      danger:status==='inactive',
+    }))return;
+    setUpdatingTeacherId(account.id);
+    setTeacherMessage('');
+    try{
+      await send('PATCH',`/accounts/${account.id}/status`,{status});
+      queryClient.invalidateQueries({queryKey:['faculty-management-accounts']});
+      queryClient.invalidateQueries({queryKey:['faculty-assignment-options']});
+      toast(`${account.display_name}'s account ${status==='inactive'?'deactivated':'activated'}.`);
+    }catch(err){setTeacherMessage(errorText(err))}
+    finally{setUpdatingTeacherId('')}
+  }
+  async function saveTeacher(account:Account){
+    if(!teacherDraft)return;
+    const emailChanged=account.email.trim().toLowerCase()!==teacherDraft.email.trim().toLowerCase();
+    setSavingTeacherId(account.id);setTeacherMessage('');
+    try{
+      await send('PATCH',`/accounts/${account.id}/profile`,{
+        display_name:teacherDraft.display_name,
+        email:teacherDraft.email,
+        college_id:teacherDraft.college_id||null,
+      });
+      setEditingTeacherId(null);setTeacherDraft(null);
+      queryClient.invalidateQueries({queryKey:['faculty-management-accounts']});
+      queryClient.invalidateQueries({queryKey:['faculty-assignment-options']});
+      queryClient.invalidateQueries({queryKey:['faculty-takeover-options']});
+      toast(emailChanged
+        ?'Teacher updated; invitation sent to the new email address.'
+        :'Teacher information updated.');
+    }catch(err){setTeacherMessage(errorText(err))}
+    finally{setSavingTeacherId(null)}
+  }
   async function withdrawStudent(student:SectionRosterRow,reason:string){
     if(!selectedSection)return;
     await send('DELETE',`/sections/${selectedSection.id}/members/${student.student_id}?reason=${encodeURIComponent(reason.trim())}`);
@@ -272,6 +332,7 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
   const visibleTeacherGroups=teacherGroups?.filter(group=>
     (!teacherFilter||group.id===teacherFilter)&&facultyAccountById.has(group.id));
   const visibleFacultyAccounts=facultyAccounts.data??[];
+  const collegeById=new Map((colleges.data??[]).map(college=>[college.id,college]));
   const assignmentTeachers=facultyOptions.data??[];
   const totalSections=sections.data?.length ?? 0;
   const totalStudents=sections.data?.reduce((sum, section) => sum + section.member_count, 0) ?? 0;
@@ -455,25 +516,54 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
           {facultyAccounts.isPending?<p>Loading teachers…</p>:facultyAccounts.error?<p role="alert">{facultyAccounts.error.message}</p>:
             visibleFacultyAccounts.length===0?<p className="muted">No teachers match these filters.</p>:
             <div className="table-wrap" tabIndex={0} role="region" aria-label="Teacher accounts">
-              <table className="teacher-account-table"><thead><tr><th scope="col">Teacher</th><th scope="col">Email</th><th scope="col">College / program</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
+              <table className="teacher-account-table"><thead><tr><th scope="col">Teacher</th><th scope="col">Email</th><th scope="col">College / program</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
                 <tbody>{visibleFacultyAccounts.map(account=><tr key={account.id}>
-                  <th scope="row">{account.display_name}</th><td>{account.email}</td>
-                  <td><label className="sr-only" htmlFor={`teacher-college-${account.id}`}>College / program for {account.display_name}</label>
-                    <select id={`teacher-college-${account.id}`} aria-label={`College / program for ${account.display_name}`}
-                      value={account.college_id??''} disabled={updatingTeacherId===account.id}
-                      onChange={event=>void changeTeacherCollege(account,event.target.value||null)}>
-                      <option value="">Not assigned</option>
-                      {colleges.data?.filter(college=>college.status==='active').map(college=><option key={college.id} value={college.id}>{college.name}</option>)}
-                      {account.college_id&&colleges.data?.some(college=>college.id===account.college_id&&college.status==='inactive')&&
-                        <option value={account.college_id} disabled>{colleges.data.find(college=>college.id===account.college_id)?.name} (inactive)</option>}
-                    </select>
-                  </td>
+                  {editingTeacherId===account.id&&teacherDraft
+                    ?<><th scope="row"><input form={`teacher-edit-${account.id}`} aria-label={`Name for ${account.display_name}`} maxLength={150} required value={teacherDraft.display_name}
+                        onChange={event=>setTeacherDraft(current=>current?{...current,display_name:event.target.value}:current)}/></th>
+                      <td><input form={`teacher-edit-${account.id}`} type="email" aria-label={`Email for ${account.display_name}`} maxLength={254} required value={teacherDraft.email}
+                        onChange={event=>setTeacherDraft(current=>current?{...current,email:event.target.value}:current)}/></td>
+                      <td><label className="sr-only" htmlFor={`teacher-college-${account.id}`}>College / program for {account.display_name}</label>
+                        <select form={`teacher-edit-${account.id}`} id={`teacher-college-${account.id}`} value={teacherDraft.college_id}
+                          onChange={event=>setTeacherDraft(current=>current?{...current,college_id:event.target.value}:current)}>
+                          <option value="">Not assigned</option>
+                          {colleges.data?.filter(college=>college.status==='active').map(college=><option key={college.id} value={college.id}>{college.name}</option>)}
+                          {account.college_id&&collegeById.get(account.college_id)?.status==='inactive'&&
+                            <option value={account.college_id} disabled>{collegeById.get(account.college_id)?.name} (inactive)</option>}
+                        </select>
+                      </td></>
+                    :<><th scope="row">{account.display_name}</th><td>{account.email}</td>
+                      <td>{account.college_id
+                    ?`${collegeById.get(account.college_id)?.name??'Unknown college / program'}${collegeById.get(account.college_id)?.status==='inactive'?' (inactive)':''}`
+                    :'Not assigned'}</td></>}
                   <td><span className="badge">{account.status}</span></td>
-                  <td><button type="button" className="icon-button" title={account.status==='inactive'?'Inactive accounts cannot receive links':account.status==='invited'?'Send invitation':'Send password-reset link'}
-                    aria-label={account.status==='inactive'?`No email link available for inactive teacher ${account.display_name}`:`${account.status==='invited'?'Send invitation':'Send password-reset link'} to ${account.display_name}`}
-                    disabled={sendingTeacherId===account.id||account.status==='inactive'} onClick={()=>void sendTeacherLink(account)}>
-                    <StudentManagementIcon name="mail"/>
-                  </button></td>
+                  <td><div className="actions">
+                    {editingTeacherId===account.id&&teacherDraft
+                      ?<><form id={`teacher-edit-${account.id}`} onSubmit={event=>{event.preventDefault();void saveTeacher(account)}}/>
+                        <button type="submit" form={`teacher-edit-${account.id}`} className="primary icon-button" title="Save" aria-label={`Save ${account.display_name}`}
+                          disabled={savingTeacherId===account.id}>{savingTeacherId===account.id?'…':<StudentManagementIcon name="save"/>}</button>
+                        <button type="button" className="icon-button" title="Cancel" aria-label={`Cancel editing ${account.display_name}`}
+                          disabled={savingTeacherId===account.id} onClick={()=>{setEditingTeacherId(null);setTeacherDraft(null)}}><StudentManagementIcon name="cancel"/></button></>
+                      :<><button type="button" className="icon-button" title="Edit teacher" aria-label={`Edit ${account.display_name}`}
+                          disabled={savingTeacherId!==null||updatingTeacherId===account.id||sendingTeacherId===account.id}
+                          onClick={()=>{setTeacherMessage('');setEditingTeacherId(account.id);setTeacherDraft({
+                            display_name:account.display_name,email:account.email,college_id:account.college_id??'',
+                          })}}><StudentManagementIcon name="edit"/></button>
+                        <button type="button" className="danger icon-button" title="Remove college / program assignment" aria-label={`Remove college / program assignment for ${account.display_name}`}
+                          disabled={updatingTeacherId===account.id||sendingTeacherId===account.id||!account.college_id} onClick={()=>void removeTeacherCollege(account)}>
+                          <StudentManagementIcon name="delete"/>
+                        </button>
+                        {account.status!=='invited'&&<button type="button" className="icon-button" title={account.status==='inactive'?'Activate account':'Deactivate account'}
+                          aria-label={`${account.status==='inactive'?'Activate':'Deactivate'} ${account.display_name}'s account`}
+                          disabled={updatingTeacherId===account.id||sendingTeacherId===account.id} onClick={()=>void changeTeacherStatus(account)}>
+                          <StudentManagementIcon name={account.status==='inactive'?'activate':'deactivate'}/>
+                        </button>}
+                        <button type="button" className="icon-button" title={account.status==='inactive'?'Inactive accounts cannot receive links':account.status==='invited'?'Send invitation':'Send password-reset link'}
+                          aria-label={account.status==='inactive'?`No email link available for inactive teacher ${account.display_name}`:`${account.status==='invited'?'Send invitation':'Send password-reset link'} to ${account.display_name}`}
+                          disabled={updatingTeacherId===account.id||sendingTeacherId===account.id||account.status==='inactive'} onClick={()=>void sendTeacherLink(account)}>
+                          <StudentManagementIcon name="mail"/>
+                        </button></>}
+                  </div></td>
                 </tr>)}</tbody>
               </table>
             </div>}
@@ -512,6 +602,12 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
                 <button type="button" className="icon-button" aria-label={`View roster for ${offering.subject.code}`} title="View roster" onClick={()=>setViewingRoster(offering)}>
                   <StudentManagementIcon name="roster"/>
                 </button>
+                <button type="button" className="icon-button" aria-label={`Take over ${offering.subject.code} assignment`} title="Take over assignment"
+                  disabled={closed||facultyTakeoverOptions.isPending||facultyTakeoverOptions.isError||
+                    !facultyTakeoverOptions.data?.some(teacher=>teacher.id!==offering.faculty.id)}
+                  onClick={()=>setTransferringOffering(offering)}>
+                  <StudentManagementIcon name="transfer"/>
+                </button>
                 {offering.status==='active'
                   ?<button type="button" className="icon-button" aria-label={`Edit assignment for ${offering.subject.code}`} title="Edit assignment" disabled={closed} onClick={()=>setEditing(offering)}>
                     <StudentManagementIcon name="edit"/>
@@ -534,6 +630,9 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
       onClose={()=>setAddingSubjectFacultyId('')} onDone={()=>{setAddingSubjectFacultyId('');refresh()}}/>}
     {addingSection&&<AddOfferingSectionsDialog offering={addingSection} termSequence={term.sequence} sections={sections.data??[]} subject={subjects.data?.find(subject=>subject.id===addingSection.subject.id)}
       onClose={()=>setAddingSection(null)} onDone={()=>{setAddingSection(null);refresh()}}/>}
+    {transferringOffering&&<TransferOfferingDialog offering={transferringOffering} teachers={facultyTakeoverOptions.data??[]}
+      onClose={()=>setTransferringOffering(null)}
+      onDone={teacherName=>{setTransferringOffering(null);refresh();toast(`${transferringOffering.subject.code} assignment taken over by ${teacherName}. Existing academic history was preserved.`)}}/>}
     {viewingRoster&&<Dialog title={`${viewingRoster.subject.code} roster`} onClose={()=>setViewingRoster(null)} className="offering-roster-dialog" confirmOnClose={false}>
       <OfferingRoster embedded offeringId={viewingRoster.id}/>
     </Dialog>}
@@ -557,7 +656,7 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
   </>;
 }
 
-function StudentManagementIcon({name}:{name:'mail'|'edit'|'save'|'cancel'|'withdraw'|'roster'|'delete'}){
+function StudentManagementIcon({name}:{name:'mail'|'edit'|'save'|'cancel'|'withdraw'|'roster'|'delete'|'activate'|'deactivate'|'transfer'}){
   return <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     {name==='mail'?<><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></>
@@ -565,6 +664,9 @@ function StudentManagementIcon({name}:{name:'mail'|'edit'|'save'|'cancel'|'withd
       :name==='save'?<path d="m5 12 4 4L19 6"/>
       :name==='cancel'?<path d="m6 6 12 12M18 6 6 18"/>
       :name==='withdraw'?<><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></>
+      :name==='activate'?<><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></>
+      :name==='deactivate'?<><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></>
+      :name==='transfer'?<path d="M7 7h13l-3-3m3 3-3 3M17 17H4l3 3m-3-3 3-3"/>
       :name==='roster'?<><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4" cy="6" r=".7" fill="currentColor"/><circle cx="4" cy="12" r=".7" fill="currentColor"/><circle cx="4" cy="18" r=".7" fill="currentColor"/></>
       :<><path d="M4 7h16M10 11v6M14 11v6"/><path d="m6 7 1 13h10l1-13M9 7V4h6v3"/></>}
   </svg>;
@@ -624,6 +726,47 @@ function TeacherInviteDialog({colleges,onClose,onDone}:{colleges:College[];onClo
       {error&&<p role="alert">{error}</p>}
       <div className="actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button>
         <button className="primary" disabled={busy||!collegeId}>{busy?'Sending…':'Send invitation'}</button></div>
+    </form>
+  </Dialog>;
+}
+
+function TransferOfferingDialog({offering,teachers,onClose,onDone}:{
+  offering:OfferingSummary;teachers:Account[];onClose:()=>void;onDone:(teacherName:string)=>void
+}){
+  const ask=useConfirm();
+  const [facultyId,setFacultyId]=useState('');
+  const [error,setError]=useState('');
+  const [busy,setBusy]=useState(false);
+  const choices=teachers.filter(teacher=>teacher.id!==offering.faculty.id);
+  const selected=choices.find(teacher=>teacher.id===facultyId);
+  async function submit(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    if(!selected)return;
+    if(!await ask({
+      title:`Transfer ${offering.subject.code} to ${selected.display_name}?`,
+      message:'The existing assignment and its academic history will stay in place. Only the assigned teacher changes; the handover is recorded in the audit history.',
+      yes:'Transfer assignment',
+    }))return;
+    setBusy(true);setError('');
+    try{
+      await send('PATCH',`/offerings/${offering.id}`,{faculty_id:selected.id});
+      onDone(selected.display_name);
+    }catch(err){setError(errorText(err))}
+    finally{setBusy(false)}
+  }
+  return <Dialog title={`Take over ${offering.subject.code}`} onClose={()=>busy?false:onClose()}>
+    <form onSubmit={submit}>
+      <p className="muted">{offering.subject.title} · {offering.term}. Existing enrollments, assessment records, and academic history stay attached to this assignment.</p>
+      <label>New teacher
+        <select required value={facultyId} onChange={event=>setFacultyId(event.target.value)} disabled={busy}>
+          <option value="">Choose an active teacher</option>
+          {choices.map(teacher=><option key={teacher.id} value={teacher.id}>{teacher.display_name}</option>)}
+        </select>
+      </label>
+      {!choices.length&&<p className="muted">No other active teachers are available to take over this assignment.</p>}
+      {error&&<p role="alert">{error}</p>}
+      <div className="actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button>
+        <button className="primary" disabled={busy||!selected}>{busy?'Transferring…':'Transfer assignment'}</button></div>
     </form>
   </Dialog>;
 }
@@ -748,9 +891,9 @@ function OfferingDialog({sections,colleges,subject,offering,onClose,onAddAnother
     finally{setBusy(false)}
   }
   async function archive(){
-    if(!await ask({title:`Delete ${offering.subject.code} assignment?`,
+    if(!await ask({title:`Archive ${offering.subject.code} assignment?`,
       message:'This removes the assignment from active teaching, but preserves enrollment and academic history so it can be restored later.',
-      yes:'Delete assignment',danger:true}))return;
+      yes:'Archive assignment',danger:true}))return;
     setBusy(true);setError('');
     try{
       await send('DELETE',`/offerings/${offering.id}`);
@@ -791,7 +934,7 @@ function OfferingDialog({sections,colleges,subject,offering,onClose,onAddAnother
     {needsOverride&&<label>Reason for an off-semester placement (kept in the audit history)<textarea name="override_reason" minLength={3} maxLength={1000} required/></label>}
     <div className="actions">
       <button type="button" disabled={busy} onClick={onAddAnother}>Add another subject</button>
-      <button type="button" className="danger" disabled={busy} onClick={()=>void archive()}>Delete assignment</button>
+      <button type="button" className="danger" disabled={busy} onClick={()=>void archive()}>Archive assignment</button>
       <button type="button" disabled={busy} onClick={onClose}>Cancel</button>
       <button className="primary" disabled={busy||chosen.length===0}>{busy?'Saving…':'Save changes'}</button>
     </div>
@@ -880,6 +1023,9 @@ function BulkAssignDialog({termId,termSequence,termLabel,sections,existing,initi
   },[initialFacultyId,faculty.data]);
   const teacher=faculty.data?.find(f=>f.id===facultyId);
   const taken=new Set(existing.filter(o=>o.faculty.id===facultyId).map(o=>o.subject.id));
+  const assignedSections=new Map<string,OfferingSummary>();
+  existing.forEach(offering=>offering.sections.forEach(section=>
+    assignedSections.set(`${offering.subject.id}:${section.id}`,offering)));
   const matchesYear=(sub:Subject,sec:Section)=>sub.year_level===null||sec.year_level===sub.year_level;
   const fits=(sub:Subject,sec:Section)=>sub.year_level===null||sub.semester===null||(sec.year_level===sub.year_level&&termSequence===sub.semester);
   const needle=find.trim().toLowerCase();
@@ -893,14 +1039,23 @@ function BulkAssignDialog({termId,termSequence,termLabel,sections,existing,initi
   const availableSubjects=list.filter(subject=>pick[subject.id]===undefined);
   const matchingSubjects=availableSubjects.filter(subject=>yearLevelFilter==='all'||
     (yearLevelFilter==='unplaced'?subject.year_level===null:subject.year_level===Number(yearLevelFilter)));
+  const subjectSections=(subject:Subject)=>programSections.filter(section=>matchesYear(subject,section));
+  const allSectionsAssigned=(subject:Subject)=>{
+    const eligible=subjectSections(subject);
+    return eligible.length>0&&eligible.every(section=>assignedSections.has(`${subject.id}:${section.id}`));
+  };
   const chosen=Object.keys(pick);
   const subjectOf=(id:string)=>subjects.data?.find(x=>x.id===id);
   const offeringsCount=chosen.reduce((total,id)=>total+pick[id].length,0);
   const needsReason=(id:string)=>{const sub=subjectOf(id);return !!sub&&pick[id].some(sid=>{const sec=programSections.find(x=>x.id===sid);return !!sec&&!fits(sub,sec)})};
-  const ready=!!facultyId&&!!collegeId&&chosen.length>0&&chosen.every(id=>pick[id].length>0&&(!needsReason(id)||(reasons[id]??'').trim().length>=3));
+  const ready=!!facultyId&&!!collegeId&&chosen.length>0&&chosen.every(id=>
+    pick[id].length>0&&pick[id].every(sectionId=>!assignedSections.has(`${id}:${sectionId}`))&&
+    (!needsReason(id)||(reasons[id]??'').trim().length>=3));
   function toggleSubject(sub:Subject,on:boolean){
     if(!on){const rest={...pick};delete rest[sub.id];setPick(rest);return}
-    setPick({...pick,[sub.id]:programSections.filter(sec=>sub.year_level!==null&&matchesYear(sub,sec)&&fits(sub,sec)).map(sec=>sec.id)});
+    setPick({...pick,[sub.id]:programSections.filter(sec=>
+      sub.year_level!==null&&matchesYear(sub,sec)&&fits(sub,sec)&&
+      !assignedSections.has(`${sub.id}:${sec.id}`)).map(sec=>sec.id)});
   }
   async function submit(e:FormEvent){
     e.preventDefault();setBusy(true);setError('');
@@ -913,7 +1068,7 @@ function BulkAssignDialog({termId,termSequence,termLabel,sections,existing,initi
   const subjectCard=(id:string)=>{
     const sub=subjectOf(id);
     if(!sub)return null;
-    const availableSections=programSections.filter(sec=>matchesYear(sub,sec));
+    const availableSections=subjectSections(sub);
     return <article className="bulk-assignment-card" key={sub.id}>
       <div className="bulk-assignment-card-heading">
         <div><h3>{sub.code}</h3><p className="muted">{sub.title}</p></div>
@@ -923,9 +1078,12 @@ function BulkAssignDialog({termId,termSequence,termLabel,sections,existing,initi
       <div className="bulk-assignment-chips" role="group" aria-label={`Sections for ${sub.code}`}>
         {availableSections.map(section=>{
           const selected=pick[sub.id].includes(section.id);
-          return <label className={`bulk-assignment-chip${selected?' selected':''}`} key={section.id}>
-            <input type="checkbox" checked={selected} onChange={event=>setPick({...pick,[sub.id]:event.target.checked?[...pick[sub.id],section.id]:pick[sub.id].filter(id=>id!==section.id)})}/>
-            <span>{section.name}</span>
+          const assigned=assignedSections.get(`${sub.id}:${section.id}`);
+          return <label className={`bulk-assignment-chip${selected?' selected':''}${assigned?' unavailable':''}`} key={section.id}>
+            <input type="checkbox" checked={selected} disabled={!!assigned}
+              aria-label={assigned?`${section.name} already assigned to ${assigned.faculty.display_name}`:section.name}
+              onChange={event=>setPick({...pick,[sub.id]:event.target.checked?[...pick[sub.id],section.id]:pick[sub.id].filter(id=>id!==section.id)})}/>
+            <span>{section.name}{assigned&&<small>{assigned.status==='archived'?'Archived assignment':'Assigned'} to {assigned.faculty.display_name}</small>}</span>
           </label>;
         })}
       </div>
@@ -976,8 +1134,13 @@ function BulkAssignDialog({termId,termSequence,termLabel,sections,existing,initi
           matchingSubjects.length===0?<p className="muted">No available subjects match this year level.</p>:
           <ul className="bulk-assignment-subject-list" aria-label="Available subjects">{matchingSubjects.map(subject=>{
             const done=taken.has(subject.id);
+            const full=allSectionsAssigned(subject);
+            const disabled=done||full||!facultyId;
             return <li key={subject.id}><span><strong>{subject.code}</strong> {subject.title}<small>{subject.year_level?`Year ${subject.year_level}, semester ${subject.semester}`:'Not placed'}</small></span>
-              <button type="button" disabled={done||!facultyId} onClick={()=>toggleSubject(subject,true)}>{done?'Already assigned':'Add'}</button></li>;
+              <button type="button" aria-label={full&&!done?`${subject.code} unavailable: all sections are already assigned`:`${done?'Already assigned':'Add'} ${subject.code}`}
+                disabled={disabled} onClick={()=>toggleSubject(subject,true)}>
+                {done?'Already assigned':full?'All sections assigned':'Add'}
+              </button></li>;
           })}</ul>}
       </div>}
       <button type="button" className="bulk-assignment-add" disabled={!collegeId||!facultyId||subjects.isError} onClick={()=>setSubjectChooserOpen(open=>!open)}>

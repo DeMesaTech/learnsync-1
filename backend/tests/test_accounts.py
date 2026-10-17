@@ -133,6 +133,51 @@ def test_faculty_accounts_can_be_filtered_by_college(client, db, actors, headers
     assert cleared.status_code == 200 and cleared.json()["college_id"] is None
 
 
+def test_admin_can_update_faculty_profile_and_email_change_requires_verification(
+        client, db, actors, headers, sent):
+    from datetime import timedelta
+
+    from app.features.accounts.models import AuthSession, now
+
+    auth = sign_in(client, headers)
+    teacher = actors[1]
+    session = AuthSession(account_id=teacher.id, token_hash="a" * 64, csrf="c" * 64,
+                          expires_at=now() + timedelta(hours=1))
+    db.add(session)
+    db.commit()
+
+    updated = client.patch(f"/api/accounts/{teacher.id}/profile", headers=auth, json={
+        "display_name": "Updated Faculty",
+        "email": "updated-faculty@example.com",
+        "college_id": None,
+    })
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["display_name"] == "Updated Faculty"
+    assert updated.json()["email"] == "updated-faculty@example.com"
+    assert updated.json()["status"] == "invited"
+    assert sent[-1][0] == "updated-faculty@example.com" and sent[-1][2] == "invite"
+    db.refresh(session)
+    assert session.revoked_at is not None
+    event = db.scalar(select(AuditEvent).where(
+        AuditEvent.action == "account.faculty_profile_updated",
+        AuditEvent.entity_id == str(teacher.id)))
+    assert set(event.details["fields"]) == {"display_name", "email"}
+    assert event.details["email_changed_requires_verification"] is True
+
+
+def test_faculty_profile_rejects_duplicate_email_without_changes(client, actors, headers):
+    auth = sign_in(client, headers)
+    teacher = actors[1]
+    response = client.patch(f"/api/accounts/{teacher.id}/profile", headers=auth, json={
+        "display_name": "Changed name",
+        "email": "student@example.com",
+        "college_id": None,
+    })
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "email_exists"
+    assert teacher.display_name == "Faculty"
+
+
 def test_bulk_send_links_reports_successes_and_email_failures(client, db, actors, headers, monkeypatch):
     from fastapi import HTTPException
 

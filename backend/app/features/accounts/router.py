@@ -26,6 +26,7 @@ from .schemas import (
     EmailRequest,
     FacultyCollegeUpdate,
     FacultyImportUpdate,
+    FacultyProfileUpdate,
     Handover,
     Invite,
     Login,
@@ -158,6 +159,14 @@ def change_faculty_college(account_id: UUID, data: FacultyCollegeUpdate,
     if not account:
         fail(404, "not_found", "Account not found.")
     return commands.set_faculty_college(db, actor, account, data.college_id)
+
+@router.patch("/accounts/{account_id}/profile", response_model=AccountView)
+def update_faculty_profile(account_id: UUID, data: FacultyProfileUpdate,
+                           actor=Depends(admin), db: Session = Depends(get_db)):
+    account = db.get(Account, account_id)
+    if not account:
+        fail(404, "not_found", "Account not found.")
+    return commands.update_faculty_profile(db, actor, account, data)
 
 @router.post("/accounts/{account_id}/send-link")
 def resend(account_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):

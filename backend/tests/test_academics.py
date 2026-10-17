@@ -331,6 +331,47 @@ def test_offering_assignment_can_be_archived_and_restored_without_losing_history
     assert restored.json()["status"] == "active"
 
 
+def test_offering_can_be_transferred_without_moving_or_archiving_academic_history(db, world):
+    admin = world["admin"]
+    offering_id = world["offering"]["id"]
+    replacement = make_account(db, "replacement@example.com", "faculty")
+    student = world["students"][0]
+    assert add_member(world, world["sections"][0], student).status_code == 204
+
+    transferred = admin.patch(f"/api/offerings/{offering_id}", {
+        "faculty_id": str(replacement.id),
+    })
+    assert transferred.status_code == 200, transferred.text
+    assert transferred.json()["id"] == offering_id
+    assert transferred.json()["status"] == "active"
+    assert transferred.json()["faculty"]["id"] == str(replacement.id)
+    assert roster(admin, offering_id)[str(student.id)]["status"] == "enrolled"
+    event = db.scalar(select(AuditEvent).where(
+        AuditEvent.action == "offering.faculty_transferred",
+        AuditEvent.entity_id == offering_id))
+    assert event.details == {
+        "previous_faculty_id": str(world["faculty"].id),
+        "faculty_id": str(replacement.id),
+    }
+
+
+def test_offering_transfer_rejects_existing_duplicate_for_target_teacher(world, db):
+    admin, term = world["admin"], world["term"]
+    replacement = make_account(db, "replacement-duplicate@example.com", "faculty")
+    second_assignment = admin.post(f"/api/terms/{term['id']}/offerings", {
+        "subject_id": world["subject"]["id"],
+        "faculty_id": str(replacement.id),
+        "section_ids": [],
+    })
+    assert second_assignment.status_code == 201, second_assignment.text
+
+    conflict = admin.patch(f"/api/offerings/{world['offering']['id']}", {
+        "faculty_id": str(replacement.id),
+    })
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "offering_exists"
+
+
 def test_one_active_section_per_term_and_withdrawal_history(db, world):
     s1 = world["students"][0]
     a, b = world["sections"]
@@ -514,6 +555,24 @@ def test_a_bulk_assignment_is_all_or_nothing_and_names_the_subject_that_failed(d
     assert exists.status_code == 409 and "ENT 101" in exists.json()["error"]["message"]
     for who in ("faculty@example.com", "student@example.com"):
         assert Api(who).post(url, {"faculty_id": str(faculty.id), "items": [{"subject_id": good["id"]}]}).status_code == 403
+
+
+def test_bulk_assignment_rejects_a_section_already_assigned_to_another_teacher(db, world):
+    admin = world["admin"]
+    replacement = make_account(db, "section-conflict@example.com", "faculty")
+    response = admin.post(f"/api/terms/{world['term']['id']}/offerings/bulk", {
+        "faculty_id": str(replacement.id),
+        "items": [{
+            "subject_id": world["subject"]["id"],
+            "section_ids": [world["sections"][0]["id"]],
+        }],
+    })
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "section_already_assigned"
+    assert "1A" in response.json()["error"]["message"]
+    assert "faculty" in response.json()["error"]["message"].lower()
+    offerings = admin.get(f"/api/terms/{world['term']['id']}/offerings").json()
+    assert len(offerings) == 1
 
 
 def test_the_section_roster_pages_searches_and_filters_and_candidates_exclude_placed_students(db, world):

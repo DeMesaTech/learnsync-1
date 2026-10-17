@@ -1,5 +1,17 @@
 # Acceptance status
 
+### 2026-10-17 (Faculty Management teacher actions)
+- The Teachers table now displays college/program as text and supports an inline edit/save/cancel row for teacher name, email, and college/program. Email changes revoke existing sessions and require invitation verification. The row also supports removing a college/program association, account activation/deactivation, and invitation/reset links.
+- Added a confirmed Take over action for subject assignments. It changes the current offering's teacher in place so enrollments and academic records remain linked; the operation is audited and refuses duplicate target assignments. Assignment archival is labeled separately and continues to preserve history.
+- Passed: frontend `npm run build`, `npm run lint`, backend Ruff on changed files, four focused account/assignment tests, and `git diff --check`. The production build emitted the existing large-chunk advisory.
+- Interactive browser verification was not completed: the local app redirected to login, and no test credentials were provided. Email delivery was not exercised; focused backend tests stub the mail sender.
+
+### 2026-10-17 (Bulk subject and section availability)
+- Bulk assignment now disables a subject when every eligible section in the selected program is already assigned. Assigned sections are disabled and identify the existing teacher; new subject cards preselect only unassigned sections. The API validates section availability as well, including archived links, and returns a conflict naming the section and teacher rather than a generic database error.
+- Added E2E assertions for partially and fully assigned subjects and a backend regression for conflicting teacher assignments.
+- Passed: frontend production build, ESLint, backend Ruff on changed files, four focused backend tests, E2E syntax check, and `git diff --check`.
+- Not run: browser E2E requires the disposable database and confirmation flag.
+
 ### 2026-10-16 (Existing section college column during migration)
 - A shared-database `alembic upgrade head` attempt reported `DuplicateColumn` for `section.college_id` at revision `d3b8f91a2c64`. The database schema is ahead of its Alembic revision for this field.
 - Updated the section-college migration to add `college_id`, its single-column index, and its college foreign key only when the equivalent schema object is missing. The existing data backfill still runs.

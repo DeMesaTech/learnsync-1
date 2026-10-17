@@ -105,6 +105,55 @@ def set_faculty_college(db, actor, account, college_id):
     return account
 
 
+def update_faculty_profile(db, actor, account, data):
+    if account.role != "faculty":
+        fail(409, "not_faculty", "Only faculty accounts can be edited here.")
+    if data.college_id is not None and data.college_id != account.college_id:
+        from app.features.academics.models import College
+        college = db.get(College, data.college_id)
+        if not college or college.status != "active":
+            fail(422, "college_unavailable", "Choose an active college/program for this teacher.")
+
+    email = str(data.email).lower()
+    if db.scalar(select(Account.id).where(Account.email == email, Account.id != account.id)):
+        fail(409, "email_exists", "Another account already uses this email.")
+    changed = {
+        field for field, value in (
+            ("display_name", data.display_name),
+            ("email", email),
+            ("college_id", data.college_id),
+        ) if getattr(account, field) != value
+    }
+    if not changed:
+        return account
+    email_changed = account.email != email
+    if email_changed and account.status == "inactive":
+        fail(409, "account_inactive", "Reactivate the account before changing its email.")
+
+    previous_college_id = account.college_id
+    account.display_name = data.display_name
+    account.email = email
+    account.college_id = data.college_id
+    if email_changed:
+        account.email_verified_at = None
+        account.status = "invited"
+        db.execute(update(AuthSession).where(
+            AuthSession.account_id == account.id).values(revoked_at=now()))
+        db.execute(update(AccountToken).where(
+            AccountToken.account_id == account.id,
+            AccountToken.consumed_at.is_(None)).values(consumed_at=now()))
+        token = issue_token(db, account, "invite", actor)
+        send_link(account, token, "invite")
+    audit(db, actor, "account.faculty_profile_updated", "account", account.id, {
+        "fields": sorted(changed),
+        "previous_college_id": str(previous_college_id) if previous_college_id else None,
+        "college_id": str(data.college_id) if data.college_id else None,
+        "email_changed_requires_verification": email_changed,
+    })
+    db.commit()
+    return account
+
+
 def consume_token(db, data, purposes):
     token = db.scalar(select(AccountToken).where(AccountToken.token_hash == digest(data.token))
                       .with_for_update())
