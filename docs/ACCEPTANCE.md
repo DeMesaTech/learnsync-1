@@ -1,5 +1,14 @@
 # Acceptance status
 
+### 2026-10-17 (Setup form clarity)
+- Category weights display zero as a blank input while retaining numeric zero internally for draft totals. The grading confirmation is a red-tinted callout with a 22px checkbox; it remains disabled until category weights total 100%. Category removal is icon-only with an accessible label; Add another category uses the primary action style; total messages are larger. Assessment planning and class schedule steps are labeled Optional.
+- Passed: frontend production build, ESLint, and `git diff --check`. Authenticated browser measurements confirmed the blank input, checkbox visibility/color, 44px remove target, primary add-category control, enlarged total, and both Optional labels.
+
+### 2026-10-17 (Outline-only chapters)
+- Removed per-chapter intended-learning-outcome, teaching-activity, and assessment fields from setup/edit and read-only syllabus views. Removed the chapter type selector and Add examination chapter action; the starter outline now creates chapters only. Existing assessment authoring remains separate.
+- Added migration `d12c8a6f4e30` to remove `ilo`, `activities`, `assessment`, and chapter `kind` keys from all stored syllabus-revision JSONB outlines. Existing exam-row titles, weeks, topics, and stable IDs are preserved as ordinary chapters. New/imported/saved outlines no longer persist those keys.
+- Passed: focused syllabus import and save regressions (2 passed); backend Ruff; frontend ESLint and production build; `git diff --check`. Migration `d12c8a6f4e30` is applied to `learnsync_v2` and is at Alembic head. The live syllabus API returned a two-chapter draft with zero retired keys; this offering has no published revision. The production build retains the existing large-chunk advisory.
+
 ### 2026-10-17 (Faculty dashboard and chapter workspace)
 - Reduced the faculty dashboard side column from 330px to 300px and moved the next-teaching-task hero above the dashboard grid so it spans the available content width.
 - Refactored faculty Classwork into a subject content manager matching the supplied reference: subject/section selectors, chapter/resource/published/draft counts, chapter navigator, chapter-local search and type filters, and status-bearing material rows. Selectors and counts use live offering/item/assessment data; section selection filters section-targeted items. Faculty can add chapters through the syllabus editor, and Add material opens the existing creation menu with the selected chapter preattached for content items.

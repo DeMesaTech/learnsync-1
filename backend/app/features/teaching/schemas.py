@@ -18,12 +18,8 @@ class Subsection(BaseModel):
 
 class Chapter(BaseModel):
     id: uuid.UUID
-    kind: Literal["chapter", "exam"] = "chapter"
     title: str = Field(default="", max_length=300)
     weeks: str = Field(default="", max_length=60)
-    ilo: str = Field(default="", max_length=3000)
-    activities: str = Field(default="", max_length=3000)
-    assessment: str = Field(default="", max_length=3000)
     topics: list[Topic] = Field(default_factory=list, max_length=100)
     subsections: list[Subsection] = Field(default_factory=list, max_length=50)
 

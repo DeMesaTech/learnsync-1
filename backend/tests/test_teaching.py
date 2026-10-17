@@ -52,8 +52,14 @@ def test_syllabus_draft_publish_and_student_visibility(course):
     refused = fac.post(t(course, "/syllabus/draft/publish"), {"expected_counter": 1})
     assert refused.status_code == 422 and refused.json()["error"]["code"] == "syllabus_incomplete"
     outline, _, topic_id = make_outline()
-    saved = fac.put(t(course, "/syllabus/draft"), {"expected_counter": 1, "outline": outline})
+    legacy_outline = {**outline, "chapters": [{**outline["chapters"][0], "kind": "exam",
+        "ilo": "retired", "activities": "retired", "assessment": "retired"},
+        *outline["chapters"][1:]]}
+    saved = fac.put(t(course, "/syllabus/draft"),
+                    {"expected_counter": 1, "outline": legacy_outline})
     assert saved.json()["counter"] == 2
+    stored_chapter = fac.get(t(course, "/syllabus")).json()["draft"]["outline"]["chapters"][0]
+    assert not {"kind", "ilo", "activities", "assessment"}.intersection(stored_chapter)
     assert fac.post(t(course, "/syllabus/draft/publish"),
                     {"expected_counter": 2}).json()["version"] == 1
     published = st1.get(learn(course, "/syllabus")).json()["published"]
@@ -153,11 +159,12 @@ def test_syllabus_import_reads_a_template_into_a_reviewable_draft(course):
     draft = response.json()["draft"]
     chapters = draft["outline"]["chapters"]
     assert draft["outline"]["course"]["code"] == "ENT 101" and draft["outline"]["course"]["units"] == "3"
-    assert [c["title"] for c in chapters if c["kind"] == "chapter"] == \
-        ["CHAPTER 1 - Foundations", "CHAPTER 2 - Planning"]
-    assert chapters[0]["weeks"] == "Week 1" and chapters[0]["assessment"] == "Quiz 1"
+    assert [c["title"] for c in chapters] == [
+        "CHAPTER 1 - Foundations", "CHAPTER 2 - Planning", "Midterm Examination"]
+    assert chapters[0]["weeks"] == "Week 1"
+    assert all(not {"ilo", "activities", "assessment", "kind"}.intersection(chapter)
+               for chapter in chapters)
     assert [x["title"] for x in chapters[0]["topics"]] == ["What is a venture?", "Opportunity"]
-    assert chapters[2]["kind"] == "exam"
     assert draft["source_file"]["name"] == "syllabus.docx"
     # the draft is not published until faculty reviews it; a second import needs the draft resolved
     assert course["st1"].get(learn(course, "/syllabus")).json()["published"] is None

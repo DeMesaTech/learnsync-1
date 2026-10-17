@@ -92,16 +92,14 @@ def parse_docx(path_bytes):
 
 
 def coverage_row(cells):
-    """[week, ilo, topics, activities, assessment] -> Chapter (or an exam row)."""
+    """Extract the week, chapter title, and topic list from a curriculum table row."""
     week = clean(WEEK.search(cells[0]).group(0)) if WEEK.search(cells[0]) else ""
     rest = cells[1:]
     if len(rest) == 1 and EXAM.search(rest[0]):
-        return Chapter(id=new_id(), kind="exam", title=clean(rest[0]).title(), weeks=week)
+        return Chapter(id=new_id(), title=clean(rest[0]).title(), weeks=week)
     if len(rest) < 2:
         return None
-    ilo, topics = rest[0], rest[1]
-    activities = rest[2] if len(rest) > 2 else ""
-    assessment = rest[-1] if len(rest) > 3 else ""
+    topics = rest[1]
     lines = lines_of(topics)
     if not lines:
         return None
@@ -109,9 +107,6 @@ def coverage_row(cells):
     if not CHAPTER.match(title) and len(lines) > 1 and CHAPTER.match(lines[1]):
         title, topic_lines = lines[1], lines[2:]
     return Chapter(id=new_id(), title=title[:300], weeks=week,
-                   ilo=" ".join(lines_of(ilo))[:3000],
-                   activities=", ".join(lines_of(activities))[:3000],
-                   assessment=", ".join(lines_of(assessment))[:3000],
                    topics=[Topic(id=new_id(), title=t[:300]) for t in topic_lines[:100]])
 
 

@@ -148,9 +148,9 @@ export function FacultyClasswork(){
         <ChapterNavigation outline={outline} rows={visibleRows} selected={selectedChapterId} onSelect={setActiveChapter} editHref={`${base}/syllabus`}/>
         <section className="chapter-detail panel">
           <header className="chapter-detail-heading">
-            <div><p className="eyebrow">{selectedChapter?`${selectedChapter.kind==='exam'?'EXAMINATION':'CHAPTER'} ${chapters.indexOf(selectedChapter)+1}`:'OTHER MATERIALS'}</p>
-              <h2>{selectedChapter?`${selectedChapter.kind==='exam'?'Examination':'Chapter'} ${chapters.indexOf(selectedChapter)+1}: ${selectedChapter.title||'Untitled'}`:'Other materials'}</h2>
-              <p className="muted">Manage learning resources for this {selectedChapter?.kind==='exam'?'examination':'chapter'}.</p></div>
+            <div><p className="eyebrow">{selectedChapter?`CHAPTER ${chapters.indexOf(selectedChapter)+1}`:'OTHER MATERIALS'}</p>
+              <h2>{selectedChapter?`Chapter ${chapters.indexOf(selectedChapter)+1}: ${selectedChapter.title||'Untitled'}`:'Other materials'}</h2>
+              <p className="muted">Manage learning resources for this chapter.</p></div>
             {!closed&&<details className="dropdown" ref={menu}><summary className="button primary" aria-disabled={closed}>＋ Add material</summary>
               <div className="menu-list" role="group" aria-label="Add material">{CREATE.map(([label,target],index)=><span key={label} className="menu-item">{(index===3||index===8)&&<hr/>}
                 <button type="button" onClick={()=>choose(target)}>{label}</button></span>)}</div></details>}
@@ -225,7 +225,7 @@ function ChapterNavigation({outline,rows,selected,onSelect,editHref}:{outline:Ou
         return <button key={chapter.id} type="button" className={`chapter-choice${selected===chapter.id?' active':''}`}
           aria-pressed={selected===chapter.id} onClick={()=>onSelect(chapter.id)}>
           <span className="chapter-index">{index+1}</span><span className="chapter-choice-copy">
-            <strong>{chapter.kind==='exam'?'Examination':'Chapter'} {index+1}: {title}</strong>
+            <strong>Chapter {index+1}: {title}</strong>
             <small>{count} learning {count===1?'item':'items'}</small>
           </span>
         </button>;
@@ -299,9 +299,9 @@ export function StudentClasswork(){
       <ChapterNavigation outline={outline} rows={shownRows} selected={selectedChapterId} onSelect={setActiveChapter}/>
       <section className="chapter-detail panel">
         <header className="chapter-detail-heading">
-          <div><p className="eyebrow">{selectedChapter?`${selectedChapter.kind==='exam'?'EXAMINATION':'CHAPTER'} ${chapters.indexOf(selectedChapter)+1}`:'OTHER MATERIALS'}</p>
-            <h2>{selectedChapter?`${selectedChapter.kind==='exam'?'Examination':'Chapter'} ${chapters.indexOf(selectedChapter)+1}: ${selectedChapter.title||'Untitled'}`:'Other materials'}</h2>
-            <p className="muted">Learning resources published for this {selectedChapter?.kind==='exam'?'examination':'chapter'}.</p></div>
+          <div><p className="eyebrow">{selectedChapter?`CHAPTER ${chapters.indexOf(selectedChapter)+1}`:'OTHER MATERIALS'}</p>
+            <h2>{selectedChapter?`Chapter ${chapters.indexOf(selectedChapter)+1}: ${selectedChapter.title||'Untitled'}`:'Other materials'}</h2>
+            <p className="muted">Learning resources published for this chapter.</p></div>
         </header>
         <div className="chapter-materials">
           <div className="section-head"><h3>Learning materials</h3><span className="muted">{selectedTree?total(selectedTree):0} items</span></div>

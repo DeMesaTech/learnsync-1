@@ -51,6 +51,7 @@ Confirmations and undo (Phase 3): confirm only what cannot be undone or what stu
 
 ## Replacing a syllabus
 - On a published syllabus, make “Replace syllabus from a file” available as a DOCX/PDF import. Import creates a reviewable draft; keep the published revision and its grading policy live until faculty publishes the replacement. Preserve the existing grading policy in the imported draft.
+- Chapter outline editing contains the chapter title, time allotment, and topics only. Assessments are authored as separate assessment records, not as chapter metadata.
 
 ## Feedback toasts and celebration
 Use `useToast()` for a one-line result of an action that is not already obvious from the page (plain, 5 seconds) and `useUndo()` for something that can be put back (Undo, 10 seconds). One toast at a time, bottom left. `celebrate()` is only for a finished lesson or quiz.

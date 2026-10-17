@@ -16,10 +16,8 @@ export function OutlineView({outline,policy,coveredOn,extra}:{outline:Outline;po
       {outline.chapters.map(ch=><article className="chapter" key={ch.id}>
         <h3>{ch.title||'Untitled'} {ch.weeks&&<span className="muted">· {ch.weeks}</span>} {tag(ch.id)}</h3>
         {extra?.(ch.id)}
-        {ch.ilo&&<p><strong>Learning outcomes:</strong> {ch.ilo}</p>}
         {ch.topics.length>0&&<ul>{ch.topics.map(t=><li key={t.id}>{t.title} {tag(t.id)} {extra?.(t.id)}</li>)}</ul>}
-        {ch.activities&&<p><strong>Activities:</strong> {ch.activities}</p>}
-        {ch.assessment&&<p><strong>Assessment:</strong> {ch.assessment}</p>}</article>)}</section>
+        </article>)}</section>
     {(c.references||c.requirements||c.evaluation_note)&&<section className="panel">
       {c.evaluation_note&&<><h2>Course evaluation</h2><p className="pre">{c.evaluation_note}</p></>}
       {c.requirements&&<><h2>Classroom requirements</h2><p className="pre">{c.requirements}</p></>}

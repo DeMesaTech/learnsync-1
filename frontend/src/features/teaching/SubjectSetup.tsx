@@ -341,7 +341,7 @@ function Flow({offering,draft,published,warnings,onChanged,onFinished}:{offering
     catch(e){setMessage(errorText(e))}
   }
   async function reload(){const s=await api<SyllabusState>(url);if(!s.draft)throw new Error('The draft no longer exists.');return {value:{outline:s.draft.outline,grading_policy:s.draft.grading_policy},counter:s.draft.counter}}
-  const starter=()=>set({outline:{...outline,chapters:[...STARTER_CHAPTERS.map(t=>({...emptyChapter(),title:t})),{...emptyChapter(),kind:'exam',title:'Midterm examination'},{...emptyChapter(),kind:'exam',title:'Final examination'}]}});
+  const starter=()=>set({outline:{...outline,chapters:STARTER_CHAPTERS.map(title=>({...emptyChapter(),title}))}});
   const topics=outline.chapters.reduce((n,c)=>n+c.topics.length,0);
   const total=(grading_policy?.categories??[]).reduce((a,c)=>a+Number(c.weight||0),0);
   const policyOk=!grading_policy||grading_policy.categories.length===0||Math.abs(total-100)<=0.01;
@@ -357,7 +357,7 @@ function Flow({offering,draft,published,warnings,onChanged,onFinished}:{offering
       <button type="button" aria-current={id===step?'step':undefined} onClick={()=>void go(id)}><span className="n" aria-hidden="true">{i<index?'✓':i+1}</span> {label}</button></li>)}</ol></nav>
 
     {step==='outline'&&<>
-      {outline.chapters.length===0&&<section className="panel"><h3>Start with a starter outline?</h3><p className="muted">Four chapters plus Midterm and Final examinations that you rename and fill in. You can also add your own below.</p>
+      {outline.chapters.length===0&&<section className="panel"><h3>Start with a starter outline?</h3><p className="muted">Four chapters that you can rename and fill in. You can also add your own below.</p>
         <button className="primary" onClick={starter}>Use the starter outline</button></section>}
       <ChaptersStep outline={outline} onChange={(o:Outline)=>set({outline:o})}/></>}
 
@@ -366,10 +366,15 @@ function Flow({offering,draft,published,warnings,onChanged,onFinished}:{offering
         <p className="muted">Attendance 10%, Quizzes 25%, Activities 20%, Examinations 45%; Midterm and Finals 50/50; passing 75. This is only a suggestion: nothing is final until you confirm it below.</p>
         <button className="primary" onClick={()=>{set({grading_policy:USUAL_POLICY});setConfirmed(false)}}>Use this suggestion</button></section>}
       <GradingStep policy={grading_policy} onChange={(p:GradingPolicy|null)=>{set({grading_policy:p});setConfirmed(false)}}/>
-      {grading_policy&&grading_policy.categories.length>0&&<section className="panel"><label className="inline"><input type="checkbox" checked={confirmed} disabled={!policyOk} onChange={e=>setConfirmed(e.target.checked)}/> I have checked these weights and confirm them for this subject</label>
+      {grading_policy&&grading_policy.categories.length>0&&<section className="panel">
+        <div className={`policy-confirmation${policyOk?' ready':''}`}>
+          <label className="inline"><input type="checkbox" checked={confirmed} disabled={!policyOk} aria-describedby="grading-confirmation-note" onChange={e=>setConfirmed(e.target.checked)}/>
+            <span>I have checked these weights and confirm them for this subject.</span></label>
+          <p id="grading-confirmation-note">{policyOk?'This confirmation is required before publishing.':'Set category weights to 100% to enable confirmation.'}</p>
+        </div>
         <p className="muted">LearnSync never guesses percentages: the policy takes effect when you publish.</p></section>}</>}
 
-    {step==='plan'&&<section className="panel"><h3>Plan your assessments</h3>
+    {step==='plan'&&<section className="panel"><h3>Plan your assessments <span className="optional-label">Optional</span></h3>
       <p className="muted">How many of each will you give? They are created as drafts with the right grading category and period, so the subject looks complete now. You fill in the details later.</p>
       {!grading_policy&&<p className="warn" role="status">No grading policy yet, so the drafts will have no category. Set grading up in the previous step for better results.</p>}
       {(existing.data?.length??0)>0&&<p className="muted" role="status">This subject already has {existing.data!.length} assessment{existing.data!.length===1?'':'s'}. New drafts are added to them.</p>}
@@ -381,7 +386,7 @@ function Flow({offering,draft,published,warnings,onChanged,onFinished}:{offering
       {planned>0&&<p role="status"><strong>✓ {planned} draft{planned===1?'':'s'} created.</strong> Planning again would add more.</p>}
       <button className="primary" disabled={plan.length===0||plan.length>MAX_PLANNED} onClick={createDrafts}>{planned>0?'Create more drafts':`Create ${plan.length} draft${plan.length===1?'':'s'}`}</button></section>}
 
-    {step==='schedule'&&<section className="panel"><h3>When does the class meet?</h3>
+    {step==='schedule'&&<section className="panel"><h3>When does the class meet? <span className="optional-label">Optional</span></h3>
       <p className="muted">The attendance register will show these days. You can add or change dates later. Skip this if the schedule varies.</p>
       <fieldset><legend>Class days</legend><div className="chips">{DAYS.map((d,i)=><label className="inline" key={d}><input type="checkbox" checked={(days&(1<<i))!==0} onChange={e=>setDays(e.target.checked?days|(1<<i):days&~(1<<i))}/> {d}</label>)}</div></fieldset></section>}
 

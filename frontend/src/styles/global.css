@@ -709,6 +709,65 @@ h3 {
   min-height: auto
 }
 
+.policy-confirmation {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid #d98989;
+  border-left: 4px solid var(--danger);
+  border-radius: 8px;
+  background: #fff2f2;
+  color: #742f2f
+}
+
+.policy-confirmation.ready {
+  border-color: #d8a0a0;
+  background: #fff7f5
+}
+
+.policy-confirmation .inline {
+  align-items: flex-start;
+  font-weight: 700
+}
+
+.policy-confirmation .inline input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  margin: 1px 2px 0 0;
+  accent-color: var(--danger)
+}
+
+.policy-confirmation .inline input[type="checkbox"]:disabled {
+  opacity: .82
+}
+
+.policy-confirmation p {
+  margin: 0 0 0 32px;
+  font-size: .95rem
+}
+
+.grading-total {
+  margin-top: 8px;
+  font-size: 1.06rem;
+  font-weight: 700
+}
+
+.optional-label {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  color: var(--muted);
+  font-size: .72em;
+  font-weight: 600;
+  vertical-align: middle
+}
+
 .checkbox-cell {
   width: 1%;
   white-space: nowrap;
@@ -1900,6 +1959,24 @@ code {
 
 .topic-row button {
   padding: 9px 11px
+}
+
+.topic-row button.icon-button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-color: #dfa5a5;
+  background: #fff0f0;
+  color: #9f3535;
+  font-size: 1.2rem
+}
+
+.topic-row button.icon-button:hover {
+  border-color: #bb5555;
+  background: #ffe2e2
 }
 
 .pre {
