@@ -1,5 +1,11 @@
 # Acceptance status
 
+### Semester status reset migration (2026-10-18)
+- Added Alembic revision `c91f7a2e4b60` to reset every existing semester status to `draft`; academic/calendar records and closure metadata are unchanged. Existing schedule/activate/close actions remain in place. This is forward-only; active-term operations require an administrator to schedule and activate a semester after migration.
+- Added a migration regression test that applies the revision to representative `draft`, `scheduled`, `active`, `inactive`, and `archived` rows and verifies IDs and row data remain while all statuses become `draft`.
+- No production database was modified and no deployment was performed.
+- Passed: `cd backend; .venv\Scripts\python.exe -m pytest tests\test_academics.py -q` (40 passed, including migration upgrade/downgrade/upgrade verification), `ruff check` on the changed Python files, `alembic heads` (new revision is sole head), `cd frontend; npm run build` (TypeScript and Vite; existing large-chunk advisory), and `git diff --check`.
+
 ### School year settings cleanup (2026-10-18)
 - Removed the redundant settings-navigation sidebar from the school-year settings page and expanded the academic calendar to the available content width. Renamed its eyebrow from “Academic calendar” to “School year”.
 - Updated the design-system route map to reflect the focused Settings page.

@@ -10,6 +10,10 @@ The user has accepted the requirements baseline and authorized you to implement 
 
 The latest academic-calendar requirements supersede the earlier open/closed and generic-reopen workflow below. A school year is labeled from consecutive starting/ending years and is created atomically with exactly two semesters, all in `draft`. Draft permits calendar configuration only; `scheduled`, `inactive`, and `archived` are read-only for normal academic operations; only `active` permits role-authorized academic writes. Scheduling and activation are explicit audited transitions. Only one semester may be active institution-wide; switching requires the current semester to be closed and the next scheduled semester to pass readiness checks. There is no generic reopen for ordinary edits; any future administrative correction must be a narrowly scoped, reasoned, audited workflow. School-year and semester date ranges may not overlap.
 
+### Current amendment (2026-10-18)
+
+By explicit user decision, a one-time Alembic data migration resets every existing academic semester to `draft`, matching the initial state of newly created semesters. This includes currently active, scheduled, inactive, and archived rows. It changes no school-year dates, semester dates, enrollments, offerings, published academic records, or closure/audit metadata. Existing transition actions remain available. The migration is intentionally one-way; rolling back the migration revision does not restore prior semester statuses. Applying it removes the active semester until an administrator schedules and activates one.
+
 **Distinction:** Product decisions explicitly confirmed by the user are identified as **confirmed**. Concrete engineering choices added here are **implementation defaults**. They provide a buildable approach without claiming the user individually approved every package, column, or timeout.
 
 ---

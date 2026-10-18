@@ -1,5 +1,6 @@
 import uuid
 from datetime import date
+from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
@@ -145,6 +146,41 @@ def test_only_admin_can_administer(db, actors):
         assert response.status_code == 403
         assert response.json()["error"]["code"] == "role_forbidden"
         assert api.post("/api/subjects", {"code": "X", "title": "X", "units": "1"}).status_code == 403
+
+
+def test_existing_semester_status_reset_migration(db):
+    statuses = ("draft", "scheduled", "active", "inactive", "archived")
+    term_ids = []
+    dates = {}
+    for index, status in enumerate(statuses):
+        start_year = 2040 + index * 2
+        year = SchoolYear(label=f"{start_year}-{start_year + 1}",
+                          start_date=date(start_year, 1, 1),
+                          end_date=date(start_year + 1, 12, 31))
+        db.add(year)
+        db.flush()
+        term = AcademicTerm(school_year_id=year.id, name="First semester", sequence=1,
+                            start_date=date(start_year, 1, 10),
+                            end_date=date(start_year, 5, 31), status=status)
+        db.add(term)
+        db.flush()
+        term_ids.append(term.id)
+        dates[term.id] = (term.start_date, term.end_date)
+    db.commit()
+    db.close()
+
+    from alembic import command
+    from alembic.config import Config
+
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    command.downgrade(config, "d12c8a6f4e30")
+    command.upgrade(config, "head")
+
+    terms = db.scalars(select(AcademicTerm).order_by(AcademicTerm.school_year_id)).all()
+    assert {term.id for term in terms} == set(term_ids)
+    assert {term.status for term in terms} == {"draft"}
+    assert {term.name for term in terms} == {"First semester"}
+    assert {term.id: (term.start_date, term.end_date) for term in terms} == dates
 
 
 def test_subject_code_normalised_and_unique(world):
