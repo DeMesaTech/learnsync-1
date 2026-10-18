@@ -674,7 +674,7 @@ Defaults:
 - Make submit idempotent and enforce attempt limits transactionally.
 - Post-submission screens show totals and attempt metadata, not solutions or a reusable answer-review screen.
 
-Latest approved decision: every online-quiz question has a 1–180 minute time limit (default 5 minutes). The server starts each question clock in order, persists it with the attempt, locks saved answers when time expires, and starts the next question. The final timeout submits the saved answers automatically. Reload resumes the server's current question and expiry; late answer changes are rejected. This approved per-question timer supersedes the original decision below.
+Latest approved decision: every online-quiz question has a 1–180 minute time limit (default 5 minutes). Show one question at a time and provide a question-number navigator so students can freely move among questions. Each question's server-side timer pauses when the student navigates away and resumes on return, including after reload. Reaching zero does not lock an answer; answers remain editable until final submission. Do not expose answer keys or explanations. This decision supersedes the earlier sequential auto-lock behavior below.
 
 #### Activity behavior
 

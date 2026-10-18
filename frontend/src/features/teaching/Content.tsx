@@ -2,7 +2,7 @@ import {useToast} from '../../components/undo';
 import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
 import {Link,useNavigate,useOutletContext,useParams} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
-import {api,post,send,upload,errorText} from '../../app/api';
+import {api,post,send,upload,errorText,ApiError} from '../../app/api';
 import {queryClient,useAuth} from '../../app/providers';
 import {useConfirm} from '../../components/confirm';
 import {Dialog} from '../../components/Dialog';
@@ -19,7 +19,11 @@ export const stateLabel=(i:Item)=>i.archived?'Archived':i.published?(i.draft?`Pu
 export function useNodes(offeringId:string){
   const query=useQuery({queryKey:['syllabus',offeringId],queryFn:()=>api<SyllabusState>(`/teach/offerings/${offeringId}/syllabus`)});
   const outline=query.data?.draft?.outline??query.data?.published?.outline;
-  return outline?nodeLabels(outline):[];
+  const publishedOutline=query.data?.published?.outline;
+  return {
+    nodes:outline?nodeLabels(outline):[],
+    publishedNodeIds:new Set(publishedOutline?nodeLabels(publishedOutline).map(node=>node.id):[]),
+  };
 }
 
 function SectionChoice({offering,chosen,onChange}:{offering:OfferingSummary;chosen:string[];onChange:(ids:string[])=>void}){
@@ -111,9 +115,10 @@ function ItemEditor({offering,item,refetch,onDone,onFlushReady,hideAnchorSelecto
   const draft=item.draft!;
   const {session}=useAuth();
   const navigate=useNavigate();
-  const nodes=useNodes(offering.id);
+  const {nodes,publishedNodeIds}=useNodes(offering.id);
   const base=`/teach/offerings/${offering.id}/items/${item.id}`;
   const [message,setMessage]=useState('');
+  const [anchorConflict,setAnchorConflict]=useState(false);
   const [sections,setSections]=useState(item.section_ids);
   const [file,setFile]=useState(draft.file);
   const [selectedFile,setSelectedFile]=useState<File|null>(null);
@@ -124,16 +129,22 @@ function ItemEditor({offering,item,refetch,onDone,onFlushReady,hideAnchorSelecto
   useEffect(()=>{onFlushReady?.(auto.flush)},[auto.flush,onFlushReady]);
   useFlushOnLeave(auto.status,auto.flush);
   const v=auto.value;const set=(patch:Partial<ItemDraftContent>)=>auto.setValue({...v,...patch});
+  const anchorNotPublished=!!v.anchor_node_id&&!publishedNodeIds.has(v.anchor_node_id);
   const back=`/faculty/offerings/${offering.id}/classwork`;
   const finish=()=>onDone?onDone():navigate(back);
 
   async function serverDraft(){const fresh=await api<Item>(base);if(!fresh.draft)throw new Error('The draft no longer exists.');return fresh.draft}
   async function publish(){
     setMessage('');
+    setAnchorConflict(false);
+    if(anchorNotPublished)return;
     if(!await auto.flush()){setMessage('Resolve the save problem above before publishing.');return}
     if(!await uploadSelectedFile())return;
     try{await post(`${base}/draft/publish`,{expected_counter:auto.counter()});auto.discardRecovered();queryClient.invalidateQueries({queryKey:['items',offering.id]});toast('Published. Students can see it now.');finish()}
-    catch(e){setMessage(errorText(e))}
+    catch(e){
+      setAnchorConflict(e instanceof ApiError&&e.code==='anchor_not_published');
+      setMessage(errorText(e));
+    }
   }
   async function saveDraft(){
     setMessage('');
@@ -180,7 +191,12 @@ function ItemEditor({offering,item,refetch,onDone,onFlushReady,hideAnchorSelecto
         <button className="primary" onClick={async()=>{try{auto.overwrite((await serverDraft()).counter)}catch(e){setMessage(errorText(e))}}}>Keep my version (overwrites the newer one)</button></div></div>}
     <section className="panel">
       <label>Title<input value={v.title} maxLength={200} onChange={e=>set({title:e.target.value})}/></label>
-      {!hideAnchorSelector&&<label>Attached syllabus topic<select value={v.anchor_node_id??''} onChange={e=>set({anchor_node_id:e.target.value||null})}><option value="">Not attached</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.label}</option>)}</select></label>}
+      {!hideAnchorSelector&&<label>Attached syllabus topic<select value={v.anchor_node_id??''} onChange={e=>{set({anchor_node_id:e.target.value||null});setAnchorConflict(false);setMessage('')}}><option value="">Not attached</option>{nodes.map(n=><option key={n.id} value={n.id}>{n.label}{publishedNodeIds.has(n.id)?'':' (not published)'}</option>)}</select></label>}
+      {(anchorNotPublished||anchorConflict)&&<div className="warn" role="status">
+        <p>This item is attached to a syllabus topic that is not published. Publish the syllabus first, or detach the item.</p>
+        <div className="actions"><Link to={`/faculty/offerings/${offering.id}/setup`}>Open syllabus setup</Link>
+          <button type="button" onClick={()=>{set({anchor_node_id:null});setAnchorConflict(false);setMessage('')}}>Detach topic</button></div>
+      </div>}
       {item.kind==='lesson'&&<><p id="lesson-label" className="label">Lesson content</p><RichEditor html={v.body_html} onChange={html=>set({body_html:html})}/></>}
       {item.kind==='file'&&<><p>{selectedFile?<>Selected file: <strong>{selectedFile.name}</strong> ({Math.ceil(selectedFile.size/1024)} KB)</>:file?<>Current file: <strong>{file.name}</strong> ({Math.ceil(file.size/1024)} KB)</>:'No file uploaded yet.'}</p>
         <label>{file?'Replace the file':'Choose a file'} (PDF, Word, PowerPoint, Excel, PNG or JPEG, up to 20 MB)<input ref={fileInput} name="file" type="file" accept=".pdf,.docx,.pptx,.xlsx,.png,.jpg,.jpeg" onChange={e=>setSelectedFile(e.target.files?.[0]??null)}/></label>

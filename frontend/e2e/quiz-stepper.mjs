@@ -88,7 +88,8 @@ try{
   const attempt=(await call(student,'POST',`/learn/offerings/${O}/assessments/${quizId}/attempts`,{})).data;
   const studentAttempt=await newPage(browser,{state:S});
   await studentAttempt.goto(`/student/offerings/${O}/work/${quizId}/attempts/${attempt.id}`);
-  check('the student sees one timed question and not its answer key',await studentAttempt.getByText('Question 1 of 3').count()===1&&await studentAttempt.getByText('Time remaining:',{exact:false}).count()===1&&!JSON.stringify(attempt).includes('"correct"'));
+  check('the student sees the current timed question and a navigator for all questions, without answer keys',await studentAttempt.getByText('Question 1 of 3').count()===1&&await studentAttempt.getByRole('navigation',{name:'Question navigation'}).getByRole('button').count()===3&&await studentAttempt.getByText('Time remaining:',{exact:false}).count()===1&&!JSON.stringify(attempt).includes('"correct"'));
+  check('students can submit after navigating freely',await studentAttempt.getByRole('button',{name:'Submit quiz now'}).count()===1);
   const timerBefore=(await call(student,'GET',`/learn/offerings/${O}/attempts/${attempt.id}`)).data.questions[0].expires_at;
   await studentAttempt.reload();
   const timerAfter=(await call(student,'GET',`/learn/offerings/${O}/attempts/${attempt.id}`)).data.questions[0].expires_at;

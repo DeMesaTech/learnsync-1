@@ -35,6 +35,7 @@ from .schemas import (
     ParseInput,
     PermissionInput,
     PlanInput,
+    QuestionNavigation,
     ReleaseInput,
     ScheduleInput,
     ScoreInput,
@@ -310,6 +311,13 @@ def save_answers(offering_id: UUID, attempt_id: UUID, data: AnswersSave,
                  actor=Depends(student), db: Session = Depends(get_db)):
     learner_offering(db, offering_id, actor, write=True)
     return attempts.save_answers(db, actor, offering_id, attempt_id, data.answers)
+
+
+@router.post(L + "/attempts/{attempt_id}/navigate")
+def navigate_attempt_question(offering_id: UUID, attempt_id: UUID, data: QuestionNavigation,
+                              actor=Depends(student), db: Session = Depends(get_db)):
+    learner_offering(db, offering_id, actor, write=True)
+    return attempts.navigate_question(db, actor, offering_id, attempt_id, data.question_key)
 
 
 @router.post(L + "/attempts/{attempt_id}/submit")

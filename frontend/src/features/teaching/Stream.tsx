@@ -77,20 +77,6 @@ export function StudentStream(){
   ].sort((a,b)=>a.at<b.at?1:-1).slice(0,30);
   const week=activityWeek(progress.data);
   return <>
-    <section className="panel" aria-labelledby="learning-activity-heading">
-      <h2 id="learning-activity-heading">Learning activity this week</h2>
-      <p className="muted">Lessons, files and links you marked complete and quizzes or activities you submitted. Opening or reading something does not count.</p>
-      <ol className="week" aria-label="Activity by day this week">{week.days.map(day=>
-        <li key={day.date} className={`${day.count>0?'done':''} ${day.today?'today':''} ${day.future?'future':''}`}>
-          <span>{day.today?'Today':day.label}</span><b aria-hidden="true">{day.count>0?'✓':day.today?'○':''}</b>
-          <span className="sr-only">{day.count>0?`${day.count} ${day.count===1?'step':'steps'} completed`:day.future?'upcoming':'nothing completed'}</span></li>)}</ol>
-      {progress.data.week?<section className="stats" aria-label="Activity today">
-        <div><strong>{week.lessons_today}</strong><span>Lessons completed today</span></div>
-        <div><strong>{week.work_today}</strong><span>Quizzes and activities submitted today</span></div>
-      </section>:<><p className="muted">Daily totals are shown until the activity breakdown is updated.</p>
-        <section className="stats" aria-label="Activity today"><div><strong>{week.work_today}</strong><span>Learning steps completed or submitted today</span></div></section></>}
-      <Link className="button" to={`${base}/progress`}>View my progress</Link>
-    </section>
     <section className="panel student-stream-announcements" aria-labelledby="stream-announcements-heading">
       <h2 id="stream-announcements-heading">Announcements</h2>
       {posts.data.items.length===0?<p className="muted">No announcements for this subject yet.</p>:
@@ -107,6 +93,20 @@ export function StudentStream(){
           <span className={`material-kind-icon kind-${e.icon}`} aria-hidden="true">{ICON[e.icon]??'▣'}</span>
           <span className="grow"><Link to={e.to}>{e.title}</Link><span className="muted">{e.type} · <time dateTime={e.at}>{uploadedAt(e.at)}</time></span></span>
         </li>)}</ul>}
+    </section>
+    <section className="panel" aria-labelledby="learning-activity-heading">
+      <h2 id="learning-activity-heading">Learning activity this week</h2>
+      <p className="muted">Lessons, files and links you marked complete and quizzes or activities you submitted. Opening or reading something does not count.</p>
+      <ol className="week" aria-label="Activity by day this week">{week.days.map(day=>
+        <li key={day.date} className={`${day.count>0?'done':''} ${day.today?'today':''} ${day.future?'future':''}`}>
+          <span>{day.today?'Today':day.label}</span><b aria-hidden="true">{day.count>0?'✓':day.today?'○':''}</b>
+          <span className="sr-only">{day.count>0?`${day.count} ${day.count===1?'step':'steps'} completed`:day.future?'upcoming':'nothing completed'}</span></li>)}</ol>
+      {progress.data.week?<section className="stats" aria-label="Activity today">
+        <div><strong>{week.lessons_today}</strong><span>Lessons completed today</span></div>
+        <div><strong>{week.work_today}</strong><span>Quizzes and activities submitted today</span></div>
+      </section>:<><p className="muted">Daily totals are shown until the activity breakdown is updated.</p>
+        <section className="stats" aria-label="Activity today"><div><strong>{week.work_today}</strong><span>Learning steps completed or submitted today</span></div></section></>}
+      <Link className="button" to={`${base}/progress`}>View my progress</Link>
     </section>
   </>;
 }

@@ -135,8 +135,6 @@ function Taking({attempt,url,back,offeringId,refresh}:{attempt:AttemptView;url:s
   const [message,setMessage]=useState('');
   const [remaining,setRemaining]=useState(0);
   const latest=useRef(answers);const dirty=useRef(false);const timer=useRef<ReturnType<typeof setTimeout>>(undefined);const running=useRef<Promise<boolean>|null>(null);
-  const syncing=useRef(false);
-  const saveRef=useRef<()=>Promise<boolean>>(async()=>true);
   const clockOffset=useRef(Date.parse(attempt.server_now)-Date.now());
   const [done,setDone]=useState<AttemptView|null>(null);
   const [submitting,setSubmitting]=useState(false);
@@ -172,7 +170,6 @@ function Taking({attempt,url,back,offeringId,refresh}:{attempt:AttemptView;url:s
     })();
     running.current=attemptSave;return attemptSave;
   };
-  saveRef.current=save;
   const change=(key:string,value:unknown)=>{
     const next={...latest.current,[key]:value};latest.current=next;dirty.current=true;setAnswers(next);setState('unsaved');
     clearTimeout(timer.current);timer.current=setTimeout(()=>void save(),80);
@@ -185,19 +182,14 @@ function Taking({attempt,url,back,offeringId,refresh}:{attempt:AttemptView;url:s
 
   useEffect(()=>{
     if(!active?.expires_at)return;
-    let refreshing=false;
     const update=()=>{
       const seconds=Math.max(0,Math.ceil((Date.parse(active.expires_at!)-(Date.now()+clockOffset.current))/1000));
       setRemaining(seconds);
-      if(seconds===0&&!refreshing&&!syncing.current){
-        refreshing=true;syncing.current=true;
-        void (async()=>{await saveRef.current();await refresh()})().finally(()=>{syncing.current=false});
-      }
     };
     update();
     const interval=setInterval(update,250);
     return()=>clearInterval(interval);
-  },[active?.expires_at,active?.key,refresh]);
+  },[active?.expires_at,active?.key]);
 
   async function submitEarly(){
     if(!await ask({title:'Submit your quiz now?',message:'Your saved answers will be scored and cannot be changed afterwards.',yes:'Submit quiz'}))return;
@@ -215,6 +207,19 @@ function Taking({attempt,url,back,offeringId,refresh}:{attempt:AttemptView;url:s
     }finally{setSubmitting(false)}
   }
 
+  async function navigateQuestion(questionKey:string){
+    if(!active||questionKey===active.key)return;
+    setSubmitting(true);setMessage('');
+    try{
+      if(!await save()){setMessage('Your latest answer could not be saved. Retry saving before moving on.');return}
+      await post<AttemptView>(`${url}/navigate`,{question_key:questionKey});
+      await refresh();
+    }catch(e){
+      setMessage(errorText(e));
+      if(e instanceof ApiError&&['attempt_closed','question_locked'].includes(e.code))void refresh();
+    }finally{setSubmitting(false)}
+  }
+
   if(done)return <Finished attempt={done} back={back}/>;
   const saveText={saved:'All answers saved',saving:'Saving…',unsaved:'Saving soon…',failed:'Could not save. Check your connection; your answers are still on this page.'}[state];
   const clock=`${Math.floor(remaining/60).toString().padStart(2,'0')}:${(remaining%60).toString().padStart(2,'0')}`;
@@ -223,17 +228,27 @@ function Taking({attempt,url,back,offeringId,refresh}:{attempt:AttemptView;url:s
     <div className="page-heading"><h2>Attempt {attempt.attempt_number}</h2><span className={`badge save-${state==='saved'?'saved':state==='failed'?'failed':'dirty'}`} role="status" aria-live="polite">{saveText}</span></div>
     {message&&<p className="warn" role="alert">{message}</p>}
     {state==='failed'&&<button onClick={()=>void save()}>Retry saving</button>}
+    <nav className="quiz-question-nav" aria-label="Question navigation">
+      {attempt.questions.map((question,index)=><button key={question.key} type="button"
+        className={question.key===active?.key?'active':''}
+        aria-current={question.key===active?.key?'step':undefined}
+        aria-label={`Question ${index+1}${answers[question.key]!==undefined?' · answered':' · unanswered'}`}
+        disabled={submitting||!!question.locked_at}
+        onClick={()=>void navigateQuestion(question.key)}>
+        {index+1}{answers[question.key]!==undefined?' ✓':''}
+      </button>)}
+    </nav>
     {active?<form onSubmit={e=>{e.preventDefault();void save()}}>
       <fieldset className="panel">
         <legend>Question {activeIndex+1} of {attempt.question_count} · {active.points} point{active.points===1?'':'s'}</legend>
         <p className="badge" role="timer" aria-label={`Time remaining ${clock}`}>Time remaining: {clock}</p>
-        <p className="muted">This question locks when its timer ends. Your saved answer will be kept and the next question will open automatically.</p>
+        <p className="muted">You can move between questions. This question’s timer pauses while you are viewing another question. Answers remain editable until you submit the quiz.</p>
         <p className="pre">{active.prompt}</p>
         {active.type==='multiple_choice'&&active.choices.map(c=><label className="inline" key={c.id}><input className="quiz-answer-radio" type="radio" name={active.key} checked={answers[active.key]===c.id} onChange={()=>change(active.key,c.id)}/> {c.text}</label>)}
         {active.type==='true_false'&&[true,false].map(v=><label className="inline" key={String(v)}><input className="quiz-answer-radio" type="radio" name={active.key} checked={answers[active.key]===v} onChange={()=>change(active.key,v)}/> {v?'True':'False'}</label>)}
         {active.type==='short_answer'&&<label>Your answer<input value={typeof answers[active.key]==='string'?String(answers[active.key]):''} maxLength={1000} onChange={e=>change(active.key,e.target.value)}/></label>}
       </fieldset>
-      <p className="muted">Question timers use the server clock. Reloading will resume this question with its remaining time.</p>
+      <p className="muted">Timers use the server clock, pause on navigation, and resume when you return. They do not lock answers.</p>
       <div className="actions"><button type="button" className="primary" disabled={submitting} onClick={()=>void submitEarly()}>{submitting?'Submitting…':'Submit quiz now'}</button></div>
     </form>:<section className="panel" role="status"><h2>Finishing your quiz…</h2><p>Your saved answers are being submitted.</p></section>}
   </>;

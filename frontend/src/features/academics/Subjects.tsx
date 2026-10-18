@@ -21,6 +21,9 @@ export function Subjects() {
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['subjects'] });
   const refreshColleges = () => queryClient.invalidateQueries({ queryKey: ['colleges'] });
   const yearTabs = Array.from(new Set((query.data ?? []).map(s => s.year_level).filter((n): n is number => n !== null))).sort((a, b) => a - b);
+  const highestSubjectYear = Math.max(0, ...(query.data ?? []).map(subject => subject.year_level ?? 0),
+    typeof editing === 'object' && editing !== null ? editing.year_level ?? 0 : 0);
+  const yearLevelOptions = Array.from({ length: Math.min(6, Math.max(1, highestSubjectYear + 1)) }, (_, index) => index + 1);
   useEffect(() => { if (!query.data) return; if (!yearTabs.length) { setActiveYear(null); return; } if (activeYear === null || !yearTabs.includes(activeYear)) setActiveYear(yearTabs[0]); }, [query.data, activeYear, yearTabs]);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -87,8 +90,8 @@ export function Subjects() {
         <label>Title<input name="title" required maxLength={200} defaultValue={editing === 'new' ? '' : editing.title} /></label>
         <label>Units<input name="units" required type="number" step="0.5" min="0" max="99" defaultValue={editing === 'new' ? '3' : editing.units} /></label>
         <div className="grid-2">
-          <label>Year level<select name="year_level" defaultValue={editing === 'new' ? '' : editing.year_level ?? ''}><option value="">Unplaced</option>{[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{yearLabel(n)}</option>)}</select></label>
-          <label>Semester<select name="semester" defaultValue={editing === 'new' ? '' : editing.semester ?? ''}><option value="">None</option>{[1, 2, 3].map(n => <option key={n} value={n}>{semesterLabel(n)}</option>)}</select></label>
+          <label>Year level<select name="year_level" defaultValue={editing === 'new' ? '' : editing.year_level ?? ''}><option value="">Unplaced</option>{yearLevelOptions.map(n => <option key={n} value={n}>{yearLabel(n)}</option>)}</select></label>
+          <label>Semester<select name="semester" defaultValue={editing === 'new' ? '' : editing.semester ?? ''}><option value="">None</option>{[1, 2].map(n => <option key={n} value={n}>{semesterLabel(n)}</option>)}</select></label>
         </div>
         <label>College<select name="college_id" defaultValue={editing === 'new' ? '' : editing.college_id ?? ''}><option value="">Unassigned</option>{(colleges.data ?? []).filter(c => c.status === 'active').map(college => <option key={college.id} value={college.id}>{college.name}</option>)}</select></label>
         {editing !== 'new' && <button type="button" onClick={async () => { try { await send('PATCH', `/subjects/${editing.id}`, { status: editing.status === 'active' ? 'archived' : 'active' }); setEditing(null); refresh() } catch (err) { setMessage(errorText(err)) } }}>{editing.status === 'active' ? 'Archive subject' : 'Restore subject'}</button>}

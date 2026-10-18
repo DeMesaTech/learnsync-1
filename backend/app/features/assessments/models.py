@@ -120,7 +120,7 @@ class QuizQuestion(Base):
 
 
 class QuizQuestionClock(Base):
-    """Server-authoritative timer and lock state for one question in one attempt."""
+    """Server-authoritative paused timer and lock state for one question in one attempt."""
     __tablename__ = "quiz_question_clock"
     __table_args__ = (UniqueConstraint("attempt_id", "question_key", name="question_clock_unique"),)
     id: Mapped[uuid.UUID] = uid()
@@ -128,6 +128,7 @@ class QuizQuestionClock(Base):
     question_key: Mapped[str] = mapped_column(String(36))
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 

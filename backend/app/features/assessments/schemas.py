@@ -57,6 +57,10 @@ class AnswersSave(BaseModel):
     answers: dict[str, Any] = Field(default_factory=dict)
 
 
+class QuestionNavigation(BaseModel):
+    question_key: str = Field(min_length=1, max_length=36)
+
+
 class AttemptSubmit(BaseModel):
     idempotency_key: str = Field(min_length=8, max_length=64)
     answers: dict[str, Any] | None = None

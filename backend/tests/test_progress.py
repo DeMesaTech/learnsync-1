@@ -205,7 +205,7 @@ def test_a_submit_the_deadline_rejected_earns_no_progress(db, graded):
     st1, s1 = graded["st1"], graded["students"][0]
     attempt = start(st1, graded, quiz["aid"]).json()
     set_deadline(db, quiz["aid"], datetime.now(UTC) - timedelta(minutes=5))
-    late = submit(st1, graded, attempt["id"], quiz["correct"])
+    late = submit(st1, graded, attempt["id"], quiz["correct"], advance=False)
     assert late.status_code == 200 and late.json()["answers_ignored"] is True      # kept as attempt history
     assert db.get(QuizAttempt, uuid.UUID(attempt["id"])).state == "submitted"
     assert events(db, s1) == 0 and mine(graded)["done"] == 0

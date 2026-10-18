@@ -1,5 +1,31 @@
 # Acceptance status
 
+### Sequential timed quiz submission (2026-10-19)
+- Replaced the sequential Next-only interaction with a question-number navigator. Navigation pauses the current question timer and resumes the target question's timer; answers remain editable even after a question timer reaches zero, until final submission.
+- Added a nullable per-question paused timestamp migration and backend coverage for free navigation, paused/resumed timers, edits after timer expiry, and submission. Updated the quiz-stepper E2E assertion.
+- Passed: focused navigation/timer tests (8 passed), changed assessment and deadline tests (30 passed; 2 unrelated score-entry expectation failures), Ruff on changed backend files, frontend lint, frontend production build/type-check, migration-head check (`5d82a1f6c901`), and `git diff --check`.
+- The full backend suite completed with 325 passed and 14 failed. Failures included unrelated account/session, validation, database-fixture, and existing assessment score-entry tests. The late-deadline test helper was adjusted to submit directly after the deadline (rather than triggering attempt-read finalization first); its focused rerun passed.
+- Quiz-stepper browser E2E was not run because it requires explicit confirmation that its database is disposable. No migration was applied to a database, and no production data was changed.
+
+### Admin dashboard and prospectus controls (2026-10-19)
+- Removed the Admin dashboard “Needs your attention” hero, moved Academic management below the dashboard grid, and removed the Syllabus pill from Student Classwork.
+- The prospectus subject editor now offers year levels through one year beyond the highest placed subject (capped at the API-supported level 6), and only the two semesters configured for each school year.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite; existing large-chunk advisory), `cd frontend; npm run lint`, and `git diff --check`.
+- Browser-verified the Admin dashboard no longer shows the hero and Academic management appears below the dashboard grid. The subject editor showed five year options for a four-year catalog and only 1st/2nd semester. Student Classwork could not be browser-verified because the shared browser session is signed in as Admin.
+
+### Student navigation, Classwork filters, and Stream order (2026-10-19)
+- Moved Study buddy below My Classes and its subject links in the student sidebar. The Account & help group remains after the workspace/subject group.
+- Added a compact All classwork type pill that includes lessons, quizzes, and activities. Renamed the segmented Everything filter to All and adjusted it to count/filter across all types when the All type pill is selected.
+- Moved Learning activity this week to the bottom of Student Stream, after announcements and published updates/results.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite; existing large-chunk advisory), `cd frontend; npm run lint`, and `git diff --check`.
+- Browser verification was not run.
+
+### Item publishing and unpublished syllabus topics (2026-10-19)
+- Faculty item editors distinguish syllabus draft nodes from nodes in the published syllabus. If an item is attached to an unpublished node, publishing is stopped in the UI with actions to open syllabus setup (which edits the existing draft) or detach the topic; the API's `anchor_not_published` guard remains unchanged.
+- The Classwork Add chapter button opens a chapter editor backed by the syllabus autosave flow. It starts an unpublished syllabus revision when none exists, saves changes to the draft as the teacher types, flushes before closing, and never publishes automatically.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite; existing large-chunk advisory), `cd frontend; npm run lint`, and `git diff --check`. No authenticated browser interaction was run.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite; existing large-chunk advisory), `cd frontend; npm run lint`, `cd backend; .venv\Scripts\python.exe -m pytest tests\test_teaching.py::test_anchored_items_protect_syllabus_nodes -q` (1 passed), and `git diff --check`.
+
 ### Semester status reset migration (2026-10-18)
 - Added Alembic revision `c91f7a2e4b60` to reset every existing semester status to `draft`; academic/calendar records and closure metadata are unchanged. Existing schedule/activate/close actions remain in place. This is forward-only; active-term operations require an administrator to schedule and activate a semester after migration.
 - Added a migration regression test that applies the revision to representative `draft`, `scheduled`, `active`, `inactive`, and `archived` rows and verifies IDs and row data remain while all statuses become `draft`.

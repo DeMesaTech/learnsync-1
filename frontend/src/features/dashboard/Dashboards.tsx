@@ -125,19 +125,12 @@ export function AdminHome(){
   const here=useHere();
   const query=useQuery({queryKey:['dashboard','admin'],queryFn:()=>api<AdminHomeData>('/dashboard/admin')});
   return <Page query={query}>{d=>{
-    const attention=d.issues.open?{t:`${plural(d.issues.open,'open report')} to review`,s:'Students and teachers are waiting for a reply.',a:'Review reports',to:'/admin/issues'}
-      :d.accounts.invited?{t:`${plural(d.accounts.invited,'invitation')} not accepted yet`,s:'These people cannot sign in until they accept their invitation.',a:'Review accounts',to:'/admin/settings'}
-      :d.pending_imports?{t:`${plural(d.pending_imports,'student import')} waiting to be confirmed`,s:'A previewed file has not been committed.',a:'Open school-year settings',to:'/admin/settings'}:null;
     return <>
       <Heading eyebrow="Admin dashboard" title="Your academic workspace." line="Manage the academic year, students, teachers and accounts."/>
       <div className="dash-grid">
         <div className="dash-main">
           {d.setup.length>0&&<section className="panel"><h2>Get started</h2><p className="muted">Set up in this order. Finished steps are ticked.</p>
             <ol className="rows">{d.setup.map(x=><li key={x.key}>{x.done?<span><span aria-hidden="true">✓ </span>{x.label}<span className="sr-only"> (done)</span></span>:<Link state={here} to={x.link}>{x.label}</Link>}</li>)}</ol></section>}
-          <section className="panel"><h2>Academic management</h2><div className="actions">
-            <Link state={here} className="button primary" to="/admin/settings">Settings</Link><Link state={here} className="button" to="/admin/subjects">Prospectus</Link></div></section>
-          {attention?<Hero eyebrow="Needs your attention" title={attention.t} detail={attention.s} action={attention.a} to={attention.to} icon="!"/>
-            :<Hero eyebrow="Needs your attention" title="Nothing needs attention" detail="No open reports, pending invitations or unconfirmed imports." icon="✓"/>}
           <Stats items={[[d.accounts.students,'Active students'],[d.accounts.faculty,'Active faculty'],[d.accounts.inactive,'Inactive accounts'],[d.subjects,'Subjects in the catalog']]}/>
           <section className="panel"><h2>Open terms</h2>
             {d.terms.length===0?<p className="muted">No term is open. Create a school year and its terms in academic setup.</p>:
@@ -149,7 +142,9 @@ export function AdminHome(){
             {d.recent_activity.length===0?<p className="muted">No account activity yet.</p>:<ul className="rows updates">{d.recent_activity.map((a,i)=><li key={i}><strong>{ACTION_LABEL[a.action]??a.action.replace('account.','').replace(/_/g,' ')}</strong><span className="muted">{a.who} · {dateTime(a.at)}</span></li>)}</ul>}</section>
           <section className="panel"><h2>Reports</h2><p className="muted">{plural(d.issues.open,'open report')}{d.issues.in_progress?`, ${d.issues.in_progress} being looked at`:''}.</p><Link state={here} className="button" to="/admin/issues">Open reports</Link></section>
         </div>
-      </div></>;
+      </div>
+      <section className="panel"><h2>Academic management</h2><div className="actions">
+        <Link state={here} className="button primary" to="/admin/settings">Settings</Link><Link state={here} className="button" to="/admin/subjects">Prospectus</Link></div></section></>;
   }}</Page>;
 }
 

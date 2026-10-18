@@ -1,12 +1,12 @@
 import type React from 'react';
-import {useEffect,useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import {Link,useOutletContext,useSearchParams} from 'react-router-dom';
 import {ClassworkTypes,catOf,CATS} from '../../components/ClassworkTypes';
 import {Dialog} from '../../components/Dialog';
 import {useHere} from '../../components/origin';
 import {useQuery} from '@tanstack/react-query';
 import {api,post,send,errorText} from '../../app/api';
-import {queryClient} from '../../app/providers';
+import {queryClient,useAuth} from '../../app/providers';
 import type {OfferingSummary} from '../academics/types';
 import {useUndo} from '../../components/undo';
 import {GenerateDialog} from '../study/Generate';
@@ -16,7 +16,8 @@ import {detail as workDetail} from '../assessments/Work';
 import {KIND_LABEL,fmt,type Assessment,type Kind,type LearnItem as Work} from '../assessments/types';
 import {ItemEditorDialog,KIND,NewItemDialog,itemTitle,stateLabel,useNodes} from './Content';
 import {FacultyAnnouncements} from './Announcements';
-import {emptyChapter,newId,type Chapter,type Item,type LearnItem,type LearnSyllabus,type Outline,type SyllabusState} from './types';
+import {SaveIndicator,DraftNotices,draftKey,useAutosave,useFlushOnLeave} from './autosave';
+import {emptyChapter,newId,type Chapter,type Item,type LearnItem,type LearnSyllabus,type Outline,type SyllabusDraftContent,type SyllabusRev,type SyllabusState} from './types';
 
 type Create={type:'item';kind:Item['kind']}|{type:'item-editor';itemId:string}|{type:'assessment';kind:Kind}|{type:'assessment-editor';assessmentId:string}|{type:'ai'}|null;
 interface MaterialContext{anchorNodeId:string|null;label:string}
@@ -38,7 +39,7 @@ export function FacultyClasswork(){
   const items=useQuery({queryKey:['items',offering.id],queryFn:()=>api<Item[]>(`/teach/offerings/${offering.id}/items`)});
   const assessments=useQuery({queryKey:['assessments',offering.id],queryFn:()=>api<Assessment[]>(`/teach/offerings/${offering.id}/assessments`)});
   const syllabus=useQuery({queryKey:['syllabus',offering.id],queryFn:()=>api<SyllabusState>(`/teach/offerings/${offering.id}/syllabus`)});
-  const nodes=useNodes(offering.id);
+  const {nodes}=useNodes(offering.id);
   const offer=useUndo();
   const [create,setCreate]=useState<Create>(null);
   const [addingChapter,setAddingChapter]=useState(false);
@@ -222,70 +223,107 @@ export function FacultyClasswork(){
     {create?.type==='assessment'&&<NewDialog offering={offering} kind={create.kind} anchorNodeId={materialContext.anchorNodeId} contextLabel={materialContext.label} onClose={()=>setCreate(null)} onCreated={assessmentCreated}/>}
     {create?.type==='assessment-editor'&&<AssessmentEditorDialog offering={offering} assessmentId={create.assessmentId} contextLabel={materialContext.label} onClose={()=>{setCreate(null);queryClient.invalidateQueries({queryKey:['assessments',offering.id]})}}/>}
     {create?.type==='ai'&&<GenerateDialog offering={offering} anchorNodeId={materialContext.anchorNodeId} contextLabel={materialContext.label} onClose={()=>setCreate(null)} onCreated={assessmentCreated}/>}
-    {addingChapter&&<ChapterDialog offering={offering} hasIntro={chapters.some(chapter=>chapter.is_intro)} onClose={()=>setAddingChapter(false)} onAdded={id=>{setAddingChapter(false);setActiveChapter(id)}}/>}
+    {addingChapter&&<ChapterDialog offering={offering} onClose={()=>setAddingChapter(false)} onAdded={id=>{setAddingChapter(false);if(id)setActiveChapter(id);void queryClient.invalidateQueries({queryKey:['syllabus',offering.id]})}}/>}
   </>;
 }
 
-function ChapterDialog({offering,hasIntro,onClose,onAdded}:{offering:OfferingSummary;hasIntro:boolean;onClose:()=>void;onAdded:(id:string)=>void}){
+function ChapterDialog({offering,onClose,onAdded}:{offering:OfferingSummary;onClose:()=>void;onAdded:(id:string|null)=>void}){
   const url=`/teach/offerings/${offering.id}/syllabus`;
-  const [chapter,setChapter]=useState<Chapter>(()=>emptyChapter());
-  const [topics,setTopics]=useState<{id:string;title:string}[]>([]);
+  const ensureDraft=useRef<Promise<SyllabusRev>|null>(null);
+  const closeHandler=useRef<()=>Promise<boolean>>(async()=>{onClose();return true});
+  const [draft,setDraft]=useState<SyllabusRev|null>(null);
   const [message,setMessage]=useState('');
-  const [saving,setSaving]=useState(false);
+  useEffect(()=>{
+    let cancelled=false;
+    ensureDraft.current??=(async()=>{
+      try{
+        let state=await api<SyllabusState>(url);
+        if(!state.draft){
+          await post(`${url}/draft`,{});
+          state=await api<SyllabusState>(url);
+        }
+        if(!state.draft)throw new Error('A syllabus draft could not be created. Please try again.');
+        return state.draft;
+      }catch(error){throw new Error(errorText(error))}
+    })();
+    void ensureDraft.current.then(result=>{
+      if(!cancelled){setDraft(result);void queryClient.invalidateQueries({queryKey:['syllabus',offering.id]})}
+    }).catch(error=>{if(!cancelled)setMessage(errorText(error))});
+    return()=>{cancelled=true};
+  },[url,offering.id]);
+  const registerClose=useCallback((close:()=>Promise<boolean>)=>{closeHandler.current=close},[]);
+  return <Dialog title="Add chapter to syllabus" onClose={()=>closeHandler.current()} confirmOnClose={false}>
+    {message?<p role="alert">{message}</p>:!draft?<p>Preparing an unpublished syllabus draft…</p>
+      :<ChapterDraftEditor offering={offering} draft={draft} closeRef={closeHandler} onCloseReady={registerClose} onAdded={onAdded}/>}
+  </Dialog>;
+}
 
-  async function save(event:React.FormEvent<HTMLFormElement>){
-    event.preventDefault();
-    setMessage('');
-    if(!chapter.title.trim()){
-      setMessage('Enter a chapter title.');
-      return;
-    }
-    setSaving(true);
-    try{
-      let state=await api<SyllabusState>(url);
-      if(!state.draft){
-        await post(`${url}/draft`,{});
-        state=await api<SyllabusState>(url);
-      }
-      if(!state.draft)throw new Error('A syllabus draft could not be created. Please try again.');
-      if(chapter.is_intro&&state.draft.outline.chapters.some(existing=>existing.is_intro))throw new Error('This subject already has an introductory chapter.');
-      const nextChapter={...chapter,title:chapter.title.trim(),topics:topics.filter(topic=>topic.title.trim()).map(topic=>({...topic,title:topic.title.trim()}))};
-      const chapters=chapter.is_intro?[nextChapter,...state.draft.outline.chapters]:[...state.draft.outline.chapters,nextChapter];
-      await send('PUT',`${url}/draft`,{
-        expected_counter:state.draft.counter,
-        outline:{...state.draft.outline,chapters},
-        grading_policy:state.draft.grading_policy,
-      });
-      await queryClient.invalidateQueries({queryKey:['syllabus',offering.id]});
-      onAdded(nextChapter.id);
-    }catch(error){setMessage(errorText(error))}
-    finally{setSaving(false)}
+function ChapterDraftEditor({offering,draft,closeRef,onCloseReady,onAdded}:{offering:OfferingSummary;draft:SyllabusRev;closeRef:{current:()=>Promise<boolean>};onCloseReady:(close:()=>Promise<boolean>)=>void;onAdded:(id:string|null)=>void}){
+  const {session}=useAuth();
+  const initialChapter=useState(()=>emptyChapter())[0];
+  const url=`/teach/offerings/${offering.id}/syllabus`;
+  const auto=useAutosave<SyllabusDraftContent>({
+    storageKey:draftKey(session?.user?.id,offering.id,'syllabus'),
+    initial:{outline:draft.outline,grading_policy:draft.grading_policy},
+    counter:draft.counter,
+    save:(value,counter)=>send<{counter:number}>('PUT',`${url}/draft`,{
+      expected_counter:counter,outline:value.outline,grading_policy:value.grading_policy,
+    }),
+  });
+  const {value:savedValue,flush}=auto;
+  const [message,setMessage]=useState('');
+  useFlushOnLeave(auto.status,auto.flush);
+  const chapter=auto.value.outline.chapters.find(item=>item.id===initialChapter.id)??initialChapter;
+  const hasIntro=auto.value.outline.chapters.some(item=>item.id!==chapter.id&&item.is_intro);
+
+  function updateChapter(next:Chapter){
+    const others=auto.value.outline.chapters.filter(item=>item.id!==next.id);
+    const chapters=next.is_intro?[next,...others]:[...others,next];
+    auto.setValue({...auto.value,outline:{...auto.value.outline,chapters}});
   }
 
-  return <Dialog title="Add chapter" onClose={onClose}>
-    <form onSubmit={save}>
-      <label>Chapter type<select value={chapter.is_intro?'intro':'chapter'} onChange={event=>{
-        const isIntro=event.target.value==='intro';
-        setChapter({...chapter,is_intro:isIntro,title:isIntro?(chapter.title||`Introduction to ${offering.subject.title}`):chapter.title});
-      }}>
-        <option value="chapter">Regular chapter</option><option value="intro" disabled={hasIntro}>Subject introduction</option>
-      </select></label>
-      <div className="grid-2">
-        <label>Title<input value={chapter.title} maxLength={300} required onChange={event=>setChapter({...chapter,title:event.target.value})}/></label>
-        <label>Time allotment<input value={chapter.weeks} maxLength={60} placeholder="Week 2" onChange={event=>setChapter({...chapter,weeks:event.target.value})}/></label>
-      </div>
-      <fieldset><legend>Topics</legend>
-        {topics.map((topic,index)=><div className="topic-row" key={topic.id}>
-          <input aria-label={`Topic ${index+1}`} value={topic.title} maxLength={300} onChange={event=>setTopics(topics.map(item=>item.id===topic.id?{...item,title:event.target.value}:item))}/>
-          <button type="button" className="icon-button" aria-label={`Remove topic ${index+1}`} onClick={()=>setTopics(topics.filter(item=>item.id!==topic.id))}>×</button>
-        </div>)}
-        <button type="button" onClick={()=>setTopics([...topics,{id:newId(),title:''}])}>Add topic</button>
-      </fieldset>
-      {message&&<p role="alert">{message}</p>}
-      <div className="actions"><button type="button" disabled={saving} onClick={onClose}>Cancel</button>
-        <button className="primary" disabled={saving}>{saving?'Saving…':'Add chapter'}</button></div>
-    </form>
-  </Dialog>;
+  const close=useCallback(async()=>{
+    setMessage('');
+    if(!await flush()){
+      setMessage('The latest chapter changes could not be saved. Resolve the save issue before closing.');
+      return false;
+    }
+    const saved=savedValue.outline.chapters.some(item=>item.id===chapter.id);
+    onAdded(saved?chapter.id:null);
+    return true;
+  },[flush,savedValue.outline.chapters,chapter.id,onAdded]);
+  useEffect(()=>{onCloseReady(close)},[close,onCloseReady]);
+
+  async function reload(){
+    const state=await api<SyllabusState>(url);
+    if(!state.draft)throw new Error('The syllabus draft no longer exists.');
+    return {value:{outline:state.draft.outline,grading_policy:state.draft.grading_policy},counter:state.draft.counter};
+  }
+
+  return <>
+    <p className="muted">Changes save automatically to syllabus draft version {draft.version}. Students continue to see the published syllabus until you publish this draft.</p>
+    <SaveIndicator status={auto.status} message={auto.message} storageFailed={auto.storageFailed} onRetry={auto.retry}/>
+    <DraftNotices auto={auto} reload={reload} onError={setMessage}/>
+    <label>Chapter type<select value={chapter.is_intro?'intro':'chapter'} onChange={event=>{
+      const isIntro=event.target.value==='intro';
+      updateChapter({...chapter,is_intro:isIntro,title:isIntro?(chapter.title||`Introduction to ${offering.subject.title}`):chapter.title});
+    }}>
+      <option value="chapter">Regular chapter</option><option value="intro" disabled={hasIntro}>Subject introduction</option>
+    </select></label>
+    <div className="grid-2">
+      <label>Title<input value={chapter.title} maxLength={300} onChange={event=>updateChapter({...chapter,title:event.target.value})}/></label>
+      <label>Time allotment<input value={chapter.weeks} maxLength={60} placeholder="Week 2" onChange={event=>updateChapter({...chapter,weeks:event.target.value})}/></label>
+    </div>
+    <fieldset><legend>Topics</legend>
+      {chapter.topics.map((topic,index)=><div className="topic-row" key={topic.id}>
+        <input aria-label={`Topic ${index+1}`} value={topic.title} maxLength={300} onChange={event=>updateChapter({...chapter,topics:chapter.topics.map(item=>item.id===topic.id?{...item,title:event.target.value}:item)})}/>
+        <button type="button" className="icon-button" aria-label={`Remove topic ${index+1}`} onClick={()=>updateChapter({...chapter,topics:chapter.topics.filter(item=>item.id!==topic.id)})}>×</button>
+      </div>)}
+      <button type="button" onClick={()=>updateChapter({...chapter,topics:[...chapter.topics,{id:newId(),title:''}]})}>Add topic</button>
+    </fieldset>
+    {message&&<p role="alert">{message}</p>}
+    <div className="actions"><button type="button" onClick={()=>void closeRef.current()}>Done</button></div>
+  </>;
 }
 
 interface WorkRow extends Work{anchor_node_id?:string|null}
@@ -370,12 +408,14 @@ export function StudentClasswork(){
   const items=useQuery({queryKey:['learn-items',offering.id],queryFn:()=>api<LearnItem[]>(`/learn/offerings/${offering.id}/items`)});
   const work=useQuery({queryKey:['learn-work',offering.id],queryFn:()=>api<WorkRow[]>(`/learn/offerings/${offering.id}/assessments`)});
   const syllabus=useQuery({queryKey:['learn-syllabus',offering.id],queryFn:()=>api<LearnSyllabus>(`/learn/offerings/${offering.id}/syllabus`)});
-  const cat=catOf(useSearchParams()[0].get('type'));const here=useHere();
-  const [filters,setFilters]=useState<Record<string,Filter>>({});const filter=filters[cat]??'all';      // each tab remembers its own filter
+  const typeParam=useSearchParams()[0].get('type');
+  const allTypes=typeParam==='all';
+  const cat=catOf(typeParam);const here=useHere();
+  const [filters,setFilters]=useState<Record<string,Filter>>({});const filter=filters[allTypes?'all':cat]??'all';
   const [search,setSearch]=useState('');
   const [activeChapter,setActiveChapter]=useState('');
   const [chapterDisplay,setChapterDisplay]=useState<'single'|'all'>('single');
-  const setFilter=(f:Filter)=>setFilters({...filters,[cat]:f});
+  const setFilter=(f:Filter)=>setFilters({...filters,[allTypes?'all':cat]:f});
   const error=items.error??work.error??syllabus.error;if(error)return <p role="alert">{error.message}</p>;
   if(!items.data||!work.data||!syllabus.data)return <p>Loading…</p>;
   const nearest=work.data.find(w=>w.bucket==='todo');                // sorted by deadline, so this is the nearest
@@ -391,7 +431,7 @@ export function StudentClasswork(){
       chips:[...(w===nearest?[{text:'Up next',cls:'next'}]:[]),...(w.state==='in_progress'?[{text:'In progress'}]:[]),...(w.late_allowed?[{text:'Late submission allowed',cls:'warn'}]:[])],
       todo:w.bucket==='todo'||w.bucket==='again',done:w.bucket==='done'||w.bucket==='awaiting',
       result:w.result?`Your result: ${fmt(w.result.score)} / ${fmt(w.result.max_points)}`:undefined}))];
-  const want=(r:SRow)=>r.cat===cat&&(filter==='all'||(filter==='todo'?r.todo:r.done));
+  const want=(r:SRow)=>(allTypes||r.cat===cat)&&(filter==='all'||(filter==='todo'?r.todo:r.done));
   const outline=syllabus.data?.published?.outline;
   const shownRows=rows.filter(want);
   const visibleRows=shownRows.filter(row=>row.title.toLowerCase().includes(search.trim().toLowerCase()));
@@ -402,7 +442,7 @@ export function StudentClasswork(){
   const selectedTree=tree.find(node=>node.id===selectedChapterId);
   const chapterTrees=chapters.map(chapter=>tree.find(node=>node.id===chapter.id)??{id:chapter.id,title:chapter.title||'Untitled chapter',rows:[],kids:[]} as TNode<SRow>);
   const otherTree=tree.find(node=>node.id==='other');
-  const count=(k:Filter)=>rows.filter(r=>r.cat===cat&&(k==='all'||(k==='todo'?r.todo:r.done))).length;
+  const count=(k:Filter)=>rows.filter(r=>(allTypes||r.cat===cat)&&(k==='all'||(k==='todo'?r.todo:r.done))).length;
   const doneCount=rows.filter(row=>row.done).length;
   const todoCount=rows.filter(row=>row.todo).length;
   return <>
@@ -420,7 +460,7 @@ export function StudentClasswork(){
       <div className="cw-bar">
         {cat==='lesson'&&lessons.length>0&&<div className="seq-head"><p><strong>{finished} of {lessons.length}</strong> complete</p>
           {next&&<Link className="button primary" to={`${base}/lessons/${next.id}`}>Continue: {next.title}</Link>}</div>}
-        <div className="segmented" role="group" aria-label="Show">{([['all','Everything'],['todo',cat==='lesson'?'Not completed':'To do'],['done',cat==='lesson'?'Completed':'Done']] as const).map(([k,l])=>
+        <div className="segmented" role="group" aria-label="Show">{([['all','All'],['todo',cat==='lesson'&&!allTypes?'Not completed':'To do'],['done',cat==='lesson'&&!allTypes?'Completed':'Done']] as const).map(([k,l])=>
           <button key={k} type="button" className={filter===k?'on':''} aria-pressed={filter===k} onClick={()=>setFilter(k)}>{l} <span className="muted">{count(k)}</span></button>)}</div>
       </div>
     </div>
@@ -443,7 +483,7 @@ export function StudentClasswork(){
           <div className="section-head"><h3>Learning materials</h3><span className="muted">{chapterDisplay==='all'?`${visibleRows.length} items`:`${selectedTree?total(selectedTree):0} items`}</span></div>
           <div className="chapter-material-tools">
             <label className="chapter-material-search">Search chapter materials<input type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="Search chapter materials…"/></label>
-            <div className="type-row"><ClassworkTypes base={base} current={cat} counts={Object.fromEntries(CATS.map(([k])=>[k,rows.filter(r=>r.cat===k).length]))}/></div>
+            <div className="type-row"><ClassworkTypes base={base} current={allTypes?'all':cat} includeAll compactAll showSyllabus={false} counts={{...Object.fromEntries(CATS.map(([k])=>[k,rows.filter(r=>r.cat===k).length])),all:rows.length}}/></div>
           </div>
           {chapterDisplay==='single'
             ?selectedTree?<Branch node={selectedTree} depth={0} here={here} bare/>:

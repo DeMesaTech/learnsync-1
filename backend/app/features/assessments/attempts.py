@@ -46,38 +46,6 @@ def attempt_questions(db, attempt):
     return questions_of(db, attempt.revision_id)
 
 
-def advance_expired_questions(db, attempt, at=None):
-    """Lock elapsed questions and start the next clock from the previous deadline."""
-    if attempt.state != "in_progress":
-        return False
-    at = at or now()
-    questions = attempt_questions(db, attempt)
-    clocks = {c.question_key: c for c in db.scalars(
-        select(QuizQuestionClock).where(QuizQuestionClock.attempt_id == attempt.id))}
-    changed = False
-    for index, question in enumerate(questions):
-        clock = clocks.get(question.key)
-        if clock is None:
-            started_at = at if index == 0 else clocks[questions[index - 1].key].expires_at
-            clock = QuizQuestionClock(
-                attempt_id=attempt.id, question_key=question.key, started_at=started_at,
-                expires_at=started_at + timedelta(minutes=question.duration_minutes))
-            db.add(clock)
-            db.flush()
-            clocks[question.key] = clock
-            changed = True
-        if clock.locked_at is not None:
-            continue
-        if clock.expires_at > at:
-            break
-        clock.locked_at = clock.expires_at
-        changed = True
-        if index == len(questions) - 1:
-            finalize(db, attempt)
-            return True
-    return changed
-
-
 def finalize(db, attempt, by_student=False):
     """Score the saved answers, close the attempt, refresh the working score and release it.
     Only a submit the student made counts as progress; expiry and faculty closing do not."""
@@ -116,7 +84,6 @@ def student_view(db, attempt):
         select(QuizAnswer).where(QuizAnswer.attempt_id == attempt.id))}
     clocks = {c.question_key: c for c in db.scalars(
         select(QuizQuestionClock).where(QuizQuestionClock.attempt_id == attempt.id))}
-    visible_questions = [q for q in questions if q.key in clocks]
     out = {"id": attempt.id, "state": attempt.state, "attempt_number": attempt.attempt_number,
            "started_at": attempt.started_at, "submitted_at": attempt.submitted_at,
            "server_now": now(),
@@ -126,12 +93,14 @@ def student_view(db, attempt):
                           "points": q.points, "duration_minutes": q.duration_minutes,
                           "started_at": clocks[q.key].started_at if q.key in clocks else None,
                           "expires_at": clocks[q.key].expires_at if q.key in clocks else None,
+                          "paused_at": clocks[q.key].paused_at if q.key in clocks else None,
                           "locked_at": clocks[q.key].locked_at if q.key in clocks else None}
-                         for q in visible_questions],
+                         for q in questions],
            "answers": answers}
     out["active_question_key"] = next(
-        (q.key for q in visible_questions
-         if q.key in clocks and clocks[q.key].locked_at is None), None)
+        (q.key for q in questions
+         if q.key in clocks and clocks[q.key].locked_at is None
+         and clocks[q.key].paused_at is None), None)
     if attempt.state == "submitted":
         out["score"], out["max_score"] = attempt.score, attempt.max_score
     return out
@@ -165,7 +134,6 @@ def start(db, student, assessment):
         QuizAttempt.state == "in_progress"))
     if current:
         if not expired(rev, at):
-            advance_expired_questions(db, current, at)
             db.commit()
             return current                                  # a reload resumes the same attempt
         finalize(db, current)
@@ -190,14 +158,8 @@ def own_attempt_view(db, student, attempt_id, offering_id):
     student_lock(db, target.assessment_id, student.id)
     attempt = own_attempt(db, student, attempt_id, offering_id, lock=True)
     rev = revision(db, attempt.assessment_id, "published")
-    changed = False
-    if attempt.state == "in_progress":
-        if expired(rev, now()):
-            finalize(db, attempt)
-            changed = True
-        else:
-            changed = advance_expired_questions(db, attempt)
-    if changed:
+    if attempt.state == "in_progress" and expired(rev, now()):
+        finalize(db, attempt)
         db.commit()
     return student_view(db, attempt)
 
@@ -213,10 +175,6 @@ def save_answers(db, student, offering_id, attempt_id, answers):
         finalize(db, attempt)
         db.commit()
         fail(409, "attempt_closed", "The deadline passed; your saved answers were submitted.")
-    advance_expired_questions(db, attempt)
-    if attempt.state != "in_progress":
-        db.commit()
-        fail(409, "attempt_closed", "The quiz timer ended; your saved answers were submitted.")
     keys = {q.key for q in attempt_questions(db, attempt)}
     unknown = set(answers) - keys
     if unknown:
@@ -226,7 +184,8 @@ def save_answers(db, student, offering_id, attempt_id, answers):
     clocks = {c.question_key: c for c in db.scalars(
         select(QuizQuestionClock).where(QuizQuestionClock.attempt_id == attempt.id))}
     active = next((q.key for q in attempt_questions(db, attempt)
-                   if q.key in clocks and clocks[q.key].locked_at is None), None)
+                   if q.key in clocks and clocks[q.key].locked_at is None
+                   and clocks[q.key].paused_at is None), None)
     for key, response in answers.items():
         clock = clocks.get(key)
         if clock is not None and clock.locked_at is not None:
@@ -236,10 +195,6 @@ def save_answers(db, student, offering_id, attempt_id, answers):
             continue
         if key != active:
             fail(409, "question_not_active", "Wait until this question's timer starts before answering it.")
-        if clock.expires_at <= now():
-            advance_expired_questions(db, attempt)
-            db.commit()
-            fail(409, "question_locked", "That question's timer has ended; its saved answer is locked.")
         if isinstance(response, str):
             response = response[:MAX_ANSWER_CHARS]
         if key in existing:
@@ -250,6 +205,46 @@ def save_answers(db, student, offering_id, attempt_id, answers):
     return {"saved": len(answers)}
 
 
+def navigate_question(db, student, offering_id, attempt_id, question_key):
+    target = own_attempt(db, student, attempt_id, offering_id)
+    student_lock(db, target.assessment_id, student.id)
+    attempt = own_attempt(db, student, attempt_id, offering_id, lock=True)
+    if attempt.state != "in_progress":
+        fail(409, "attempt_closed", "This attempt has already been submitted.")
+    rev = revision(db, attempt.assessment_id, "published")
+    if expired(rev, now()):
+        finalize(db, attempt)
+        db.commit()
+        fail(409, "attempt_closed", "The deadline passed; your saved answers were submitted.")
+    questions = attempt_questions(db, attempt)
+    active_index = next((i for i, question in enumerate(questions)
+                         if question.key == question_key), None)
+    if active_index is None:
+        fail(422, "question_unknown", "The question is not part of this quiz.")
+    clocks = {clock.question_key: clock for clock in db.scalars(
+        select(QuizQuestionClock).where(QuizQuestionClock.attempt_id == attempt.id))}
+    selected = questions[active_index]
+    selected_clock = clocks.get(question_key)
+    if selected_clock is not None and selected_clock.locked_at is not None:
+        fail(409, "question_locked", "This question is locked.")
+    at = now()
+    for clock in clocks.values():
+        if clock.locked_at is None and clock.paused_at is None:
+            clock.paused_at = at
+
+    if selected_clock is None:
+        selected_clock = QuizQuestionClock(
+            attempt_id=attempt.id, question_key=question_key, started_at=at,
+            expires_at=at + timedelta(minutes=selected.duration_minutes))
+        db.add(selected_clock)
+    else:
+        if selected_clock.paused_at is not None:
+            selected_clock.expires_at += at - selected_clock.paused_at
+            selected_clock.paused_at = None
+    db.commit()
+    return student_view(db, attempt)
+
+
 def submit(db, student, offering_id, attempt_id, idempotency_key, answers):
     target = own_attempt(db, student, attempt_id, offering_id)
     student_lock(db, target.assessment_id, student.id)
@@ -257,11 +252,6 @@ def submit(db, student, offering_id, attempt_id, idempotency_key, answers):
     if attempt.state == "submitted":
         return student_view(db, attempt)                    # idempotent: same result, no re-score
     rev = revision(db, attempt.assessment_id, "published")
-    if not expired(rev, now()):
-        advance_expired_questions(db, attempt)
-        if attempt.state == "submitted":
-            db.commit()
-            return student_view(db, attempt)
     ignored = bool(answers) and expired(rev, now())     # sent after a strict deadline: not counted
     if answers and not ignored:
         keys = {q.key for q in attempt_questions(db, attempt)}

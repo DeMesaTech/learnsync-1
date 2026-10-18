@@ -72,6 +72,24 @@ textarea {
   accent-color: var(--action);
 }
 
+.quiz-question-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0
+}
+
+.quiz-question-nav button {
+  min-width: 44px;
+  padding: 8px 12px
+}
+
+.quiz-question-nav button.active {
+  background: var(--action);
+  border-color: var(--action);
+  color: var(--surface)
+}
+
 label {
   display: grid;
   gap: 6px;
@@ -4785,6 +4803,12 @@ details.topic[open]>summary::before {
 .type-tabs a.active .muted {
   color: inherit;
   opacity: .85
+}
+
+.type-tabs a.type-all-compact {
+  min-height: 36px;
+  padding: 4px 12px;
+  font-size: .9rem
 }
 
 .content-manager-header h2 {
