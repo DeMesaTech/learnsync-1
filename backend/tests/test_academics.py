@@ -133,10 +133,17 @@ def test_school_year_creation_rolls_back_after_late_failure(db, actors, monkeypa
 
 
 def test_only_admin_can_administer(db, actors):
-    assert TestClient(app).get("/api/school-years").status_code == 401
+    unauthenticated = TestClient(app).get("/api/school-years")
+    assert unauthenticated.status_code == 401
+
+    admin = Api("admin@example.com")
+    assert admin.get("/api/school-years").status_code == 200
+
     for email in ("faculty@example.com", "student@example.com"):
         api = Api(email)
-        assert api.get("/api/school-years").status_code == 403
+        response = api.get("/api/school-years")
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "role_forbidden"
         assert api.post("/api/subjects", {"code": "X", "title": "X", "units": "1"}).status_code == 403
 
 

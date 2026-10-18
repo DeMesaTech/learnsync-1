@@ -33,33 +33,9 @@ export function SchoolYears(){
         <p className="muted">Configure the academic year and the structure used across LearnSync.</p></div>
     </div>
     <div className="settings-layout">
-      <aside className="settings-navigation">
-        <p className="settings-navigation-title">Institution</p>
-        <nav aria-label="Settings sections">
-          <Link className="settings-nav-link active" to="/admin/settings" aria-current="page">
-            <span aria-hidden="true">▦</span><span><strong>Academic calendar</strong><small>School years and semesters</small></span>
-          </Link>
-          <Link className="settings-nav-link" to="/admin/subjects">
-            <span aria-hidden="true">▤</span><span><strong>Prospectus</strong><small>Subjects and placements</small></span>
-          </Link>
-          <Link className="settings-nav-link" to="/admin/students">
-            <span aria-hidden="true">◫</span><span><strong>Students and sections</strong><small>Enrollment and rosters</small></span>
-          </Link>
-          <Link className="settings-nav-link" to="/admin/offerings">
-            <span aria-hidden="true">☷</span><span><strong>Faculty assignments</strong><small>Teacher assignments</small></span>
-          </Link>
-          <Link className="settings-nav-link" to="/account">
-            <span aria-hidden="true">○</span><span><strong>Account and theme</strong><small>Your profile preferences</small></span>
-          </Link>
-        </nav>
-        <div className="settings-navigation-note">
-          <strong>Academic setup</strong>
-          <p>Changes here affect the terms where students and teachers work.</p>
-        </div>
-      </aside>
       <div className="settings-main">
         <section className="settings-section-heading">
-          <div><p className="eyebrow">ACADEMIC CALENDAR</p><h2>School years and semesters</h2>
+          <div><p className="eyebrow">School year</p><h2>School years and semesters</h2>
             <p className="muted">Create yearly calendars, prepare semesters, and control when academic records can be changed.</p></div>
           <button className="primary" onClick={()=>{setMessage('');setCreating(true)}}>＋ New school year</button>
         </section>

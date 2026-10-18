@@ -13,7 +13,7 @@ import {studentHomeQuery} from '../features/dashboard/Dashboards';
 import {useUnread} from './seen';
 import {StudyBuddy} from '../features/study/StudyBuddy';
 import {useConfirm} from './confirm';
-import type {MySubject,OfferingSummary,SchoolYear} from '../features/academics/types';
+import type {MySubject,OfferingSummary} from '../features/academics/types';
 import logoUrl from '../img/gmvcc.png';
 
 type NavItem={to:string;label:string;icon:string;end?:boolean;dot?:boolean;children?:NavItem[]};
@@ -21,13 +21,13 @@ type ClassLink={to:string;label:string;icon:string};
 const ROLE_LABEL={admin:'Academic administrator',faculty:'Teaching faculty',student:'Student'} as const;
 
 /** Grouped navigation. Icons and the school logo are decoration; every entry has a visible text label. */
-function navigation(role:'admin'|'faculty'|'student', schoolYears?:SchoolYear[], classes:ClassLink[]=[]):{label:string;items:NavItem[]}[]{
+function navigation(role:'admin'|'faculty'|'student', classes:ClassLink[]=[]):{label:string;items:NavItem[]}[]{
   const home='/'+role;
   const account={label:'Account & help',items:[{to:'/account',label:'Account & theme',icon:'○'}]};
   if(role==='admin'){
     return [
       {label:'Management',items:[{to:`${home}/students`,label:'Student',icon:'◫'},{to:`${home}/offerings`,label:'Faculty',icon:'☰'}]},
-      {label:'Oversight',items:[{to:`${home}/subjects`,label:'Subjects',icon:'▤'},{to:`${home}/issues`,label:'Reports',icon:'?'},{to:`${home}/audit`,label:'Audit history',icon:'◷'}]},
+      {label:'Oversight',items:[{to:`${home}/subjects`,label:'Subjects',icon:'▤'}/*,{to:`${home}/issues`,label:'Reports',icon:'?'},{to:`${home}/audit`,label:'Audit history',icon:'◷'}*/]},
       {label:'Settings',items:[{to:`${home}/settings`,label:'Settings',icon:'⚙'}]}
     ];
   }
@@ -48,7 +48,6 @@ function UpdatesDot({userId}:{userId:string}){
 export function Shell(){
   const ask=useConfirm();
   const {session,loading,error}=useAuth();const {theme,setTheme}=useTheme();
-  const schoolYears=useQuery({queryKey:['school-years'],queryFn:()=>api<SchoolYear[]>('/school-years')});
   const classes=useQuery({queryKey:['sidebar-classes',session?.user?.id,session?.user?.role],
     enabled:session?.user?.role==='faculty'||session?.user?.role==='student',
     queryFn:async():Promise<ClassLink[]>=>{
@@ -100,7 +99,7 @@ export function Shell(){
     </header>
     <aside id="main-navigation" className={'sidebar '+(open?'open':'')}>
       <nav aria-label="Main" onClick={()=>setOpen(false)}>
-        {navigation(user.role, schoolYears.data, classes.data??[]).map(group=><div className="nav-group" key={group.label}>
+        {navigation(user.role, classes.data??[]).map(group=><div className="nav-group" key={group.label}>
           <p className="nav-label">{group.label}</p>
           {group.items.map(i=>i.children?
             <div className="nav-subgroup" key={i.to}>

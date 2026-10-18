@@ -1,5 +1,11 @@
 # Acceptance status
 
+### School year settings cleanup (2026-10-18)
+- Removed the redundant settings-navigation sidebar from the school-year settings page and expanded the academic calendar to the available content width. Renamed its eyebrow from “Academic calendar” to “School year”.
+- Updated the design-system route map to reflect the focused Settings page.
+- Passed: `cd frontend; npm run build` (TypeScript and production build; existing large-chunk advisory), `cd frontend; npm run lint`, and `git diff --check`.
+- Browser verification was not run.
+
 ### Student Classwork content-manager layout (2026-10-18)
 - Aligned the student Classwork hierarchy with faculty Classwork: subject classwork heading, overview cards, chapter navigation, and chapter detail panel. Kept student type/completion filters and Continue behavior, placed the type pills below chapter-material search, moved the chapter-view selector into the detail panel, and added chapter-material search scoped to the selected type/status filters.
 - Updated `docs/DESIGN_SYSTEM.md` to reflect the shared layout and student-specific behavior.

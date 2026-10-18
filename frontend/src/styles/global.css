@@ -1377,94 +1377,9 @@ code {
 
 .settings-layout {
   display: grid;
-  grid-template-columns: minmax(215px, 250px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 20px
-}
-
-.settings-navigation {
-  position: sticky;
-  top: calc(var(--header-h, 74px) + 18px);
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--surface);
-  box-shadow: 0 6px 20px rgba(25, 52, 71, .04)
-}
-
-.settings-navigation-title {
-  margin: 4px 8px 10px;
-  color: var(--muted);
-  font-size: .72rem;
-  font-weight: 750;
-  letter-spacing: .1em;
-  text-transform: uppercase
-}
-
-.settings-navigation nav {
-  display: grid;
-  gap: 4px
-}
-
-.settings-nav-link {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
-  padding: 10px 8px;
-  border-radius: 9px;
-  color: var(--text);
-  text-decoration: none
-}
-
-.settings-nav-link>span:first-child {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: var(--surface-alt);
-  color: var(--action);
-  font-size: 1.1rem
-}
-
-.settings-nav-link strong,
-.settings-nav-link small {
-  display: block
-}
-
-.settings-nav-link strong {
-  font-size: .88rem
-}
-
-.settings-nav-link small {
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: .74rem;
-  line-height: 1.35
-}
-
-.settings-nav-link:hover,
-.settings-nav-link:focus-visible,
-.settings-nav-link.active {
-  background: var(--surface-alt)
-}
-
-.settings-nav-link.active strong {
-  color: var(--action)
-}
-
-.settings-navigation-note {
-  margin-top: 14px;
-  padding: 12px 10px 4px;
-  border-top: 1px solid var(--border);
-  font-size: .8rem
-}
-
-.settings-navigation-note p {
-  margin: 5px 0 8px;
-  color: var(--muted);
-  font-size: .76rem
 }
 
 .settings-main {
@@ -1750,18 +1665,6 @@ code {
     grid-template-columns: 1fr;
     gap: 14px
   }
-
-  .settings-navigation {
-    position: static
-  }
-
-  .settings-navigation nav {
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr))
-  }
-
-  .settings-navigation-note {
-    display: none
-  }
 }
 
 @media (max-width: 640px) {
@@ -1834,9 +1737,6 @@ code {
     grid-template-columns: 1fr
   }
 
-  .settings-navigation nav {
-    grid-template-columns: 1fr
-  }
 }
 
 .content {
