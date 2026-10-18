@@ -468,6 +468,19 @@ Browser (real running stack, desktop + 375px mobile emulation):
   catalog; imported students through the import page (preview showed the invalid-email row, "Import" button disabled while
   an error exists; corrected file imported 3 invited students and placed them in the section); term workspace showed the
   section (3 students) and the offering (ENT 101, Demo faculty 1, 3 enrolled).
+
+### 2026-10-18 (School-year permission request)
+- Removed the unconditional `GET /api/school-years` query from the shared shell. Its result was not used to render navigation;
+  the Admin settings and student/term management pages retain their Admin-only calendar queries. No read-only endpoint is
+  needed for Teacher or Student pages.
+- Extended the school-year authorization test: Admin receives 200, Teacher and Student receive 403 `role_forbidden`, and
+  unauthenticated requests receive 401. Passed focused test:
+  `cd backend; .venv\Scripts\python.exe -m pytest tests\test_academics.py::test_only_admin_can_administer -q`.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk advisory).
+- Full backend suite: 322 passed, 14 failed. Failures are outside the school-year change, including invitation-mail
+  configuration (503), session expiry, timezone-sensitive assessment assertions, and AI-generation/study behavior.
+  Full-suite gate remains blocked pending those existing test/environment failures.
+- React Query's shared client already sets `retry: false`; 401/403 failures are not retried.
 - Faculty1 sees exactly the assigned subject and a read-only roster; faculty2 gets 404 on that offering and roster and an
   empty "My Classes"; an unrelated student gets 403 on the roster and an empty "My Classes"; student gets 403 on admin APIs.
 - Mobile 375px: found and fixed page-wide horizontal overflow (absolutely positioned `.sr-only` header cell escaping the
