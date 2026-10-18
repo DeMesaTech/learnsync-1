@@ -5208,6 +5208,11 @@ details.topic[open]>summary::before {
   margin: 12px 0 4px
 }
 
+.chapter-material-tools .type-row,
+.chapter-material-tools .type-tabs {
+  margin: 0
+}
+
 .chapter-material-search {
   display: block;
   margin: 0

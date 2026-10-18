@@ -27,6 +27,7 @@ from .models import LearningEvent, LessonCompletion
 
 DAYS, WEEKS = 14, 8
 TYPES = ("lesson_completed", "quiz_submitted", "activity_submitted")
+WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 
 def complete_lesson(db, student, offering_id, item_id):
@@ -78,6 +79,20 @@ def buckets(events, today):
             [{"week_start": d.isoformat(), "count": n} for d, n in week_counts.items()])
 
 
+def week_data(events, today=None):
+    """Monday-to-Sunday activity for one student and offering, in the school's time zone."""
+    today = today or local(now()).date()
+    monday = today - timedelta(days=today.weekday())
+    counts = {monday + timedelta(days=n): {"lessons": 0, "work": 0} for n in range(7)}
+    for event_type, at in events:
+        day = local(at).date()
+        if day in counts:
+            counts[day]["lessons" if event_type == "lesson_completed" else "work"] += 1
+    days = [{"label": WEEKDAYS[i], "date": day.isoformat(), "count": values["lessons"] + values["work"],
+             "today": day == today, "future": day > today} for i, (day, values) in enumerate(counts.items())]
+    return {"days": days, "lessons_today": counts[today]["lessons"], "work_today": counts[today]["work"]}
+
+
 def summary(db, offering, enrollment, student_id):
     steps = applicable_steps(db, offering, enrollment)
     events = db.execute(select(LearningEvent.event_type, LearningEvent.resource_id,
@@ -99,7 +114,8 @@ def summary(db, offering, enrollment, student_id):
     return {"total": len(steps), "done": finished,
             "percent": round(100 * finished / len(steps)) if steps else None,
             "steps": steps, "outside_count": outside, "note": note,
-            "days": days, "weeks": weeks, "last_activity_at": last,
+            "days": days, "weeks": weeks, "week": week_data([(t, at) for t, _, at in events]),
+            "last_activity_at": last,
             "events_total": len(events)}
 
 

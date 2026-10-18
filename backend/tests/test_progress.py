@@ -48,6 +48,7 @@ def test_only_deliberate_actions_become_progress(db, graded):
     view = mine(graded)
     assert (view["total"], view["done"], view["percent"]) == (2, 2, 100)
     assert {s["type"] for s in view["steps"]} == {"lesson_completed", "quiz_submitted"}
+    assert (view["week"]["lessons_today"], view["week"]["work_today"]) == (1, 1)
 
 
 def test_retries_never_inflate_progress(db, graded):
@@ -140,6 +141,21 @@ def test_days_and_weeks_use_manila_time_and_monday_weeks(db):
     assert all(datetime.fromisoformat(w["week_start"]).weekday() == 0 for w in weeks)
     old = datetime(2026, 1, 1, tzinfo=UTC)
     assert sum(d["count"] for d in progress.buckets([old], today)[0]) == 0           # outside the window
+
+
+def test_offering_week_data_uses_school_time_and_marks_upcoming_days():
+    today = datetime(2026, 10, 7, 12, 0, tzinfo=progress.ZoneInfo("Asia/Manila")).date()
+    data = progress.week_data([
+        ("lesson_completed", datetime(2026, 10, 4, 23, 30, tzinfo=UTC)),
+        ("quiz_submitted", datetime(2026, 10, 7, 1, 0, tzinfo=UTC)),
+        ("activity_submitted", datetime(2026, 10, 7, 2, 0, tzinfo=UTC)),
+    ], today)
+    days = {day["date"]: day for day in data["days"]}
+    assert len(data["days"]) == 7
+    assert days["2026-10-05"]["count"] == 1
+    assert days["2026-10-07"]["count"] == 2 and days["2026-10-07"]["today"]
+    assert days["2026-10-08"]["future"]
+    assert (data["lessons_today"], data["work_today"]) == (0, 2)
 
 
 def test_withdrawn_students_get_no_new_events_and_no_progress_page(db, graded):

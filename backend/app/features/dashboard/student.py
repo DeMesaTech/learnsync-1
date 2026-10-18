@@ -18,7 +18,6 @@ from app.features.teaching.items import student_items
 
 UPDATE_DAYS = 30
 MAX_UPDATES = 8
-WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 
 def current_enrollments(db, student):
@@ -33,17 +32,11 @@ def current_enrollments(db, student):
 
 def week_strip(db, student):
     """Monday to Sunday of the current week in school time: counts of VALID events, nothing else."""
-    today = progress.local(now()).date()
-    monday = today - timedelta(days=today.weekday())
-    counts = {monday + timedelta(days=n): {"lessons": 0, "work": 0} for n in range(7)}
-    for event_type, at in db.execute(select(LearningEvent.event_type, LearningEvent.occurred_at).where(
-            LearningEvent.student_id == student.id, LearningEvent.occurred_at >= now() - timedelta(days=8))):
-        day = progress.local(at).date()
-        if day in counts:
-            counts[day]["lessons" if event_type == "lesson_completed" else "work"] += 1
-    days = [{"label": WEEKDAYS[i], "date": d.isoformat(), "count": c["lessons"] + c["work"],
-             "today": d == today, "future": d > today} for i, (d, c) in enumerate(counts.items())]
-    return {"days": days, "lessons_today": counts[today]["lessons"], "work_today": counts[today]["work"]}
+    events = db.execute(
+        select(LearningEvent.event_type, LearningEvent.occurred_at).where(
+            LearningEvent.student_id == student.id,
+            LearningEvent.occurred_at >= now() - timedelta(days=8)))
+    return progress.week_data(events)
 
 
 def work_buckets(db, student, offering, enrollment, subject):

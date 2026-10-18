@@ -31,7 +31,6 @@ function Hero({eyebrow,title,detail,action,to,icon}:{eyebrow:string;title:string
 // ---------------------------------------------------------------- student
 export interface Work{late_allowed?:boolean;offering_id:string;assessment_id:string;kind:string;title:string;subject:string;deadline:string|null;available_from?:string|null;state?:string;attempts_left?:number}
 interface StudentHomeData{name:string;subjects:{offering_id:string;code:string;title:string;percent:number|null;done:number;total:number;to_do:number}[];
-  week:{days:{label:string;date:string;count:number;today:boolean;future:boolean}[];lessons_today:number;work_today:number};
   next_step:{type:string;title:string;subject:string;link:string}|null;todo:Work[];todo_total:number;awaiting_feedback:Work[];another_attempt:Work[];
   updates:{type:string;title:string;subject:string;at:string;link:string}[]}
 const UPDATE_LABEL:Record<string,string>={announcement:'Announcement',material:'New material',result:'Result',grade:'Grade'};
@@ -53,15 +52,6 @@ export function StudentHome(){
         <div className="dash-main">
           {d.next_step?<Hero eyebrow={d.next_step.type==='lesson'?'Your next step':'Your next task'} title={d.next_step.title} detail={d.next_step.subject} action={d.next_step.type==='lesson'?'Continue learning':'Open work'} to={d.next_step.link} icon="▤"/>
             :<Hero eyebrow="Your next step" title="You’re up to date" detail={d.subjects.length?'Nothing is waiting for you right now. New lessons and work appear here when your teacher publishes them. You can review your subjects or ask study help about what you have learned.':'You are not enrolled in a current subject yet.'} action={d.subjects.length?(only?'Ask Study buddy':'See My Classes'):undefined} to={only?`/student/study-buddy?subject=${only.offering_id}`:'/student/subjects'} icon="✓"/>}
-          <section className="panel"><h2>Learning activity this week</h2>
-            <p className="muted">Lessons, files and links you marked complete and quizzes or activities you submitted. Opening or reading something does not count.</p>
-            <ol className="week" aria-label="Activity by day this week">{d.week.days.map(day=>
-              <li key={day.date} className={`${day.count>0?'done':''} ${day.today?'today':''} ${day.future?'future':''}`}>
-                <span>{day.today?'Today':day.label}</span><b aria-hidden="true">{day.count>0?'✓':day.today?'○':''}</b>
-                <span className="sr-only">{day.count>0?`${plural(day.count,'step')} completed`:day.future?'upcoming':'nothing completed'}</span></li>)}</ol>
-            <Stats items={[[d.week.lessons_today,'Lessons completed today'],[d.week.work_today,'Quizzes and activities submitted today']]}/>
-            {only&&<Link state={here} className="button" to={`/student/offerings/${only.offering_id}/progress`}>View my progress</Link>}
-          </section>
           <section aria-labelledby="subjects-h"><div className="section-head"><h2 id="subjects-h">My Classes</h2><Link state={here} to="/student/subjects">All subjects, including past terms</Link></div>
             {d.subjects.length===0?<p className="panel muted">No current subjects.</p>:<div className="cards">{d.subjects.map(s=><SubjectCard key={s.offering_id} code={s.code} title={s.title} meta={s.to_do?plural(s.to_do,'item')+' to do':'Nothing to do'}
               progress={s.percent} detail={s.total?`${s.done} of ${s.total} steps done`:'No lessons or work yet'} to={`/student/offerings/${s.offering_id}/classwork`} action="Open" links={[['Progress',`/student/offerings/${s.offering_id}/progress`],['Study buddy',`/student/study-buddy?subject=${s.offering_id}`]]}/>)}</div>}</section>

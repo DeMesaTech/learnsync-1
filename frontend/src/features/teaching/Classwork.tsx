@@ -372,6 +372,7 @@ export function StudentClasswork(){
   const syllabus=useQuery({queryKey:['learn-syllabus',offering.id],queryFn:()=>api<LearnSyllabus>(`/learn/offerings/${offering.id}/syllabus`)});
   const cat=catOf(useSearchParams()[0].get('type'));const here=useHere();
   const [filters,setFilters]=useState<Record<string,Filter>>({});const filter=filters[cat]??'all';      // each tab remembers its own filter
+  const [search,setSearch]=useState('');
   const [activeChapter,setActiveChapter]=useState('');
   const [chapterDisplay,setChapterDisplay]=useState<'single'|'all'>('single');
   const setFilter=(f:Filter)=>setFilters({...filters,[cat]:f});
@@ -393,7 +394,8 @@ export function StudentClasswork(){
   const want=(r:SRow)=>r.cat===cat&&(filter==='all'||(filter==='todo'?r.todo:r.done));
   const outline=syllabus.data?.published?.outline;
   const shownRows=rows.filter(want);
-  const tree=buildTree(outline,shownRows);
+  const visibleRows=shownRows.filter(row=>row.title.toLowerCase().includes(search.trim().toLowerCase()));
+  const tree=buildTree(outline,visibleRows);
   const chapters=outline?.chapters??[];
   const selectedChapter=chapters.find(chapter=>chapter.id===activeChapter)??chapters[0];
   const selectedChapterId=selectedChapter?.id??'other';
@@ -401,38 +403,56 @@ export function StudentClasswork(){
   const chapterTrees=chapters.map(chapter=>tree.find(node=>node.id===chapter.id)??{id:chapter.id,title:chapter.title||'Untitled chapter',rows:[],kids:[]} as TNode<SRow>);
   const otherTree=tree.find(node=>node.id==='other');
   const count=(k:Filter)=>rows.filter(r=>r.cat===cat&&(k==='all'||(k==='todo'?r.todo:r.done))).length;
+  const doneCount=rows.filter(row=>row.done).length;
+  const todoCount=rows.filter(row=>row.todo).length;
   return <>
-    <div className="type-row"><ClassworkTypes base={base} current={cat} counts={Object.fromEntries(CATS.map(([k])=>[k,rows.filter(r=>r.cat===k).length]))}/></div>
-    <div className="cw-bar">
-      {cat==='lesson'&&lessons.length>0&&<div className="seq-head"><p><strong>{finished} of {lessons.length}</strong> complete</p>
-        {next&&<Link className="button primary" to={`${base}/lessons/${next.id}`}>Continue: {next.title}</Link>}</div>}
-      <div className="segmented" role="group" aria-label="Show">{([['all','Everything'],['todo',cat==='lesson'?'Not completed':'To do'],['done',cat==='lesson'?'Completed':'Done']] as const).map(([k,l])=>
-        <button key={k} type="button" className={filter===k?'on':''} aria-pressed={filter===k} onClick={()=>setFilter(k)}>{l} <span className="muted">{count(k)}</span></button>)}</div>
-    </div>
-    <div className="chapter-display-options">
-      <div className="segmented" role="group" aria-label="Chapter display">
-        <button type="button" className={chapterDisplay==='all'?'on':''} aria-label="Show all chapters" title="Show all chapters" aria-pressed={chapterDisplay==='all'} onClick={()=>setChapterDisplay('all')}>▤</button>
-        <button type="button" className={chapterDisplay==='single'?'on':''} aria-label="Show one chapter at a time" title="Show one chapter at a time" aria-pressed={chapterDisplay==='single'} onClick={()=>setChapterDisplay('single')}>▣</button>
+    <section className="content-manager-header">
+      <div><p className="eyebrow">SUBJECT CLASSWORK</p><h2>Classwork</h2>
+        <p className="muted">Browse this subject’s published lessons, quizzes, and activities by chapter.</p></div>
+    </section>
+    <section className="content-manager-overview" aria-label="Classwork overview">
+      <article><span aria-hidden="true">▤</span><div><strong>{chapters.length}</strong><small>Chapters</small></div></article>
+      <article><span aria-hidden="true">▣</span><div><strong>{rows.length}</strong><small>Learning items</small></div></article>
+      <article><span aria-hidden="true">✓</span><div><strong>{doneCount}</strong><small>Done or submitted</small></div></article>
+      <article><span aria-hidden="true">○</span><div><strong>{todoCount}</strong><small>To do</small></div></article>
+    </section>
+    <div className="student-classwork-controls">
+      <div className="cw-bar">
+        {cat==='lesson'&&lessons.length>0&&<div className="seq-head"><p><strong>{finished} of {lessons.length}</strong> complete</p>
+          {next&&<Link className="button primary" to={`${base}/lessons/${next.id}`}>Continue: {next.title}</Link>}</div>}
+        <div className="segmented" role="group" aria-label="Show">{([['all','Everything'],['todo',cat==='lesson'?'Not completed':'To do'],['done',cat==='lesson'?'Completed':'Done']] as const).map(([k,l])=>
+          <button key={k} type="button" className={filter===k?'on':''} aria-pressed={filter===k} onClick={()=>setFilter(k)}>{l} <span className="muted">{count(k)}</span></button>)}</div>
       </div>
     </div>
     <div className="chapter-workspace">
-      <ChapterNavigation outline={outline} rows={shownRows} selected={selectedChapterId} onSelect={id=>{setActiveChapter(id);if(chapterDisplay==='all')document.getElementById(`chapter-${id}`)?.scrollIntoView({behavior:'smooth',block:'start'})}}/>
+      <ChapterNavigation outline={outline} rows={visibleRows} selected={selectedChapterId} onSelect={id=>{setActiveChapter(id);if(chapterDisplay==='all')document.getElementById(`chapter-${id}`)?.scrollIntoView({behavior:'smooth',block:'start'})}}/>
       <section className="chapter-detail panel">
+        <div className="chapter-display-options">
+          <span className="muted">Chapter view</span>
+          <div className="segmented" role="group" aria-label="Chapter display">
+            <button type="button" className={chapterDisplay==='all'?'on':''} aria-label="Show all chapters" title="Show all chapters" aria-pressed={chapterDisplay==='all'} onClick={()=>setChapterDisplay('all')}>▤</button>
+            <button type="button" className={chapterDisplay==='single'?'on':''} aria-label="Show one chapter at a time" title="Show one chapter at a time" aria-pressed={chapterDisplay==='single'} onClick={()=>setChapterDisplay('single')}>▣</button>
+          </div>
+        </div>
         <header className="chapter-detail-heading">
           <div><p className="eyebrow">{chapterDisplay==='all'?'ALL CHAPTERS':selectedChapter?(selectedChapter.is_intro?'SUBJECT INTRODUCTION':`CHAPTER ${chapters.slice(0,chapters.indexOf(selectedChapter)).filter(chapter=>!chapter.is_intro).length+1}`):'OTHER MATERIALS'}</p>
             <h2>{chapterDisplay==='all'?'All chapters':selectedChapter?(selectedChapter.is_intro?(selectedChapter.title||'Subject Introduction'):`Chapter ${chapters.slice(0,chapters.indexOf(selectedChapter)).filter(chapter=>!chapter.is_intro).length+1}: ${selectedChapter.title||'Untitled'}`):'Other materials'}</h2>
             <p className="muted">{chapterDisplay==='all'?'Browse all chapters in syllabus order.':'Learning resources published for this chapter.'}</p></div>
         </header>
         <div className="chapter-materials">
-          <div className="section-head"><h3>Learning materials</h3><span className="muted">{chapterDisplay==='all'?`${shownRows.length} items`:`${selectedTree?total(selectedTree):0} items`}</span></div>
+          <div className="section-head"><h3>Learning materials</h3><span className="muted">{chapterDisplay==='all'?`${visibleRows.length} items`:`${selectedTree?total(selectedTree):0} items`}</span></div>
+          <div className="chapter-material-tools">
+            <label className="chapter-material-search">Search chapter materials<input type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="Search chapter materials…"/></label>
+            <div className="type-row"><ClassworkTypes base={base} current={cat} counts={Object.fromEntries(CATS.map(([k])=>[k,rows.filter(r=>r.cat===k).length]))}/></div>
+          </div>
           {chapterDisplay==='single'
             ?selectedTree?<Branch node={selectedTree} depth={0} here={here} bare/>:
-              <p className="muted">{filter==='todo'?'You are up to date.':filter==='done'?'Completed lessons and finished work appear here.':'No published learning materials or activities in this chapter yet.'}</p>
+              <p className="muted">{search?'No materials match your search.':filter==='todo'?'You are up to date.':filter==='done'?'Completed lessons and finished work appear here.':'No published learning materials or activities in this chapter yet.'}</p>
             :<div className="chapter-all-list">
               {chapterTrees.map((node,index)=><details key={node.id} id={`chapter-${node.id}`} className="chapter-all-entry" open>
                 <summary><h3>{chapters[index].is_intro?`Subject introduction · ${node.title}`:`Chapter ${chapters.slice(0,index).filter(chapter=>!chapter.is_intro).length+1}: ${node.title}`}</h3><span className="count">{total(node)}</span></summary>
                 {total(node)>0?<Branch node={node} depth={0} here={here} bare/>:
-                  <p className="muted">{filter==='todo'?'You are up to date.':filter==='done'?'Completed lessons and finished work appear here.':'No published learning materials or activities in this chapter yet.'}</p>}
+                  <p className="muted">{search?'No materials match your search.':filter==='todo'?'You are up to date.':filter==='done'?'Completed lessons and finished work appear here.':'No published learning materials or activities in this chapter yet.'}</p>}
               </details>)}
               {otherTree&&<details id="chapter-other" className="chapter-all-entry" open><summary><h3>Other materials</h3><span className="count">{total(otherTree)}</span></summary><Branch node={otherTree} depth={0} here={here} bare/></details>}
             </div>}

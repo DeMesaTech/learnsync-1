@@ -1,5 +1,18 @@
 # Acceptance status
 
+### Student Classwork content-manager layout (2026-10-18)
+- Aligned the student Classwork hierarchy with faculty Classwork: subject classwork heading, overview cards, chapter navigation, and chapter detail panel. Kept student type/completion filters and Continue behavior, placed the type pills below chapter-material search, moved the chapter-view selector into the detail panel, and added chapter-material search scoped to the selected type/status filters.
+- Updated `docs/DESIGN_SYSTEM.md` to reflect the shared layout and student-specific behavior.
+- Passed: `cd frontend; npm run build` (TypeScript and production build; existing large-chunk advisory), `cd frontend; npm run lint`, and `git diff --check`.
+- Browser-verified the four overview cards, chapter-scoped search, and chapter-view controls inside the detail panel. Search showed the no-match state and returned matching material; type pills now follow search and page width remained 1109px at a 1109px viewport.
+
+### Student subject Stream activity (2026-10-18)
+- Moved “Learning activity this week” off the cross-subject student dashboard and into each subject’s Stream. The per-subject activity uses the existing enrollment-scoped progress endpoint and school-time Monday–Sunday buckets; the dashboard still provides per-subject progress links.
+- Separated student announcements into their own Stream panel, with published materials, released results, and grades in a separate list. Student Classwork retains its faculty-aligned chapter navigator and subject-specific tabs.
+- When an already-running API has not yet been restarted for the richer week response, the Stream derives weekly daily totals from its existing 14-day activity data and labels the combined today total. The lesson/work split appears when the refreshed API is available.
+- Passed: `cd frontend; npm run build` (TypeScript and production build; existing large-chunk advisory), `cd frontend; npm run lint`, `cd backend; .venv\Scripts\python.exe -m pytest tests\test_progress.py -q` (16 passed), and `git diff --check`.
+- Browser-verified the subject-specific activity, announcement, and published-update panels with an authenticated offering. A running API returning only the existing `days` response displays the full seven-day activity panel and daily aggregate instead of an error; the lesson/work split requires the API process to be restarted to use the newer response.
+
 ### Collapsible announcements and fixed gradebook columns (2026-10-17)
 - Made the Classwork announcements panel collapsible and changed draft Edit/Publish actions to icon buttons with accessible labels and tooltips. Pinned Section, Student number, and Student columns at the left edge of the gradebook while score columns scroll horizontally.
 - Passed: frontend production build/type-check (existing large-chunk advisory), ESLint, and `git diff --check`.
