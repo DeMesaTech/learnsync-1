@@ -76,7 +76,9 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 12px 0
+  margin: 12px 0;
+  list-style: none;
+  padding: 0
 }
 
 .quiz-question-nav button {
@@ -84,11 +86,15 @@ textarea {
   padding: 8px 12px
 }
 
-.quiz-question-nav button.active {
+.quiz-question-nav .question-active {
   background: var(--action);
   border-color: var(--action);
   color: var(--surface)
 }
+
+.quiz-question-nav .question-answered { border-color: var(--action); color: var(--action); }
+.quiz-question-nav .question-skipped,
+.quiz-question-nav .question-timed_out { color: var(--muted); }
 
 label {
   display: grid;

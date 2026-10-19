@@ -1,4 +1,4 @@
-import {useRef} from 'react';
+import {useRef,useState} from 'react';
 import {useUndo} from '../../components/undo';
 import {newId} from '../teaching/types';
 import type {Question,QType} from './types';
@@ -6,15 +6,16 @@ import type {Question,QType} from './types';
 const move=<T,>(list:T[],i:number,by:number)=>{const j=i+by;if(j<0||j>=list.length)return list;const c=[...list];[c[i],c[j]]=[c[j],c[i]];return c};
 
 export function blankQuestion(type:QType='multiple_choice'):Question{
-  if(type==='true_false')return {key:newId(),type,prompt:'',choices:[],correct:true,explanation:'',points:1};
-  if(type==='short_answer')return {key:newId(),type,prompt:'',choices:[],correct:[''],explanation:'',points:1};
+  if(type==='true_false')return {key:newId(),type,prompt:'',choices:[],correct:true,explanation:'',points:1,duration_seconds:300};
+  if(type==='short_answer')return {key:newId(),type,prompt:'',choices:[],correct:[''],explanation:'',points:1,duration_seconds:300};
   const choices=[1,2,3,4].map(()=>({id:newId(),text:''}));
-  return {key:newId(),type,prompt:'',choices,correct:choices[0].id,explanation:'',points:1};
+  return {key:newId(),type,prompt:'',choices,correct:choices[0].id,explanation:'',points:1,duration_seconds:300};
 }
 
 /** locked: students already started attempts, so keys, points and question identity cannot change. */
 export function QuestionList({questions,onChange,locked}:{questions:Question[];onChange:(q:Question[])=>void;locked:boolean}){
   const undo=useUndo();const latest=useRef(onChange);latest.current=onChange;   // undo must reach the CURRENT draft, not the one at removal time
+  const [units,setUnits]=useState<Record<string,'seconds'|'minutes'>>({});
   const set=(i:number,q:Question)=>onChange(questions.map((x,j)=>j===i?q:x));
   return <section>
     <h2>Questions</h2>
@@ -28,10 +29,21 @@ export function QuestionList({questions,onChange,locked}:{questions:Question[];o
           <button type="button" onClick={()=>{const before=questions;onChange(questions.filter((_,j)=>j!==i));undo(`Question ${i+1} removed.`,()=>latest.current(before))}}>Remove</button></div>}</div>
       {q.source&&<p className="muted">Drafted from: <strong>{q.source.title}</strong>. Check the answer against that material.</p>}
       <div className="grid-2">
-        <label>Type<select value={q.type} disabled={locked} onChange={e=>set(i,{...blankQuestion(e.target.value as QType),key:q.key,prompt:q.prompt,points:q.points,explanation:q.explanation,source:q.source})}>
+        <label>Type<select value={q.type} disabled={locked} onChange={e=>set(i,{...blankQuestion(e.target.value as QType),key:q.key,prompt:q.prompt,points:q.points,explanation:q.explanation,duration_seconds:q.duration_seconds,source:q.source})}>
           <option value="multiple_choice">Multiple choice</option><option value="true_false">True / False</option><option value="short_answer">Short answer</option></select></label>
         <label>Points<input type="number" min="0" step="0.5" value={q.points} disabled={locked} onChange={e=>set(i,{...q,points:e.target.value})}/></label>
       </div>
+      <fieldset><legend>Time limit per question (up to 180 minutes)</legend>
+        <div className="grid-2">
+          <label>Time limit<input type="number" min={unitFor(q,units)==='minutes'?1/60:1}
+            max={unitFor(q,units)==='minutes'?180:10800} step="any"
+            value={unitFor(q,units)==='minutes'?q.duration_seconds/60:q.duration_seconds} disabled={locked}
+            onChange={e=>set(i,{...q,duration_seconds:Math.round(Number(e.target.value)*(unitFor(q,units)==='minutes'?60:1))})}/></label>
+          <label>Unit<select value={unitFor(q,units)} disabled={locked}
+            onChange={e=>setUnits(current=>({...current,[q.key]:e.target.value as 'seconds'|'minutes'}))}>
+            <option value="seconds">Seconds</option><option value="minutes">Minutes</option></select></label>
+        </div>
+      </fieldset>
       <label>Question<textarea value={q.prompt} maxLength={5000} onChange={e=>set(i,{...q,prompt:e.target.value})}/></label>
       {q.type==='multiple_choice'&&<fieldset><legend>Choices (select the correct one)</legend>
         {q.choices.map((c,j)=><div className="topic-row" key={c.id}>
@@ -53,4 +65,8 @@ export function QuestionList({questions,onChange,locked}:{questions:Question[];o
       <button type="button" onClick={()=>onChange([...questions,blankQuestion('true_false')])}>Add true / false</button>
       <button type="button" onClick={()=>onChange([...questions,blankQuestion('short_answer')])}>Add short answer</button></div>}
   </section>;
+}
+
+function unitFor(question:Question,units:Record<string,'seconds'|'minutes'>){
+  return units[question.key]??(question.duration_seconds%60===0?'minutes':'seconds');
 }

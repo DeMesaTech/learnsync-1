@@ -67,7 +67,10 @@ try{
   check('axe finds no violations on the Questions step',(await axe(page)).length===0);
   await act(()=>page.getByRole('button',{name:'Add 3 questions'}).click());
   await page.getByRole('heading',{name:/^Question 3/}).waitFor();
-  check('questions have no per-question time-limit controls',await page.getByLabel('Time limit (minutes)').count()===0);
+  check('each question exposes a seconds/minutes time limit',await page.getByLabel('Time limit').count()===3&&await page.getByLabel('Unit').count()===3);
+  await act(()=>page.getByLabel('Time limit').nth(0).fill('10'));
+  await act(()=>page.getByLabel('Unit').nth(1).selectOption('minutes'));
+  await act(()=>page.getByLabel('Time limit').nth(1).fill('1'));
   await act(()=>page.getByRole('button',{name:'Next',exact:true}).click());
   await page.getByText('step 3 of 3').waitFor();
   check('the review step summarises the quiz',(await page.locator('main').innerText()).includes('3 questions · 4 points'));
@@ -76,9 +79,10 @@ try{
   check('axe finds no violations on the Review step',(await axe(page)).length===0);
   await act(()=>page.getByRole('button',{name:'Assign',exact:true}).click());
   await page.waitForURL(/\/classwork(\?type=\w+)?$/);
-  check(`a planned quiz was finished and assigned in ${inputs} inputs`,inputs<=10,String(inputs));
+  check(`a planned quiz was finished and assigned in ${inputs} inputs`,inputs<=12,String(inputs));
   const quiz=(await call(page,'GET',`/teach/offerings/${O}/assessments/${quizId}`)).data;
   check('the quiz is published with 3 questions and 4 points',!!quiz.published&&quiz.published.questions.length===3&&Number(quiz.published.max_points)===4);
+  check('custom seconds and minutes persist as seconds',quiz.published.questions[0].duration_seconds===2&&quiz.published.questions[1].duration_seconds===60);
   const student=await newPage(browser,{state:S});await student.goto('/student');
   const todo=(await call(student,'GET','/dashboard/student/todo')).data;
   check('the student now sees Quiz 1 and not the unfinished activity',todo.todo.some(w=>w.title==='Quiz 1')&&!todo.todo.some(w=>w.title==='Activity 1'));
@@ -87,17 +91,17 @@ try{
   const attempt=(await call(student,'POST',`/learn/offerings/${O}/assessments/${quizId}/attempts`,{})).data;
   const studentAttempt=await newPage(browser,{state:S});
   await studentAttempt.goto(`/student/offerings/${O}/work/${quizId}/attempts/${attempt.id}`);
-  check('the student sees an untimed question and a navigator for all questions, without answer keys',await studentAttempt.getByText('Question 1 of 3').count()===1&&await studentAttempt.getByRole('navigation',{name:'Question navigation'}).getByRole('button').count()===3&&await studentAttempt.getByText('Time remaining:',{exact:false}).count()===0&&!JSON.stringify(attempt).includes('"correct"')&&!JSON.stringify(attempt).includes('"expires_at"'));
-  check('Previous is disabled on the first question',await studentAttempt.getByRole('button',{name:/Previous/}).isDisabled());
-  await studentAttempt.getByRole('button',{name:/Next/}).click();
-  check('Next moves to the following question',await studentAttempt.getByText('Question 2 of 3').count()===1);
-  await studentAttempt.getByRole('button',{name:/Previous/}).click();
-  check('Previous returns to the prior question',await studentAttempt.getByText('Question 1 of 3').count()===1);
-  check('students can submit after navigating freely',await studentAttempt.getByRole('button',{name:'Submit quiz now'}).count()===1);
+  check('the student sees the server timer and sequential progress without answer keys',await studentAttempt.getByText('Question 1 of 3').count()===1&&await studentAttempt.locator('ol[aria-label="Question progress"] li').count()===3&&await studentAttempt.getByText('Time remaining:',{exact:false}).count()===1&&!JSON.stringify(attempt).includes('"correct"'));
+  await studentAttempt.getByText('Question 2 of 3').waitFor({timeout:15000});
+  check('an expired question times out and automatically advances',await studentAttempt.locator('.question-timed_out').count()===1);
   const savedBeforeReload=(await call(student,'GET',`/learn/offerings/${O}/attempts/${attempt.id}`)).data;
   await studentAttempt.reload();
   const savedAfterReload=(await call(student,'GET',`/learn/offerings/${O}/attempts/${attempt.id}`)).data;
-  check('reloading preserves the untimed attempt without clock metadata',savedBeforeReload.state===savedAfterReload.state&&!JSON.stringify(savedAfterReload).includes('"expires_at"')&&!JSON.stringify(savedAfterReload).includes('"paused_at"'));
+  check('reloading preserves the active question deadline',savedBeforeReload.active_question_key===savedAfterReload.active_question_key&&savedBeforeReload.active_expires_at===savedAfterReload.active_expires_at);
+  await studentAttempt.getByRole('button',{name:'Skip and continue'}).click();
+  check('skipping locks the unanswered question and moves forward',await studentAttempt.getByText('Question 3 of 3').count()===1&&await studentAttempt.locator('.question-skipped').count()===1);
+  check('students have no controls to return to locked questions',await studentAttempt.locator('ol[aria-label="Question progress"] button').count()===0);
+  check('students can still submit the current quiz early',await studentAttempt.getByRole('button',{name:'Submit quiz now'}).count()===1);
 
   // ---- B: Save and exit keeps the work, and editing a published quiz says Update for students
   await page.goto(`/faculty/offerings/${O}/assessments/${quizId}/edit`);await page.waitForLoadState('networkidle');
@@ -111,7 +115,7 @@ try{
   check('a duplicate opens as a hidden draft with the questions',(await page.getByLabel('Title').inputValue())==='Copy of Quiz 1');
   const list=(await call(page,'GET',`/teach/offerings/${O}/assessments`)).data;
   const copy=list.find(a=>a.draft?.title==='Copy of Quiz 1');
-  check('the copy has no dates and is not published',!!copy&&copy.published===null&&copy.draft.deadline===null&&copy.draft.questions.length===3);
+  check('the copy keeps question time limits without dates and remains unpublished',!!copy&&copy.published===null&&copy.draft.deadline===null&&copy.draft.questions.length===3&&copy.draft.questions[0].duration_seconds===10&&copy.draft.questions[1].duration_seconds===60);
   check('students do not see the copy',!(await call(student,'GET','/dashboard/student/todo')).data.todo.some(w=>w.title==='Copy of Quiz 1'));
 
   // ---- C2: removing a question is undoable, and deleting asks with the safe choice first

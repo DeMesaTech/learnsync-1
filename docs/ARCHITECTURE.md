@@ -20,7 +20,7 @@ Faculty Classwork chapter-level creation anchors new learning items and assessme
 
 Online quiz scores are computed only from submitted attempts. Faculty may correct a submitted answer, which recomputes the score, but cannot enter or overwrite a quiz score through individual-score or gradebook batch APIs.
 
-Online quizzes expose one question at a time with a navigator for all question numbers. Students may navigate freely, edit any answer until final submission, and submit without opening every question. Assessment availability and deadlines remain enforced; no per-question clock state is read or written.
+Online quizzes expose one active question at a time. Each published question carries a teacher-configured time limit, stored in seconds. `quiz_question_clock` records the server-side start, expiry, and terminal state (`answered`, `skipped`, or `timed_out`); a refresh or disconnected client cannot pause or reset a deadline. The server accepts answers only for the active question and starts the next question at the skip/answer time or prior expiry time. Students cannot revisit locked questions. Assessment availability and overall deadlines remain enforced.
 
 When committing a reviewed prospectus, the admin confirms an active college. Newly created subjects inherit that college; existing catalog subjects are not overwritten. The API validates the college at commit time.
 

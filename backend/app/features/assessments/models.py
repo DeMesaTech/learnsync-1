@@ -103,6 +103,8 @@ class QuizQuestion(Base):
         CheckConstraint("type IN ('multiple_choice','true_false','short_answer')",
                         name="question_type"),
         CheckConstraint("duration_minutes BETWEEN 1 AND 180", name="question_duration"),
+        CheckConstraint("duration_seconds BETWEEN 1 AND 10800",
+                        name="question_duration_seconds"),
     )
     id: Mapped[uuid.UUID] = uid()
     revision_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assessment_revision.id"),
@@ -117,12 +119,17 @@ class QuizQuestion(Base):
     source: Mapped[dict | None] = mapped_column(JSONB)                # AI drafts: where it came from
     points: Mapped[Decimal] = mapped_column(POINTS, default=Decimal(1))
     duration_minutes: Mapped[int] = mapped_column(Integer, default=5)  # retained legacy column
+    duration_seconds: Mapped[int] = mapped_column(Integer, default=300, server_default=text("300"))
 
 
 class QuizQuestionClock(Base):
-    """Legacy attempt-clock schema; quiz behavior no longer reads or writes these rows."""
+    """A server-authoritative timer and terminal state for one question in an attempt."""
     __tablename__ = "quiz_question_clock"
-    __table_args__ = (UniqueConstraint("attempt_id", "question_key", name="question_clock_unique"),)
+    __table_args__ = (
+        UniqueConstraint("attempt_id", "question_key", name="question_clock_unique"),
+        CheckConstraint("status IN ('active','answered','skipped','timed_out')",
+                        name="question_clock_status"),
+    )
     id: Mapped[uuid.UUID] = uid()
     attempt_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("quiz_attempt.id"), index=True)
     question_key: Mapped[str] = mapped_column(String(36))
@@ -130,6 +137,8 @@ class QuizQuestionClock(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(12), default="active",
+                                        server_default=text("'active'"))
 
 
 class QuizAttempt(Base):

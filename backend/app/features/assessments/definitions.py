@@ -57,7 +57,7 @@ def has_attempts(db, assessment_id):
 def question_view(q):
     return {"key": q.key, "type": q.type, "prompt": q.prompt, "choices": q.choices,
             "correct": q.correct, "explanation": q.explanation, "points": q.points,
-            "source": q.source}
+            "duration_seconds": q.duration_seconds, "source": q.source}
 
 
 def rev_view(db, rev):
@@ -144,7 +144,8 @@ def start_draft(db, actor, assessment):
     for q in questions_of(db, base.id):   # same keys: question identity survives revisions
         db.add(QuizQuestion(revision_id=draft.id, key=q.key, position=q.position, type=q.type,
                             prompt=q.prompt, choices=q.choices, correct=q.correct,
-                            explanation=q.explanation, points=q.points, source=q.source))
+                            explanation=q.explanation, points=q.points,
+                            duration_seconds=q.duration_seconds, source=q.source))
     db.commit()
     return draft
 
@@ -170,7 +171,8 @@ def save_draft(db, actor, offering, assessment, data):
             db.add(QuizQuestion(revision_id=draft.id, key=str(q.key), position=position,
                                 type=q.type, prompt=q.prompt,
                                 choices=[c.model_dump() for c in q.choices], correct=q.correct,
-                                explanation=q.explanation, points=q.points, source=q.source))
+                                explanation=q.explanation, points=q.points,
+                                duration_seconds=q.duration_seconds, source=q.source))
         draft.max_points = sum((q.points for q in data.questions), Decimal(0))
     draft.draft_counter += 1
     db.commit()
@@ -287,7 +289,7 @@ def question_problems(questions):
 
 def locked_signature(questions):
     """What must not change once students have started attempts."""
-    return {q.key: (q.type, Decimal(q.points),
+    return {q.key: (q.type, Decimal(q.points), q.duration_seconds,
                     tuple(c["id"] for c in q.choices),
                     tuple(sorted(normalize_text(a) for a in q.correct))
                     if q.type == "short_answer" else q.correct) for q in questions}
@@ -337,8 +339,8 @@ def publish(db, actor, offering, assessment, expected_counter):
     if (published and assessment.kind == "online_quiz" and has_attempts(db, assessment.id)
             and violates_lock(db, published, draft, questions)):
         fail(409, "locked_after_attempts",
-             "Students have already started attempts, so answer keys, points, attempt limits "
-             "and the score rule can no longer change. Wording, instructions and deadlines "
+             "Students have already started attempts, so answer keys, points, time limits, "
+             "attempt limits and the score rule can no longer change. Wording, instructions and deadlines "
              "can.")
     highest = db.scalar(select(func.max(AssessmentScore.score)).where(
         AssessmentScore.assessment_id == assessment.id))

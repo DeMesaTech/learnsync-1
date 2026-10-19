@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState,type FormEvent} from 'react';
+import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
 import {Link,useLocation,useNavigate,useOutletContext,useParams} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
 import {ApiError,api,post,send,upload,errorText} from '../../app/api';
@@ -132,13 +132,43 @@ function Taking({attempt,url,back,offeringId,refresh}:{attempt:AttemptView;url:s
   const [state,setState]=useState<SaveState>('saved');
   const [message,setMessage]=useState('');
   const latest=useRef(answers);const dirty=useRef(false);const timer=useRef<ReturnType<typeof setTimeout>>(undefined);const running=useRef<Promise<boolean>|null>(null);
+  const refreshing=useRef(false);
   const [done,setDone]=useState<AttemptView|null>(null);
   const [submitting,setSubmitting]=useState(false);
   const submitKey=useRef(keyFor(attempt.id));
-  const [questionKey,setQuestionKey]=useState(attempt.questions[0]?.key??'');
-  const active=attempt.questions.find(q=>q.key===questionKey);
-  const activeIndex=attempt.questions.findIndex(q=>q.key===questionKey);
+  const receivedAt=useRef(performance.now());
+  const active=attempt.questions.find(q=>q.key===attempt.active_question_key);
+  const activeIndex=attempt.questions.findIndex(q=>q.key===active?.key);
+  const remainingSeconds=useCallback(()=>{
+    if(!attempt.active_expires_at)return 0;
+    const remaining=Date.parse(attempt.active_expires_at)-Date.parse(attempt.server_now)
+      -(performance.now()-receivedAt.current);
+    return Math.max(0,Math.ceil(remaining/1000));
+  },[attempt.active_expires_at,attempt.server_now]);
+  const [secondsLeft,setSecondsLeft]=useState(remainingSeconds);
   useEffect(()=>{latest.current=attempt.answers;setAnswers(attempt.answers);dirty.current=false;setState('saved')},[attempt]);
+  useEffect(()=>{
+    receivedAt.current=performance.now();
+    const update=()=>setSecondsLeft(remainingSeconds());
+    update();
+    const interval=setInterval(update,250);
+    return()=>clearInterval(interval);
+  },[remainingSeconds]);
+  useEffect(()=>{
+    if(!attempt.active_expires_at)return;
+    let lastRequest=0;
+    const reconcile=()=>{
+      const current=performance.now();
+      if(remainingSeconds()<=0&&!refreshing.current&&current-lastRequest>1500){
+        lastRequest=current;refreshing.current=true;
+        void refresh().finally(()=>{refreshing.current=false});
+      }
+    };
+    const interval=setInterval(reconcile,500);
+    const visible=()=>{if(document.visibilityState==='visible')reconcile()};
+    document.addEventListener('visibilitychange',visible);
+    return()=>{clearInterval(interval);document.removeEventListener('visibilitychange',visible)};
+  },[attempt.active_expires_at,refresh,remainingSeconds]);
 
   const save=async():Promise<boolean>=>{
     if(running.current)return running.current;
@@ -154,7 +184,8 @@ function Taking({attempt,url,back,offeringId,refresh}:{attempt:AttemptView;url:s
         return !dirty.current;
       }
       catch(e){
-        if(e instanceof ApiError&&['attempt_closed','term_closed','closed'].includes(e.code)){setMessage(e.message);setState('failed');dirty.current=false;return true}
+        if(e instanceof ApiError&&['attempt_closed','question_expired','question_locked','term_closed','closed'].includes(e.code)){
+          setMessage(e.message);setState('failed');dirty.current=false;void refresh();return false}
         setState('failed');return false;
       }finally{running.current=null}
     })();
@@ -175,7 +206,10 @@ function Taking({attempt,url,back,offeringId,refresh}:{attempt:AttemptView;url:s
     setSubmitting(true);setMessage('');
     try{
       if(!await save()){setMessage('Your latest answer could not be saved. Retry saving before submitting.');return}
-      const result=await post<AttemptView>(`${url}/submit`,{idempotency_key:submitKey.current,answers:latest.current});
+      const result=await post<AttemptView>(`${url}/submit`,{
+        idempotency_key:submitKey.current,
+        answers:active?{[active.key]:latest.current[active.key]}:{},
+      });
       dirty.current=false;setDone(result);celebrate();toast('Quiz submitted.');
       queryClient.invalidateQueries({queryKey:['learn-work',offeringId]});
       queryClient.invalidateQueries({queryKey:['learn-results',offeringId]});
@@ -186,17 +220,18 @@ function Taking({attempt,url,back,offeringId,refresh}:{attempt:AttemptView;url:s
     }finally{setSubmitting(false)}
   }
 
-  async function navigateQuestion(questionKey:string){
-    if(!active||questionKey===active.key)return;
+  async function advanceQuestion(){
+    if(!active)return;
+    const next=attempt.questions.slice(activeIndex+1).find(question=>question.status==='pending');
+    if(!next){await submitEarly();return}
     setSubmitting(true);setMessage('');
     try{
       if(!await save()){setMessage('Your latest answer could not be saved. Retry saving before moving on.');return}
-      await post<AttemptView>(`${url}/navigate`,{question_key:questionKey});
-      setQuestionKey(questionKey);
+      await post<AttemptView>(`${url}/navigate`,{question_key:next.key});
       await refresh();
     }catch(e){
       setMessage(errorText(e));
-      if(e instanceof ApiError&&e.code==='attempt_closed')void refresh();
+      if(e instanceof ApiError&&['attempt_closed','question_expired','question_order'].includes(e.code))void refresh();
     }finally{setSubmitting(false)}
   }
 
@@ -207,36 +242,40 @@ function Taking({attempt,url,back,offeringId,refresh}:{attempt:AttemptView;url:s
     <div className="page-heading"><h2>Attempt {attempt.attempt_number}</h2><span className={`badge save-${state==='saved'?'saved':state==='failed'?'failed':'dirty'}`} role="status" aria-live="polite">{saveText}</span></div>
     {message&&<p className="warn" role="alert">{message}</p>}
     {state==='failed'&&<button onClick={()=>void save()}>Retry saving</button>}
-    <nav className="quiz-question-nav" aria-label="Question navigation">
-      {attempt.questions.map((question,index)=><button key={question.key} type="button"
-        className={question.key===active?.key?'active':''}
-        aria-current={question.key===active?.key?'step':undefined}
-        aria-label={`Question ${index+1}${answers[question.key]!==undefined?' · answered':' · unanswered'}`}
-        disabled={submitting}
-        onClick={()=>void navigateQuestion(question.key)}>
-        {index+1}{answers[question.key]!==undefined?' ✓':''}
-      </button>)}
-    </nav>
+    <ol className="quiz-question-nav" aria-label="Question progress">
+      {attempt.questions.map((question,index)=><li key={question.key}>
+        <span className={`badge question-${question.status}`} aria-current={question.key===active?.key?'step':undefined}
+          aria-label={`Question ${index+1}: ${question.status}`}>{index+1}</span>
+      </li>)}
+    </ol>
     {active?<form onSubmit={e=>{e.preventDefault();void save()}}>
-      <fieldset className="panel">
+      <fieldset className="panel" disabled={submitting||secondsLeft<=0}>
         <legend>Question {activeIndex+1} of {attempt.question_count} · {active.points} point{active.points===1?'':'s'}</legend>
-        <p className="muted">You can move between questions and edit every answer until you submit the quiz.</p>
+        <p className="warn" role="timer" aria-live="off">
+          Time remaining: {Math.floor(secondsLeft/60)}:{String(secondsLeft%60).padStart(2,'0')}
+        </p>
+        <p className="muted">This question locks when you continue, skip it, or its timer expires. You cannot return to a locked question.</p>
         <p className="pre">{active.prompt}</p>
         {active.type==='multiple_choice'&&active.choices.map(c=><label className="inline" key={c.id}><input className="quiz-answer-radio" type="radio" name={active.key} checked={answers[active.key]===c.id} onChange={()=>change(active.key,c.id)}/> {c.text}</label>)}
         {active.type==='true_false'&&[true,false].map(v=><label className="inline" key={String(v)}><input className="quiz-answer-radio" type="radio" name={active.key} checked={answers[active.key]===v} onChange={()=>change(active.key,v)}/> {v?'True':'False'}</label>)}
         {active.type==='short_answer'&&<label>Your answer<input value={typeof answers[active.key]==='string'?String(answers[active.key]):''} maxLength={1000} onChange={e=>change(active.key,e.target.value)}/></label>}
       </fieldset>
       <div className="actions">
-        <button type="button" disabled={submitting||activeIndex<=0}
-          onClick={()=>void navigateQuestion(attempt.questions[activeIndex-1].key)}>
-          <span aria-hidden="true">←</span> Previous
-        </button>
-        <button type="button" disabled={submitting||activeIndex>=attempt.questions.length-1}
-          onClick={()=>void navigateQuestion(attempt.questions[activeIndex+1].key)}>
-          Next <span aria-hidden="true">→</span>
-        </button>
-        <button type="button" className="primary" disabled={submitting} onClick={()=>void submitEarly()}>{submitting?'Submitting…':'Submit quiz now'}</button>
+        {activeIndex<attempt.questions.length-1
+          ?<button type="button" className="primary" disabled={submitting||state==='failed'||secondsLeft<=0} onClick={()=>void advanceQuestion()}>
+            {submitting?'Saving…':hasResponseValue(answers[active.key])?'Lock answer and continue':'Skip and continue'} <span aria-hidden="true">→</span>
+          </button>
+          :<button type="button" className="primary" disabled={submitting||state==='failed'||secondsLeft<=0} onClick={()=>void submitEarly()}>
+            {submitting?'Submitting…':'Submit quiz'}
+          </button>}
+        {activeIndex<attempt.questions.length-1&&<button type="button" disabled={submitting} onClick={()=>void submitEarly()}>
+          Submit quiz now
+        </button>}
       </div>
     </form>:<section className="panel" role="status"><h2>Finishing your quiz…</h2><p>Your saved answers are being submitted.</p></section>}
   </>;
+}
+
+function hasResponseValue(value:unknown){
+  return value!==undefined&&value!==null&&!(typeof value==='string'&&!value.trim());
 }

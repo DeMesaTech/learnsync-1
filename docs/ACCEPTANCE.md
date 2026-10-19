@@ -1,5 +1,14 @@
 # Acceptance status
 
+### Teacher-configurable per-question quiz timers (2026-10-19)
+- Re-enabled the existing question-clock schema with a forward Alembic migration, converting saved minute limits to seconds and persisting explicit `answered`, `skipped`, and `timed_out` states. Teacher settings accept whole seconds or minutes, bounded to 1 second–180 minutes.
+- The server initializes and enforces each question deadline. Refreshes and reconnects reuse the persisted expiry; delayed clients catch up from the server deadline. Answers are accepted only for the active question. Continue locks answered questions, skip locks unanswered questions and starts the next timer, and timeout locks and automatically advances. Locked questions cannot be revisited or edited.
+- Passed: isolated backend assessment + question-import run (38 passed; 2 pre-existing score-entry tests deselected because they already fail on the current baseline), final focused timer/skip/lock tests (5 passed), Ruff, frontend ESLint, frontend TypeScript/Vite build, `node --check frontend\e2e\quiz-stepper.mjs`, `git diff --check`, and Alembic head verification (`41c9e0ab7d52`). The backend test fixture also upgraded the isolated `*_test` database through head.
+- Follow-up timer regression checks passed (3 passed), including a skip starting the next question's deadline immediately and deadline catch-up after a long disconnect. The updated stepper E2E script passed `node --check`; browser E2E remains unrun for the disposable-database reason below.
+- Timer authoring now displays saved durations in an appropriate unit (whole-minute durations default to minutes; other durations default to seconds); changing units preserves the timer value, and a value entered as 3 minutes is stored as 180 seconds. New questions default to 300 seconds (5 minutes). Frontend lint and production build/type-check passed after this correction.
+- Browser E2E was not run because `e2e:stepper` requires an explicit disposable-database confirmation; the available shared browser is connected to a non-disposable local application. Offline `alembic upgrade --sql` rendering is blocked by an existing revision that queries live database state; the isolated online test migration succeeded.
+- The two deselected tests (`test_online_quiz_scores_are_only_typed_in_for_no_shows`, `test_no_shows_and_abandoned_attempts_can_be_resolved_by_faculty`) have the same pre-existing score-entry expectation failures recorded below; no unrelated scoring changes were made.
+
 ### Quiz attempt navigation controls (2026-10-19)
 - Added Previous/Next buttons with directional icons alongside Submit quiz now; buttons disable at the first/last question and reuse the saved-answer navigation flow.
 - Removed Classwork type tabs from the quiz/activity detail page while retaining the question-number navigator during an attempt.

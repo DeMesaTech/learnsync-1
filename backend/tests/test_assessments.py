@@ -109,13 +109,17 @@ def advance_to_last_question(st, c, attempt_id, answers=None):
     attempt = st.get(path).json()
     if attempt["state"] != "in_progress":
         return
-    for question in attempt["questions"][:-1]:
+    for index, question in enumerate(attempt["questions"][:-1]):
+        if attempt["active_question_key"] != question["key"]:
+            continue
         if answers and question["key"] in answers:
             saved = st.put(path + "/answers",
                            {"answers": {question["key"]: answers[question["key"]]}})
             assert saved.status_code == 200, saved.text
-    moved = st.post(path + "/navigate", {"question_key": attempt["questions"][-1]["key"]})
-    assert moved.status_code == 200, moved.text
+        moved = st.post(path + "/navigate",
+                        {"question_key": attempt["questions"][index + 1]["key"]})
+        assert moved.status_code == 200, moved.text
+        attempt = moved.json()
 
 
 def submit(st, c, attempt_id, answers=None, *, advance=True):
@@ -211,59 +215,50 @@ def test_published_quiz_total_and_student_never_sees_keys(graded):
     assert all(set(ch) == {"id", "text"} for ch in attempt["questions"][0]["choices"])
 
 
-def test_quiz_attempts_have_no_question_timers_and_all_answers_remain_editable(db, graded):
+def test_question_timer_is_returned_with_the_active_question(db, graded):
     questions = [mc(), tf()]
     quiz = make_quiz(graded, questions=questions)
     student = graded["st1"]
     attempt = start(student, graded, quiz["aid"]).json()
     assert attempt["question_count"] == 2 and len(attempt["questions"]) == 2
-    assert "active_question_key" not in attempt
-    assert all(not {"duration_minutes", "expires_at", "paused_at", "locked_at"} & question.keys()
-               for question in attempt["questions"])
+    assert attempt["active_question_key"] == questions[0]["key"]
+    assert attempt["questions"][0]["status"] == "active"
+    assert attempt["questions"][0]["duration_seconds"] == 300
+    assert attempt["active_expires_at"]
     assert db.scalar(select(func.count()).select_from(QuizQuestionClock).where(
-        QuizQuestionClock.attempt_id == uuid.UUID(attempt["id"]))) == 0
-
-    second_key, first_key = questions[1]["key"], questions[0]["key"]
-    saved_future = student.put(la(graded, f"/attempts/{attempt['id']}/answers"),
-                               {"answers": {second_key: True}})
-    assert saved_future.status_code == 200
-    moved = student.post(la(graded, f"/attempts/{attempt['id']}/navigate"),
-                         {"question_key": second_key})
-    assert moved.status_code == 200
-    changed_first = student.put(la(graded, f"/attempts/{attempt['id']}/answers"),
-                                {"answers": {first_key: questions[0]["choices"][0]["id"]}})
-    assert changed_first.status_code == 200
-    still_open = student.get(la(graded, f"/attempts/{attempt['id']}")).json()
-    assert still_open["state"] == "in_progress"
-    assert still_open["answers"][second_key] is True
-    assert still_open["answers"][first_key] == questions[0]["choices"][0]["id"]
-
-    finished = submit(student, graded, attempt["id"], quiz["correct"], advance=False)
-    assert finished.status_code == 200
-    assert finished.json()["state"] == "submitted"
+        QuizQuestionClock.attempt_id == uuid.UUID(attempt["id"]))) == 1
 
 
-def test_students_can_navigate_to_unvisited_questions_and_submit(graded):
-    quiz = make_quiz(graded, questions=[mc(), tf()])
+def test_students_skip_unanswered_questions_sequentially(graded, monkeypatch):
+    from app.features.assessments import attempts
+
+    questions = [{**mc(), "duration_seconds": 3}, {**tf(), "duration_seconds": 7}]
+    quiz = make_quiz(graded, questions=questions)
+    clock = [datetime.now(UTC)]
+    monkeypatch.setattr(attempts, "now", lambda: clock[0])
     student = graded["st1"]
     attempt = start(student, graded, quiz["aid"]).json()
-    answers = quiz["correct"]
-
-    preview = student.get(la(graded, f"/attempts/{attempt['id']}")).json()
-    assert [question["key"] for question in preview["questions"]] == [
-        question["key"] for question in quiz["questions"]]
+    first, second = quiz["questions"]
+    clock[0] += timedelta(seconds=1)
     moved = student.post(la(graded, f"/attempts/{attempt['id']}/navigate"),
-                         {"question_key": quiz["questions"][1]["key"]})
-    assert moved.status_code == 200
-    assert moved.json()["state"] == "in_progress"
-    finished = submit(student, graded, attempt["id"], answers, advance=False)
+                         {"question_key": second["key"]})
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["active_question_key"] == second["key"]
+    assert moved.json()["questions"][0]["status"] == "skipped"
+    assert moved.json()["questions"][1]["status"] == "active"
+    assert datetime.fromisoformat(moved.json()["active_expires_at"]) == (
+        clock[0] + timedelta(seconds=7))
+    locked = student.put(la(graded, f"/attempts/{attempt['id']}/answers"),
+                         {"answers": {first["key"]: quiz["correct"][first["key"]]}})
+    assert locked.status_code == 409
+    finished = submit(student, graded, attempt["id"], {second["key"]: quiz["correct"][second["key"]]},
+                      advance=False)
     assert finished.status_code == 200, finished.text
     assert finished.json()["state"] == "submitted"
-    assert finished.json()["score"] == sum(
-        float(question["points"]) for question in quiz["questions"])
+    assert finished.json()["score"] == float(second["points"])
 
 
-def test_student_can_navigate_back_and_edit_answers_until_submission(graded):
+def test_answered_questions_cannot_be_revisited_or_edited(graded):
     quiz = make_quiz(graded, questions=[mc(), tf()])
     student = graded["st1"]
     attempt = start(student, graded, quiz["aid"]).json()
@@ -278,14 +273,79 @@ def test_student_can_navigate_back_and_edit_answers_until_submission(graded):
     view = advanced.json()
     assert view["answers"][first["key"]] == quiz["correct"][first["key"]]
     assert [question["key"] for question in view["questions"]] == [first["key"], second["key"]]
+    assert view["questions"][0]["status"] == "answered"
+    assert view["active_question_key"] == second["key"]
 
     back = student.post(la(graded, f"/attempts/{attempt['id']}/navigate"),
                         {"question_key": first["key"]})
-    assert back.status_code == 200
+    assert back.status_code == 409
     changed_answer = student.put(
         la(graded, f"/attempts/{attempt['id']}/answers"),
         {"answers": {first["key"]: quiz["questions"][0]["choices"][0]["id"]}})
-    assert changed_answer.status_code == 200
+    assert changed_answer.status_code == 409
+
+
+def test_question_timer_deadline_persists_and_times_out_automatically(db, graded, monkeypatch):
+    from app.features.assessments import attempts
+
+    questions = [{**mc(), "duration_seconds": 2}, {**tf(), "duration_seconds": 4}]
+    quiz = make_quiz(graded, questions=questions)
+    clock = [datetime.now(UTC)]
+    monkeypatch.setattr(attempts, "now", lambda: clock[0])
+    student = graded["st1"]
+    attempt = start(student, graded, quiz["aid"]).json()
+    first_expiry = attempt["active_expires_at"]
+
+    clock[0] += timedelta(seconds=1)
+    refreshed = student.get(la(graded, f"/attempts/{attempt['id']}")).json()
+    assert refreshed["active_expires_at"] == first_expiry
+    assert refreshed["active_question_key"] == questions[0]["key"]
+
+    clock[0] += timedelta(seconds=1)
+    moved = student.get(la(graded, f"/attempts/{attempt['id']}")).json()
+    assert moved["active_question_key"] == questions[1]["key"]
+    assert moved["questions"][0]["status"] == "timed_out"
+    assert moved["questions"][1]["status"] == "active"
+    assert datetime.fromisoformat(moved["active_expires_at"]) == (
+        datetime.fromisoformat(first_expiry) + timedelta(seconds=4))
+
+    clock[0] += timedelta(seconds=4)
+    finished = student.get(la(graded, f"/attempts/{attempt['id']}")).json()
+    assert finished["state"] == "submitted"
+    assert [question["status"] for question in finished["questions"]] == [
+        "timed_out", "timed_out"]
+
+
+def test_attempt_catches_up_timers_after_a_long_disconnect(db, graded, monkeypatch):
+    from app.features.assessments import attempts
+
+    questions = [{**mc(), "duration_seconds": 2}, {**tf(), "duration_seconds": 3},
+                 {**short(), "duration_seconds": 4}]
+    quiz = make_quiz(graded, questions=questions)
+    clock = [datetime.now(UTC)]
+    monkeypatch.setattr(attempts, "now", lambda: clock[0])
+    student = graded["st1"]
+    attempt = start(student, graded, quiz["aid"]).json()
+
+    clock[0] += timedelta(seconds=10)
+    resumed = student.get(la(graded, f"/attempts/{attempt['id']}")).json()
+
+    assert resumed["state"] == "submitted"
+    assert [question["status"] for question in resumed["questions"]] == [
+        "timed_out", "timed_out", "timed_out"]
+
+
+def test_only_the_active_question_accepts_well_typed_answers(graded):
+    quiz = make_quiz(graded, questions=[mc(), tf()])
+    student = graded["st1"]
+    attempt = start(student, graded, quiz["aid"]).json()
+    first, second = quiz["questions"]
+    future = student.put(la(graded, f"/attempts/{attempt['id']}/answers"),
+                         {"answers": {second["key"]: True}})
+    assert future.status_code == 409
+    malformed = student.put(la(graded, f"/attempts/{attempt['id']}/answers"),
+                            {"answers": {first["key"]: True}})
+    assert malformed.status_code == 422
 
 
 def test_drafts_are_invisible_and_tabs_cannot_overwrite_each_other(graded):
@@ -433,6 +493,10 @@ def test_answer_keys_lock_after_attempts_but_wording_does_not(graded):
     changed = [{**q, "correct": (not q["correct"]) if q["type"] == "true_false" else q["correct"]}
                for q in published["questions"]]
     refused = publish(graded, aid, questions=changed, max_attempts=2, title="Quiz 1")
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "locked_after_attempts"
+    changed_timer = [{**q, "duration_seconds": q["duration_seconds"] + 1}
+                     for q in published["questions"]]
+    refused = publish(graded, aid, questions=changed_timer, max_attempts=2, title="Quiz 1")
     assert refused.status_code == 409 and refused.json()["error"]["code"] == "locked_after_attempts"
     # ...as is changing points or the attempt limit
     pts = [{**q, "points": "9"} if i == 0 else q for i, q in enumerate(published["questions"])]

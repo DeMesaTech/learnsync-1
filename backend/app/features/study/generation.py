@@ -124,7 +124,8 @@ def validate(raw, counts, source_ids, points):
         questions.append({"key": str(uuid.uuid4()), "type": kind, "prompt": (prompt or "").strip(),
                           "choices": choices, "correct": correct,
                           "explanation": explanation[:2000] if isinstance(explanation, str) else "",
-                          "points": points, "source_id": q.get("source_id")})
+                          "points": points, "duration_seconds": 300,
+                          "source_id": q.get("source_id")})
     if got != wanted:
         problems.append(f"Expected {wanted} but received {got}.")
     return questions, problems

@@ -674,7 +674,7 @@ Defaults:
 - Make submit idempotent and enforce attempt limits transactionally.
 - Post-submission screens show totals and attempt metadata, not solutions or a reusable answer-review screen.
 
-Latest approved decision: online quizzes have no per-question timers or countdowns. Show one question at a time with a question-number navigator; students may navigate freely, edit any answer until final submission, and submit without opening every question. Quiz availability and deadlines remain in force. Do not expose answer keys or explanations.
+Latest approved decision (2026-10-19): online quizzes use teacher-configurable per-question timers. Teachers set each question's limit in seconds or minutes. The server owns each deadline; refreshing, disconnecting, or switching tabs does not pause or reset it. Students answer questions in order; continuing locks an answered question, skipping locks it as `skipped`, and expiry locks it as `timed_out` before advancing. Students cannot revisit or edit locked questions. Quiz availability and overall deadlines remain in force. Do not expose answer keys or explanations.
 
 #### Activity behavior
 
