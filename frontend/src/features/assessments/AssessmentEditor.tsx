@@ -268,7 +268,7 @@ function Editor({offering,assessment,refetch,modal=false,contextLabel,onDone,onF
       <PasteQuestions offeringId={offering.id} locked={locked} onAdd={added=>set({questions:[...v.questions,...added]})}/></>}
     {quiz&&step==='review'&&<>
       <section className="panel"><h3>Review</h3><ul className="rows">
-        <li><strong>{v.title||'Untitled quiz'}</strong><span className="muted">{v.questions.length} question{v.questions.length===1?'':'s'} · {total} point{total===1?'':'s'} · {v.questions.reduce((sum,q)=>sum+(Number(q.duration_minutes)||5),0)} minutes maximum</span></li>
+        <li><strong>{v.title||'Untitled quiz'}</strong><span className="muted">{v.questions.length} question{v.questions.length===1?'':'s'} · {total} point{total===1?'':'s'}</span></li>
         <li><strong>Grading</strong><span className="muted">{v.include_in_grade?`${categories.find(c=>c.key===v.category_key)?.label??'No category chosen'} · ${policy?.periods.find(p=>p.key===v.period)?.label??'no period chosen'}`:'Does not count toward the grade'}</span></li>
         <li><strong>When</strong><span className="muted">{v.deadline?`Due ${new Date(v.deadline).toLocaleString()}`:'No deadline'}{v.available_from?` · opens ${new Date(v.available_from).toLocaleString()}`:''} · {v.max_attempts} attempt{v.max_attempts===1?'':'s'}</span></li>
         <li><strong>Who</strong><span className="muted">{sections.length===0?'All sections':offering.sections.filter(s=>sections.includes(s.id)).map(s=>s.name).join(', ')}</span></li></ul></section>

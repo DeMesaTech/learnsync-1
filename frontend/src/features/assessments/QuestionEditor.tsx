@@ -6,10 +6,10 @@ import type {Question,QType} from './types';
 const move=<T,>(list:T[],i:number,by:number)=>{const j=i+by;if(j<0||j>=list.length)return list;const c=[...list];[c[i],c[j]]=[c[j],c[i]];return c};
 
 export function blankQuestion(type:QType='multiple_choice'):Question{
-  if(type==='true_false')return {key:newId(),type,prompt:'',choices:[],correct:true,explanation:'',points:1,duration_minutes:5};
-  if(type==='short_answer')return {key:newId(),type,prompt:'',choices:[],correct:[''],explanation:'',points:1,duration_minutes:5};
+  if(type==='true_false')return {key:newId(),type,prompt:'',choices:[],correct:true,explanation:'',points:1};
+  if(type==='short_answer')return {key:newId(),type,prompt:'',choices:[],correct:[''],explanation:'',points:1};
   const choices=[1,2,3,4].map(()=>({id:newId(),text:''}));
-  return {key:newId(),type,prompt:'',choices,correct:choices[0].id,explanation:'',points:1,duration_minutes:5};
+  return {key:newId(),type,prompt:'',choices,correct:choices[0].id,explanation:'',points:1};
 }
 
 /** locked: students already started attempts, so keys, points and question identity cannot change. */
@@ -18,7 +18,7 @@ export function QuestionList({questions,onChange,locked}:{questions:Question[];o
   const set=(i:number,q:Question)=>onChange(questions.map((x,j)=>j===i?q:x));
   return <section>
     <h2>Questions</h2>
-    {locked&&<p className="warn" role="status">Students have already started this quiz, so the questions, answer keys, points, timers, attempt limit and score rule are locked. You can still fix wording and explanations, the instructions and the deadline.</p>}
+    {locked&&<p className="warn" role="status">Students have already started this quiz, so the questions, answer keys, points, attempt limit and score rule are locked. You can still fix wording and explanations, the instructions and the deadline.</p>}
     {questions.length===0&&<p className="panel">No questions yet. Add the first one below.</p>}
     {questions.map((q,i)=><article className="panel" key={q.key}>
       <div className="page-heading"><h3>Question {i+1} · {Number(q.points)||0} pt{Number(q.points)===1?'':'s'}</h3>
@@ -28,10 +28,10 @@ export function QuestionList({questions,onChange,locked}:{questions:Question[];o
           <button type="button" onClick={()=>{const before=questions;onChange(questions.filter((_,j)=>j!==i));undo(`Question ${i+1} removed.`,()=>latest.current(before))}}>Remove</button></div>}</div>
       {q.source&&<p className="muted">Drafted from: <strong>{q.source.title}</strong>. Check the answer against that material.</p>}
       <div className="grid-2">
-        <label>Type<select value={q.type} disabled={locked} onChange={e=>set(i,{...blankQuestion(e.target.value as QType),key:q.key,prompt:q.prompt,points:q.points,duration_minutes:q.duration_minutes,explanation:q.explanation,source:q.source})}>
+        <label>Type<select value={q.type} disabled={locked} onChange={e=>set(i,{...blankQuestion(e.target.value as QType),key:q.key,prompt:q.prompt,points:q.points,explanation:q.explanation,source:q.source})}>
           <option value="multiple_choice">Multiple choice</option><option value="true_false">True / False</option><option value="short_answer">Short answer</option></select></label>
         <label>Points<input type="number" min="0" step="0.5" value={q.points} disabled={locked} onChange={e=>set(i,{...q,points:e.target.value})}/></label>
-        <label>Time limit (minutes)<input type="number" min="1" max="180" step="1" value={q.duration_minutes??5} disabled={locked} onChange={e=>set(i,{...q,duration_minutes:Number(e.target.value)})}/></label></div>
+      </div>
       <label>Question<textarea value={q.prompt} maxLength={5000} onChange={e=>set(i,{...q,prompt:e.target.value})}/></label>
       {q.type==='multiple_choice'&&<fieldset><legend>Choices (select the correct one)</legend>
         {q.choices.map((c,j)=><div className="topic-row" key={c.id}>

@@ -116,11 +116,11 @@ class QuizQuestion(Base):
     explanation: Mapped[str] = mapped_column(Text, default="")        # private
     source: Mapped[dict | None] = mapped_column(JSONB)                # AI drafts: where it came from
     points: Mapped[Decimal] = mapped_column(POINTS, default=Decimal(1))
-    duration_minutes: Mapped[int] = mapped_column(Integer, default=5)
+    duration_minutes: Mapped[int] = mapped_column(Integer, default=5)  # retained legacy column
 
 
 class QuizQuestionClock(Base):
-    """Server-authoritative paused timer and lock state for one question in one attempt."""
+    """Legacy attempt-clock schema; quiz behavior no longer reads or writes these rows."""
     __tablename__ = "quiz_question_clock"
     __table_args__ = (UniqueConstraint("attempt_id", "question_key", name="question_clock_unique"),)
     id: Mapped[uuid.UUID] = uid()

@@ -1,7 +1,6 @@
 """Online quiz attempts. Answers are saved on the server, so a reload resumes the same attempt;
 starting and submitting are serialised per student and assessment, so concurrent requests can
 never create an extra attempt or score twice."""
-from datetime import timedelta
 from decimal import Decimal
 
 from sqlalchemy import and_, func, select, text
@@ -13,7 +12,7 @@ from app.features.accounts.models import Account, now
 from app.features.study.events import record_event
 
 from .definitions import questions_of, revision
-from .models import Assessment, QuizAnswer, QuizAttempt, QuizQuestionClock
+from .models import Assessment, QuizAnswer, QuizAttempt
 from .results import release_one
 from .reviews import flag_graded_change
 from .scores import sync_quiz_score
@@ -62,9 +61,6 @@ def finalize(db, attempt, by_student=False):
         total += row.awarded
     attempt.score, attempt.max_score = total, sum((q.points for q in questions), Decimal(0))
     attempt.state, attempt.submitted_at = "submitted", now()
-    for clock in db.scalars(select(QuizQuestionClock).where(
-            QuizQuestionClock.attempt_id == attempt.id, QuizQuestionClock.locked_at.is_(None))):
-        clock.locked_at = attempt.submitted_at
     db.flush()
     assessment_rev = revision(db, attempt.assessment_id, "published")
     assessment = db.get(Assessment, attempt.assessment_id)
@@ -82,25 +78,14 @@ def student_view(db, attempt):
     questions = attempt_questions(db, attempt)
     answers = {a.question_key: a.response for a in db.scalars(
         select(QuizAnswer).where(QuizAnswer.attempt_id == attempt.id))}
-    clocks = {c.question_key: c for c in db.scalars(
-        select(QuizQuestionClock).where(QuizQuestionClock.attempt_id == attempt.id))}
     out = {"id": attempt.id, "state": attempt.state, "attempt_number": attempt.attempt_number,
            "started_at": attempt.started_at, "submitted_at": attempt.submitted_at,
-           "server_now": now(),
            "question_count": len(questions),
            "questions": [{"key": q.key, "type": q.type, "prompt": q.prompt,
                           "choices": q.choices if q.type == "multiple_choice" else [],
-                          "points": q.points, "duration_minutes": q.duration_minutes,
-                          "started_at": clocks[q.key].started_at if q.key in clocks else None,
-                          "expires_at": clocks[q.key].expires_at if q.key in clocks else None,
-                          "paused_at": clocks[q.key].paused_at if q.key in clocks else None,
-                          "locked_at": clocks[q.key].locked_at if q.key in clocks else None}
+                          "points": q.points}
                          for q in questions],
            "answers": answers}
-    out["active_question_key"] = next(
-        (q.key for q in questions
-         if q.key in clocks and clocks[q.key].locked_at is None
-         and clocks[q.key].paused_at is None), None)
     if attempt.state == "submitted":
         out["score"], out["max_score"] = attempt.score, attempt.max_score
     return out
@@ -145,10 +130,6 @@ def start(db, student, assessment):
     attempt = QuizAttempt(assessment_id=assessment.id, revision_id=rev.id, student_id=student.id,
                           attempt_number=used + 1)
     db.add(attempt)
-    db.flush()
-    first = attempt_questions(db, attempt)[0]
-    db.add(QuizQuestionClock(attempt_id=attempt.id, question_key=first.key, started_at=at,
-                             expires_at=at + timedelta(minutes=first.duration_minutes)))
     db.commit()
     return attempt
 
@@ -181,20 +162,7 @@ def save_answers(db, student, offering_id, attempt_id, answers):
         fail(422, "question_unknown", "An answer refers to a question that is not in this quiz.")
     existing = {a.question_key: a for a in db.scalars(
         select(QuizAnswer).where(QuizAnswer.attempt_id == attempt.id))}
-    clocks = {c.question_key: c for c in db.scalars(
-        select(QuizQuestionClock).where(QuizQuestionClock.attempt_id == attempt.id))}
-    active = next((q.key for q in attempt_questions(db, attempt)
-                   if q.key in clocks and clocks[q.key].locked_at is None
-                   and clocks[q.key].paused_at is None), None)
     for key, response in answers.items():
-        clock = clocks.get(key)
-        if clock is not None and clock.locked_at is not None:
-            if key not in existing or existing[key].response != response:
-                db.commit()
-                fail(409, "question_locked", "That question's timer has ended; its saved answer is locked.")
-            continue
-        if key != active:
-            fail(409, "question_not_active", "Wait until this question's timer starts before answering it.")
         if isinstance(response, str):
             response = response[:MAX_ANSWER_CHARS]
         if key in existing:
@@ -216,32 +184,8 @@ def navigate_question(db, student, offering_id, attempt_id, question_key):
         finalize(db, attempt)
         db.commit()
         fail(409, "attempt_closed", "The deadline passed; your saved answers were submitted.")
-    questions = attempt_questions(db, attempt)
-    active_index = next((i for i, question in enumerate(questions)
-                         if question.key == question_key), None)
-    if active_index is None:
+    if question_key not in {question.key for question in attempt_questions(db, attempt)}:
         fail(422, "question_unknown", "The question is not part of this quiz.")
-    clocks = {clock.question_key: clock for clock in db.scalars(
-        select(QuizQuestionClock).where(QuizQuestionClock.attempt_id == attempt.id))}
-    selected = questions[active_index]
-    selected_clock = clocks.get(question_key)
-    if selected_clock is not None and selected_clock.locked_at is not None:
-        fail(409, "question_locked", "This question is locked.")
-    at = now()
-    for clock in clocks.values():
-        if clock.locked_at is None and clock.paused_at is None:
-            clock.paused_at = at
-
-    if selected_clock is None:
-        selected_clock = QuizQuestionClock(
-            attempt_id=attempt.id, question_key=question_key, started_at=at,
-            expires_at=at + timedelta(minutes=selected.duration_minutes))
-        db.add(selected_clock)
-    else:
-        if selected_clock.paused_at is not None:
-            selected_clock.expires_at += at - selected_clock.paused_at
-            selected_clock.paused_at = None
-    db.commit()
     return student_view(db, attempt)
 
 
@@ -260,16 +204,8 @@ def submit(db, student, offering_id, attempt_id, idempotency_key, answers):
                                           "quiz.")
         existing = {a.question_key: a for a in db.scalars(
             select(QuizAnswer).where(QuizAnswer.attempt_id == attempt.id))}
-        clocks = {c.question_key: c for c in db.scalars(
-            select(QuizQuestionClock).where(QuizQuestionClock.attempt_id == attempt.id))}
         for key, response in answers.items():
             response = response[:MAX_ANSWER_CHARS] if isinstance(response, str) else response
-            clock = clocks.get(key)
-            if clock is not None and clock.locked_at is not None:
-                if key not in existing or existing[key].response != response:
-                    fail(409, "question_locked",
-                         "That question's timer has ended; its saved answer is locked.")
-                continue
             if key in existing:
                 existing[key].response = response
             else:

@@ -20,7 +20,6 @@ class QuestionIn(BaseModel):
     correct: Any = None
     explanation: str = Field(default="", max_length=5000)
     points: Decimal = Field(default=Decimal(1), ge=0, le=1000)
-    duration_minutes: int = Field(default=5, ge=1, le=180)
     source: dict | None = None   # where an AI-drafted question came from
 
 

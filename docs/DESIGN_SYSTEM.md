@@ -6,7 +6,7 @@ Use semantic CSS variables, system/light/dark themes, base mobile layouts, 640px
 
 Short independent forms use native dialog with accessible labels, focus restoration and unsaved-change protection. Imports, syllabus, content editor, quizzes and gradebooks use pages. Server errors and saving/recovery/conflict states must be visible.
 
-In online-quiz authoring, every question has a teacher-editable 1–180 minute limit (5-minute default); lock this setting once attempts exist. During an attempt, show one question at a time with an accessible question-number navigator, saved-answer status, and accessible countdown. Each question timer pauses when the student navigates away and resumes on return, including across reloads. Reaching zero does not lock the answer; answers stay editable until the student submits.
+Online quizzes have no per-question time-limit controls or countdowns. During an attempt, show one question at a time with an accessible question-number navigator and saved-answer status. Students can navigate freely and edit any answer until submission; quiz availability and deadlines remain visible and enforced.
 
 Detailed colors, route inventory and theme rules: IMPLEMENTATION_PLAN.md section 5.
 

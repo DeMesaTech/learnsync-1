@@ -187,7 +187,7 @@ try{
   await shot(stud,'flow-3-student-quiz');
   const attemptId=new URL(stud.url()).pathname.match(/\/attempts\/([^/]+)/)?.[1];
   const current=await call(stud,'GET',`/learn/offerings/${O}/attempts/${attemptId}`);
-  check('the answer is saved against the active timed question',current.status===200&&current.data.answers[current.data.active_question_key]);
+  check('the answer is saved against the untimed question',current.status===200&&current.data.answers[current.data.questions[0].key]);
   await stud.getByRole('button',{name:'Submit quiz now'}).click();
   await stud.getByRole('heading',{name:'Quiz submitted'}).waitFor();
   check('the quiz was scored without revealing the answers',(await text(stud)).includes('1.00 / 1.00')&&(await text(stud)).includes('correct answers are not shown'));
@@ -331,17 +331,17 @@ try{
   // ---------- 8. issue report lifecycle ----------
   await stud.goto('/student/issues');
   await stud.getByRole('button',{name:'Report a problem'}).click();
-  await stud.getByLabel('Short title').fill('Quiz timer is confusing');
+  await stud.getByLabel('Short title').fill('Quiz navigation is confusing');
   await stud.getByLabel('What happened?').fill('I could not tell how much time was left on the quiz page.');
   await stud.getByRole('button',{name:'Send report'}).click();
   await stud.getByText('Your report was sent').waitFor();
   await admin.goto('/admin/issues');
-  await admin.getByText('Quiz timer is confusing').waitFor();
-  await admin.getByLabel('Note for the reporter').fill('Thanks - we will add a visible timer.');
+  await admin.getByText('Quiz navigation is confusing').waitFor();
+  await admin.getByLabel('Note for the reporter').fill('Thanks - we will clarify quiz navigation.');
   await admin.getByRole('button',{name:'Mark as resolved'}).click();
   await admin.getByText('Saved.').waitFor();
   await stud.goto('/student/issues');
-  await stud.getByText('Thanks - we will add a visible timer.').waitFor();
+  await stud.getByText('Thanks - we will clarify quiz navigation.').waitFor();
   check('the student sees the administrator’s reply on a resolved report',(await text(stud)).includes('Resolved'));
   await shot(admin,'flow-6-admin-reports');
 

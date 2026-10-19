@@ -8,7 +8,7 @@ Run Alembic before starting the API. Never initialize from old learnsync.sql. Bo
 
 Alembic revision `c91f7a2e4b60` resets every existing semester to `draft`. This is a one-time, forward-only data change; it preserves academic records and closure metadata but removes the active term, so active-term operations remain unavailable until an administrator schedules and activates a semester. Before applying this revision to any non-test database, stop the API and take and verify a database/uploads backup. Do not treat a schema downgrade as restoring the previous statuses.
 
-Alembic revision `5d82a1f6c901` adds the nullable pause timestamp used by server-authoritative per-question quiz timers. It does not alter existing attempts or answer history.
+Alembic revision `5d82a1f6c901` adds a legacy pause timestamp to the quiz-question clock table. Per-question timers have been removed; application code no longer reads or writes this clock state. The column and prior clock data are retained, and this migration is not needed to start quiz attempts.
 
 Detailed configuration and backup rules: IMPLEMENTATION_PLAN.md section 7. Verified runnable commands will be added as each milestone passes.
 

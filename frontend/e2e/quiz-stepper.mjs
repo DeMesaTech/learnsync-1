@@ -67,14 +67,11 @@ try{
   check('axe finds no violations on the Questions step',(await axe(page)).length===0);
   await act(()=>page.getByRole('button',{name:'Add 3 questions'}).click());
   await page.getByRole('heading',{name:/^Question 3/}).waitFor();
-  check('pasted questions receive a five-minute timer by default',await page.getByLabel('Time limit (minutes)').count()===3&&await page.getByLabel('Time limit (minutes)').nth(0).inputValue()==='5');
-  await act(()=>page.getByLabel('Time limit (minutes)').nth(0).fill('1'));
-  await act(()=>page.getByLabel('Time limit (minutes)').nth(1).fill('2'));
-  await act(()=>page.getByLabel('Time limit (minutes)').nth(2).fill('3'));
+  check('questions have no per-question time-limit controls',await page.getByLabel('Time limit (minutes)').count()===0);
   await act(()=>page.getByRole('button',{name:'Next',exact:true}).click());
   await page.getByText('step 3 of 3').waitFor();
   check('the review step summarises the quiz',(await page.locator('main').innerText()).includes('3 questions · 4 points'));
-  check('the review step shows the combined question time limits',(await page.locator('main').innerText()).includes('6 minutes maximum'));
+  check('the review step does not show a combined question time limit',!(await page.locator('main').innerText()).includes('minutes maximum'));
   check('the final button says Assign',await page.getByRole('button',{name:'Assign',exact:true}).count()===1);
   check('axe finds no violations on the Review step',(await axe(page)).length===0);
   await act(()=>page.getByRole('button',{name:'Assign',exact:true}).click());
@@ -85,15 +82,22 @@ try{
   const student=await newPage(browser,{state:S});await student.goto('/student');
   const todo=(await call(student,'GET','/dashboard/student/todo')).data;
   check('the student now sees Quiz 1 and not the unfinished activity',todo.todo.some(w=>w.title==='Quiz 1')&&!todo.todo.some(w=>w.title==='Activity 1'));
+  await student.goto(`/student/offerings/${O}/work/${quizId}`);
+  check('the quiz detail page omits Classwork type tabs',await student.locator('nav.type-tabs').count()===0);
   const attempt=(await call(student,'POST',`/learn/offerings/${O}/assessments/${quizId}/attempts`,{})).data;
   const studentAttempt=await newPage(browser,{state:S});
   await studentAttempt.goto(`/student/offerings/${O}/work/${quizId}/attempts/${attempt.id}`);
-  check('the student sees the current timed question and a navigator for all questions, without answer keys',await studentAttempt.getByText('Question 1 of 3').count()===1&&await studentAttempt.getByRole('navigation',{name:'Question navigation'}).getByRole('button').count()===3&&await studentAttempt.getByText('Time remaining:',{exact:false}).count()===1&&!JSON.stringify(attempt).includes('"correct"'));
+  check('the student sees an untimed question and a navigator for all questions, without answer keys',await studentAttempt.getByText('Question 1 of 3').count()===1&&await studentAttempt.getByRole('navigation',{name:'Question navigation'}).getByRole('button').count()===3&&await studentAttempt.getByText('Time remaining:',{exact:false}).count()===0&&!JSON.stringify(attempt).includes('"correct"')&&!JSON.stringify(attempt).includes('"expires_at"'));
+  check('Previous is disabled on the first question',await studentAttempt.getByRole('button',{name:/Previous/}).isDisabled());
+  await studentAttempt.getByRole('button',{name:/Next/}).click();
+  check('Next moves to the following question',await studentAttempt.getByText('Question 2 of 3').count()===1);
+  await studentAttempt.getByRole('button',{name:/Previous/}).click();
+  check('Previous returns to the prior question',await studentAttempt.getByText('Question 1 of 3').count()===1);
   check('students can submit after navigating freely',await studentAttempt.getByRole('button',{name:'Submit quiz now'}).count()===1);
-  const timerBefore=(await call(student,'GET',`/learn/offerings/${O}/attempts/${attempt.id}`)).data.questions[0].expires_at;
+  const savedBeforeReload=(await call(student,'GET',`/learn/offerings/${O}/attempts/${attempt.id}`)).data;
   await studentAttempt.reload();
-  const timerAfter=(await call(student,'GET',`/learn/offerings/${O}/attempts/${attempt.id}`)).data.questions[0].expires_at;
-  check('reloading resumes with the same server-set question expiry',timerBefore===timerAfter);
+  const savedAfterReload=(await call(student,'GET',`/learn/offerings/${O}/attempts/${attempt.id}`)).data;
+  check('reloading preserves the untimed attempt without clock metadata',savedBeforeReload.state===savedAfterReload.state&&!JSON.stringify(savedAfterReload).includes('"expires_at"')&&!JSON.stringify(savedAfterReload).includes('"paused_at"'));
 
   // ---- B: Save and exit keeps the work, and editing a published quiz says Update for students
   await page.goto(`/faculty/offerings/${O}/assessments/${quizId}/edit`);await page.waitForLoadState('networkidle');

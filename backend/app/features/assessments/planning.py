@@ -163,7 +163,7 @@ def copy_from(db, actor, target, source):
                             .order_by(QuizQuestion.position)):
             db.add(QuizQuestion(revision_id=draft.id, key=q.key, position=q.position, type=q.type, prompt=q.prompt,
                                 choices=q.choices, correct=q.correct, explanation=q.explanation, points=q.points,
-                                duration_minutes=q.duration_minutes, source=q.source))
+                                source=q.source))
         result["assessments"] += 1
     audit(db, actor, "subject.copied", "offering", target.id, {"from": str(source.id), **result})
     db.commit()
@@ -189,7 +189,7 @@ def duplicate(db, actor, offering, assessment):
     for q in db.scalars(select(QuizQuestion).where(QuizQuestion.revision_id == rev.id).order_by(QuizQuestion.position)):
         db.add(QuizQuestion(revision_id=draft.id, key=q.key, position=q.position, type=q.type, prompt=q.prompt,
                             choices=q.choices, correct=q.correct, explanation=q.explanation, points=q.points,
-                            duration_minutes=q.duration_minutes, source=q.source))
+                            source=q.source))
     for section_id in section_ids_of(db, assessment.id):
         db.add(AssessmentSection(assessment_id=new.id, section_id=section_id))
     audit(db, actor, "assessment.duplicated", "assessment", new.id, {"from": str(assessment.id)})

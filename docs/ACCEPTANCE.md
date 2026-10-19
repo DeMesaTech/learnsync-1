@@ -1,5 +1,24 @@
 # Acceptance status
 
+### Quiz attempt navigation controls (2026-10-19)
+- Added Previous/Next buttons with directional icons alongside Submit quiz now; buttons disable at the first/last question and reuse the saved-answer navigation flow.
+- Removed Classwork type tabs from the quiz/activity detail page while retaining the question-number navigator during an attempt.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite; existing large-chunk advisory), `cd frontend; npm run lint`, `node --check frontend\e2e\quiz-stepper.mjs`, and `git diff --check`.
+- Browser E2E was not run because it requires confirmation that the target database is disposable.
+
+### Quiz start 500 diagnosis (2026-10-19)
+- The configured database is at Alembic revision `d12c8a6f4e30`; `quiz_question_clock` exists but is missing `paused_at`. The former attempt-start code inserted timer rows using that missing column, causing the SQLAlchemy 500.
+- Per the latest user decision, removed per-question timer behavior instead of applying migrations. Quiz availability and deadlines remain enforced. Existing timer schema/data are retained but unused, so this fix does not require a database migration.
+- The subsequently attached traceback is from the still-running API process (PID `25664`), started without Uvicorn `--reload`; it is executing the pre-fix code. The current source no longer imports or inserts `QuizQuestionClock`. Restart that API process to load the fix.
+- The pending chain still includes `c91f7a2e4b60`, a forward-only migration that resets existing semester statuses to `draft`; follow the verified-backup and stopped-API procedure in `docs/OPERATIONS.md` before applying migrations for other reasons.
+
+### Removing per-question quiz timers (2026-10-19)
+- Removed authoring controls, countdown UI, server-side clock writes/reads and active-question answer restrictions. Students may navigate freely and edit any answer before submission. Assessment availability/deadlines remain enforced.
+- Removed timer fields from question and attempt API projections. Retained legacy timer columns and rows to avoid destructive schema/data changes.
+- Passed: focused untimed attempt/navigation and question-import tests (10 passed), Ruff on changed backend files, frontend lint, frontend production build/type-check, and `git diff --check`.
+- Broader assessment/import run: 36 passed; 2 existing score-entry expectation failures (`test_online_quiz_scores_are_only_typed_in_for_no_shows`, `test_no_shows_and_abandoned_attempts_can_be_resolved_by_faculty`), unrelated to quiz timer removal.
+- Quiz-stepper browser E2E was not run; it requires `STEPPER_E2E_DISPOSABLE=1` to confirm the target database is disposable. No migrations were applied.
+
 ### Sequential timed quiz submission (2026-10-19)
 - Replaced the sequential Next-only interaction with a question-number navigator. Navigation pauses the current question timer and resumes the target question's timer; answers remain editable even after a question timer reaches zero, until final submission.
 - Added a nullable per-question paused timestamp migration and backend coverage for free navigation, paused/resumed timers, edits after timer expiry, and submission. Updated the quiz-stepper E2E assertion.
