@@ -1,5 +1,11 @@
 # Acceptance status
 
+### Objective 2 presentation snippets (2026-11-05)
+- Kept faculty module upload in Section 4.C and quiz/activity creation in Section 4.D; numbered the presentation sections sequentially (3–6) and changed Section 4 subsections to A–G.
+- Passed: `git diff --check`; verified the section order, subsection labels, and quiz-source references. No application tests run (documentation-only change).
+- Added [SO 2 presentation code snippet - beginner guide.md](./SO%202%20presentation%20code%20snippet%20-%20beginner%20guide.md) as a separate plain-language companion, preserving the original examples and source locations while explaining the terminology and data flow.
+- Validation: documentation-only change; `git diff --check` passed and the companion's sections 3–6 and A–G subsections were verified.
+
 ### Teacher-configurable per-question quiz timers (2026-10-19)
 - Re-enabled the existing question-clock schema with a forward Alembic migration, converting saved minute limits to seconds and persisting explicit `answered`, `skipped`, and `timed_out` states. Teacher settings accept whole seconds or minutes, bounded to 1 second–180 minutes.
 - The server initializes and enforces each question deadline. Refreshes and reconnects reuse the persisted expiry; delayed clients catch up from the server deadline. Answers are accepted only for the active question. Continue locks answered questions, skip locks unanswered questions and starts the next timer, and timeout locks and automatically advances. Locked questions cannot be revisited or edited.
