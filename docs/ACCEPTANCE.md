@@ -1,5 +1,13 @@
 # Acceptance status
 
+### 2026-11-09 (Chapter-based AI quiz sources and menu placement)
+- Moved the Faculty Classwork chapter material menu above its trigger button.
+- Grouped readable published AI quiz sources by syllabus chapter, with individual material checkboxes and a chapter-level “Use all materials in this chapter” selector. Materials without a matching published chapter anchor are available under Other materials.
+- Expanded generation to allow up to 50 selected materials and retain a bounded 8,000-character provider source budget; long chunks are excerpted to the per-material share so selecting an entire chapter does not silently omit sources.
+- Passed: two focused AI generation tests, Ruff, frontend ESLint and production build, and `git diff --check`.
+- Browser verified: the AI dialog shows 3 chapter groups with 6 individual material choices. Selecting all materials in one chapter selected all 3; deselecting one left the chapter selector unchecked and the other 2 selected. The Classwork create menu's measured bounds place the whole menu above its trigger.
+- Restarted the API; `/openapi.json` returned HTTP 200 and the generation schema reports a 50-material maximum.
+
 ### 2026-11-09 (College-scoped subject catalog matching)
 - Prospectus duplicate indicators and commit skips are now scoped to the selected college. Same-code subjects in other colleges remain eligible for creation and are not overwritten.
 - Subject codes are now unique within a college/program, with a separate uniqueness guard for legacy subjects that have no college. Manual subject creation and college reassignment use the same scope.

@@ -108,6 +108,24 @@ def test_unpublishable_until_the_latest_version_is_reviewed(graded, ai):  # noqa
     assert submit(graded["st1"], graded, attempt["id"]).status_code == 200
 
 
+def test_generation_can_use_materials_across_a_whole_chapter(db, graded, ai):  # noqa: F811
+    item_ids = [
+        lesson(graded, f"Chapter material {n}", TEXT)
+        for n in range(11)
+    ]
+    ai.answer = payload(mc=1, tf=0, sa=0)
+
+    response = gen(graded, item_ids, mc=1, tf=0, sa=0)
+
+    assert response.status_code == 201, response.text
+    sent_sources = ai.calls[0]["messages"][1]["content"]
+    request = json.loads(sent_sources)
+    assert len(request["sources"]) == len(item_ids)
+    assert sum(len(source["text"]) for source in request["sources"]) <= 8_000
+    generation = db.scalars(select(AiGeneration)).one()
+    assert len(generation.source_item_ids) == len(item_ids)
+
+
 def test_manual_quizzes_do_not_need_a_review(graded):
     quiz = make_quiz(graded)
     d = graded["fac"].get(a(graded, f"/{quiz['aid']}")).json()

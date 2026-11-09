@@ -100,7 +100,7 @@ export function FacultyClasswork(){
     return {anchorNodeId:chapter.id,label:chapter.is_intro?`Subject introduction · ${title}`:`Chapter ${number} · ${title}`};
   };
   const createMenu=(context:MaterialContext)=><details className="dropdown chapter-material-dropdown">
-    <summary className="button primary" aria-label={`Add material to ${context.label}`}>＋ Add material</summary>
+    <summary className="button primary" aria-label={`Add material to ${context.label}`}>＋</summary>
     <div className="menu-list chapter-create-menu" role="group" aria-label={`Add material to ${context.label}`}>
       <p className="eyebrow material-context-label">{context.label}</p>
       {CREATE_GROUPS.map(group=><div className="menu-category" key={group.label}><strong>{group.label}</strong>

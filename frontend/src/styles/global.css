@@ -5195,8 +5195,8 @@ details.topic[open]>summary::before {
 }
 
 .chapter-material-dropdown .menu-list {
-  top: calc(100% + 6px);
-  bottom: auto;
+  top: auto;
+  bottom: calc(100% + 6px);
   max-height: min(70vh, 560px);
   overflow-y: auto
 }
@@ -5226,6 +5226,32 @@ details.topic[open]>summary::before {
 .chapter-create-menu .menu-category+.menu-category {
   padding-top: 5px;
   border-top: 1px solid var(--border)
+}
+
+.study-source-picker {
+  display: grid;
+  gap: 10px
+}
+
+.study-source-chapter {
+  min-width: 0;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px
+}
+
+.study-source-chapter>legend {
+  padding: 0 6px;
+  font-weight: 650
+}
+
+.study-source-chapter .study-source-item {
+  margin-left: 12px
+}
+
+.study-source-select-all {
+  font-weight: 600
 }
 
 .chapter-archived {

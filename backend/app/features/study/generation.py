@@ -61,10 +61,17 @@ def gather_sources(db, offering, item_ids):
         used, picked = 0, []
         for chunk in db.scalars(select(ContentChunk).where(ContentChunk.revision_id == rev.id)
                                 .order_by(ContentChunk.ordinal)):
-            if used + len(chunk.text) > per_item:
+            remaining = per_item - used
+            if remaining <= 0:
                 break
-            picked.append(chunk)
-            used += len(chunk.text)
+            text = chunk.text
+            if len(text) > remaining:
+                text = text[:remaining].rsplit(" ", 1)[0] or text[:remaining]
+            if text:
+                picked.append((chunk, text))
+                used += len(text)
+            if used >= per_item:
+                break
         if picked:
             out.append((f"src{n}", item, rev, picked))
     if not out:
@@ -152,7 +159,7 @@ def generate(db, actor, offering_id, data):
     db.commit()
     request = {"task": "generate_quiz", "counts": counts, "language": LANGUAGES[data.language],
                "sources": [{"id": sid, "title": rev.title,
-                            "text": "\n\n".join(c.text for c in chunks)}
+                            "text": "\n\n".join(text for _, text in chunks)}
                            for sid, _, rev, chunks in sources]}
     messages = [{"role": "system", "content": SYSTEM},
                 {"role": "user", "content": json.dumps(request, ensure_ascii=False)}]
