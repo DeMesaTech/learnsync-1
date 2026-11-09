@@ -187,6 +187,24 @@ def test_subject_code_normalised_and_unique(world):
     assert world["subject"]["code"] == "ENT 101"
     again = world["admin"].post("/api/subjects", {"code": "Ent 101", "title": "Dup", "units": "3"})
     assert again.status_code == 409
+    colleges = [
+        world["admin"].post("/api/colleges", {"code": code, "name": name}).json()
+        for code, name in (("COLA", "College A"), ("COLB", "College B"))
+    ]
+    subjects = [
+        world["admin"].post("/api/subjects", {
+            "code": "ENT 101", "title": f"Subject in {college['code']}", "units": "3",
+            "college_id": college["id"]})
+        for college in colleges
+    ]
+    assert [response.status_code for response in subjects] == [201, 201]
+    same_college = world["admin"].post("/api/subjects", {
+        "code": "ENT 101", "title": "Duplicate", "units": "3",
+        "college_id": colleges[0]["id"]})
+    assert same_college.status_code == 409
+    reassigned = world["admin"].patch(
+        f"/api/subjects/{subjects[1].json()['id']}", {"college_id": colleges[0]["id"]})
+    assert reassigned.status_code == 409
 
 
 def test_assigned_faculty_and_enrolled_students_see_offering(db, world):

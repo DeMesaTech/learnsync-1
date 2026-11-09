@@ -317,17 +317,19 @@ def create_prospectus_import(file: UploadFile | None = File(None), actor=Depends
 
 
 @router.get("/prospectus-imports/{import_id}")
-def prospectus_import(import_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):
+def prospectus_import(import_id: UUID, college_id: UUID | None = None,
+                      actor=Depends(admin), db: Session = Depends(get_db)):
     return imports.prospectus_view(
-        db, commands.get_or_404(db, imports.ProspectusImport, import_id, "Prospectus import"))
+        db, commands.get_or_404(db, imports.ProspectusImport, import_id, "Prospectus import"),
+        college_id)
 
 
 @router.put("/prospectus-imports/{import_id}")
-def save_prospectus_draft(import_id: UUID, data: DraftSave, actor=Depends(admin),
-                          db: Session = Depends(get_db)):
+def save_prospectus_draft(import_id: UUID, data: DraftSave, college_id: UUID | None = None,
+                          actor=Depends(admin), db: Session = Depends(get_db)):
     imp = imports.save_prospectus_draft(db, actor, import_id, data.expected_revision,
                                         data.subjects)
-    return imports.prospectus_view(db, imp)
+    return imports.prospectus_view(db, imp, college_id)
 
 
 @router.post("/prospectus-imports/{import_id}/commit")

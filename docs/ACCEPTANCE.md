@@ -1,5 +1,47 @@
 # Acceptance status
 
+### 2026-11-09 (College-scoped subject catalog matching)
+- Prospectus duplicate indicators and commit skips are now scoped to the selected college. Same-code subjects in other colleges remain eligible for creation and are not overwritten.
+- Subject codes are now unique within a college/program, with a separate uniqueness guard for legacy subjects that have no college. Manual subject creation and college reassignment use the same scope.
+- Added migration `c82e6a14d970`; before applying it, backed up to `var/backups/learnsync-20261109-155541`. Backup verification passed at prior revision `b1f4a8d20c3e`, including 26 referenced upload checksums and a readable PostgreSQL dump. Migration is applied; current revision is `c82e6a14d970`.
+- Passed: focused prospectus review/commit tests (3), Ruff, Python compile, frontend ESLint and production build, and `git diff --check`.
+- Passed separately: subject API regression for same-college duplicate rejection, same-code creation across colleges, and reassignment conflict handling (1 test).
+- Browser/API verification: for the same 50-row draft, the selected Information System college showed 0 existing-code matches while the Entrepreneurship college showed 47; selected-college catalog filtering matched all returned `exists` flags. Cross-college import test confirmed same-code creation without skipping.
+
+### 2026-11-09 (Populate current prospectus prerequisites)
+- Saved and verified all 11 prerequisite values in the current, still-uncommitted 50-subject draft (revision 4). No subjects were committed to the catalog.
+- Before migration, created `var/backups/learnsync-20261109-153342` using local PostgreSQL 18 tools. The backup manifest captured revision `41c9e0ab7d52`, 3,420 rows, and 23 referenced files; the source verification passed, all 23 copied-file checksums matched, all 50 upload files were copied, and `pg_restore --list` accepted the database dump.
+- Applied migration `b1f4a8d20c3e` to head and restarted the API. `/openapi.json` returned HTTP 200 on port 8001.
+- Verified the review API returns the 11 requested values at revision 4. Browser verification confirmed the displayed first-year prerequisite fields; the remaining values were verified in the review API response.
+- Regression run: `pytest tests/test_imports.py -q` had 23 passed and 2 unrelated existing faculty-import failures (`make_account` argument mismatch and an unexpected 201 response).
+
+### 2026-11-09 (Prospectus review grouping)
+- Grouped review rows under year-level navigation buttons and semester headings. Unplaced rows remain available in their own group, and adding a row navigates to Unplaced.
+- Added an API-level regression test confirming a labeled DOCX prerequisite is returned in review together with its detected year and semester.
+- Passed: focused import/prerequisite tests (3 passed), frontend ESLint, TypeScript/Vite production build, and `git diff --check`.
+- Browser verification: not run. Existing prospectus drafts created before prerequisite extraction need a fresh upload for the omitted column to be read from the source file.
+- Production build emitted the existing large-JavaScript-chunk advisory.
+
+### 2026-11-09 (College-specific prospectus import)
+- Moved Import prospectus below the subject catalog filters. When a college filter is selected, the import page carries that selection forward.
+- Added an active college/program selector above the file input; upload and manual-entry drafts require a valid selection and carry it into the commit confirmation.
+- Passed: frontend ESLint, TypeScript/Vite production build, and `git diff --check`.
+- Browser verification: not run. Production build emitted the existing large-JavaScript-chunk advisory.
+
+### 2026-11-09 (Prospectus prerequisites)
+- Prospectus DOCX review now extracts a labeled Pre-Requisite column when present; admins can edit prerequisite text in reviewed rows and the subject catalog, and saved catalog entries display it.
+- The subject catalog stores prerequisite text (max 300 characters) through an additive Alembic migration. Existing subjects default to blank.
+- Verified the supplied curriculum parses 50 subjects, including all 11 populated prerequisites, with no parser warnings.
+- Passed: focused prerequisite/import tests (3 passed), Ruff on changed backend files, frontend ESLint, TypeScript/Vite production build, Alembic head check (`b1f4a8d20c3e`), and `git diff --check`.
+- Broader `test_imports.py` run: 22 passed; 2 faculty-import tests failed in unrelated existing test helpers/expectations (`make_account` unexpected `student_number` argument; invalid faculty CSV returned 201 instead of 422).
+- Browser verification: not run. Production build emitted the existing large-JavaScript-chunk advisory.
+
+### 2026-11-08 (Sticky Add section action)
+- Moved Add section to the top of the year-level section menu and made it sticky within the menu's scroll area, so it remains visible while browsing long section lists.
+- Passed: frontend ESLint, TypeScript/Vite production build, and `git diff --check`.
+- Browser verification: not run.
+- Note: production build completed with the existing large-JavaScript-chunk advisory.
+
 ### Objective 2 presentation snippets (2026-11-05)
 - Kept faculty module upload in Section 4.C and quiz/activity creation in Section 4.D; numbered the presentation sections sequentially (3–6) and changed Section 4 subsections to A–G.
 - Passed: `git diff --check`; verified the section order, subsection labels, and quiz-source references. No application tests run (documentation-only change).

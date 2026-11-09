@@ -1106,6 +1106,16 @@ th {
   margin-top: 6px
 }
 
+.prospectus-review-semester {
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid var(--border)
+}
+
+.prospectus-review-semester h2 {
+  margin-top: 0
+}
+
 code {
   background: var(--surface-alt);
   padding: 1px 5px;
@@ -1122,7 +1132,7 @@ code {
   }
 
   .edit-row {
-    grid-template-columns: 110px minmax(180px, 1fr) 70px 70px 80px auto;
+    grid-template-columns: minmax(80px, 1fr) minmax(115px, 1.5fr) minmax(52px, .6fr) minmax(60px, .7fr) minmax(70px, .8fr) minmax(95px, 1.2fr) auto;
     align-items: end
   }
 
@@ -1197,10 +1207,13 @@ code {
 }
 
 .year-section-menu>.year-section-add {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   justify-content: flex-start;
-  margin-top: 4px;
-  border-top: 1px solid var(--border);
-  border-radius: 0 0 6px 6px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 6px 6px 0 0;
+  background: var(--surface);
   color: var(--action);
   font-weight: 700
 }

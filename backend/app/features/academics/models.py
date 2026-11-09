@@ -87,13 +87,19 @@ class College(Base):
 
 class Subject(Base):
     __tablename__ = "subject"
-    __table_args__ = (CheckConstraint("status IN ('active','archived')", name="subject_status"),)
+    __table_args__ = (
+        CheckConstraint("status IN ('active','archived')", name="subject_status"),
+        UniqueConstraint("college_id", "code", name="subject_college_code_unique"),
+        Index("subject_unassigned_code_unique", "code", unique=True,
+              postgresql_where=text("college_id IS NULL")),
+    )
     id: Mapped[uuid.UUID] = uid()
-    code: Mapped[str] = mapped_column(String(30), unique=True)
+    code: Mapped[str] = mapped_column(String(30))
     title: Mapped[str] = mapped_column(String(200))
     units: Mapped[Decimal] = mapped_column(Numeric(4, 1))
     year_level: Mapped[int | None] = mapped_column(Integer)
     semester: Mapped[int | None] = mapped_column(Integer)
+    prerequisite: Mapped[str] = mapped_column(String(300), default="", server_default="")
     description: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(10), default="active")
     college_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("college.id"), index=True)

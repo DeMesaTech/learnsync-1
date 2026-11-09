@@ -179,6 +179,7 @@ ROW_RE = re.compile(rf"^\s*(?P<code>{CODE})\s+(?P<title>.+?)\s+(?P<units>\d{{1,2
                     r"(?:\s+\d{1,3}(?:\.\d)?){0,3}\s*$", re.IGNORECASE)
 LOOKS_LIKE_ROW = re.compile(rf"^\s*{CODE}\s+\S", re.IGNORECASE)
 TABLE_BOUNDARY = "\x00PROSPECTUS_TABLE_BOUNDARY\x00"
+DOCX_ROW_SEPARATOR = "\x00PROSPECTUS_ROW\x00"
 
 
 def read_lines(path, ext):
@@ -197,11 +198,18 @@ def read_lines(path, ext):
                 header = [_norm(cell.text) for cell in rows[0].cells] if rows else []
                 columns = {name: header.index(name) for name in
                            ("subject_code", "descriptive_title", "units") if name in header}
+                prerequisite_column = next(
+                    (header.index(name) for name in ("pre_requisite", "prerequisite")
+                     if name in header), None)
                 if len(columns) == 3:
                     for row in rows[1:]:
                         cells = [cell.text.strip() for cell in row.cells]
-                        lines.append(" ".join(cells[columns[name]] for name in
-                                              ("subject_code", "descriptive_title", "units")))
+                        values = [cells[columns[name]] for name in
+                                  ("subject_code", "descriptive_title", "units")]
+                        values.append(cells[prerequisite_column]
+                                      if prerequisite_column is not None
+                                      and prerequisite_column < len(cells) else "")
+                        lines.append(DOCX_ROW_SEPARATOR.join(values))
                 else:
                     lines.extend(" ".join(cell.text.strip() for cell in row.cells
                                           if cell.text.strip()) for row in rows)
@@ -217,7 +225,7 @@ def read_lines(path, ext):
 
 
 def parse_prospectus(lines):
-    """Best-effort subject draft: [{code,title,units,year_level,semester}], plus warnings."""
+    """Best-effort subject draft with optional prerequisites, plus warnings."""
     draft, warnings, year, sem = [], [], None, None
     table_year_seen = table_semester_seen = False
     for line in lines:
@@ -232,9 +240,22 @@ def parse_prospectus(lines):
         if m := SEM_RE.search(line):
             sem = SEM_WORDS.get((m.group(1) or "").lower()) or int(m.group(2))
             table_semester_seen = True
-        if m := ROW_RE.match(line):
+        if DOCX_ROW_SEPARATOR in line:
+            code, title, units, prerequisite = (line.split(DOCX_ROW_SEPARATOR) + [""] * 4)[:4]
+            code, title, units, prerequisite = (
+                re.sub(r"\s+", " ", value).strip()
+                for value in (code, title, units, prerequisite))
+            if re.fullmatch(CODE, code, re.IGNORECASE) and title \
+                    and re.fullmatch(r"\d{1,2}(?:\.\d)?", units):
+                draft.append({"code": code.upper(), "title": title, "units": units,
+                              "year_level": year, "semester": sem,
+                              "prerequisite": prerequisite})
+            elif LOOKS_LIKE_ROW.match(line):
+                warnings.append(f"Could not read: {line[:120]}")
+        elif m := ROW_RE.match(line):
             draft.append({"code": re.sub(r"\s+", " ", m["code"]).upper(), "title": m["title"],
-                          "units": m["units"], "year_level": year, "semester": sem})
+                          "units": m["units"], "year_level": year, "semester": sem,
+                          "prerequisite": ""})
         elif LOOKS_LIKE_ROW.match(line):
             warnings.append(f"Could not read: {line[:120]}")
     if not draft:

@@ -57,7 +57,8 @@ def college(db, college_id):
 def subject_view(subject):
     data = {"id": subject.id, "code": subject.code, "title": subject.title,
             "units": subject.units, "year_level": subject.year_level,
-            "semester": subject.semester, "description": subject.description,
+            "semester": subject.semester, "prerequisite": subject.prerequisite,
+            "description": subject.description,
             "status": subject.status, "college_id": subject.college_id}
     if subject.college is not None:
         data["college"] = {"id": subject.college.id, "code": subject.college.code,

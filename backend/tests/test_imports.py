@@ -369,6 +369,29 @@ def test_docx_table_without_a_clear_year_and_semester_heading_is_unplaced(tmp_pa
     assert any("no year level/semester" in warning for warning in warnings)
 
 
+def test_docx_extracts_pre_requisites_from_labeled_table(tmp_path):
+    doc = Document()
+    doc.add_paragraph("1st YEAR — 2nd Semester")
+    table = doc.add_table(rows=1, cols=6)
+    for cell, value in zip(table.rows[0].cells, (
+            "Subject Code", "Descriptive Title", "Lec", "Lab", "Units", "Pre-Requisite")):
+        cell.text = value
+    for values in (
+            ("AE 113", "Financial Accounting & Reporting", "6", "0", "6", "BCA 1"),
+            ("GEN ED 004", "Mathematics in the Modern World", "3", "0", "3", "")):
+        for cell, value in zip(table.add_row().cells, values):
+            cell.text = value
+
+    path = tmp_path / "curriculum.docx"
+    doc.save(path)
+    draft, warnings = documents.parse_prospectus(documents.read_lines(path, ".docx"))
+
+    assert [(row["code"], row["prerequisite"]) for row in draft] == [
+        ("AE 113", "BCA 1"), ("GEN ED 004", "")]
+    assert all(row["year_level"] == 1 and row["semester"] == 2 for row in draft)
+    assert warnings == []
+
+
 def docx_bytes(lines):
     doc = Document()
     for line in lines:
@@ -386,12 +409,17 @@ PROSPECTUS = ["BS Entrepreneurship Prospectus", "First Year", "First Semester",
 
 def test_prospectus_extraction_review_and_commit(db, stage):
     admin = stage["admin"]
-    db.add(Subject(code="GE 101", title="Existing", units=3))
-    db.commit()
+    existing_subject = admin.post("/api/subjects", {
+        "code": "GE 101", "title": "Existing", "units": "3",
+        "college_id": stage["college"]["id"]})
+    assert existing_subject.status_code == 201, existing_subject.text
     created = admin.upload("/api/prospectus-imports", "prospectus.docx", docx_bytes(PROSPECTUS))
     assert created.status_code == 201, created.text
     draft = created.json()
-    rows = {r["code"]: r for r in draft["subjects"]}
+    review = admin.get(
+        f"/api/prospectus-imports/{draft['id']}?college_id={stage['college']['id']}")
+    assert review.status_code == 200, review.text
+    rows = {r["code"]: r for r in review.json()["subjects"]}
     assert rows["ENT 101"]["title"] == "Introduction to Entrepreneurship"
     assert rows["ENT 101"]["units"] == "3" and rows["ENT 101"]["year_level"] == 1
     assert rows["ENT 102"]["semester"] == 2 and rows["GE 101"]["exists"] is True
@@ -399,9 +427,11 @@ def test_prospectus_extraction_review_and_commit(db, stage):
     assert db.scalar(select(func.count()).select_from(Subject)) == 1     # nothing created yet
 
     edited = [{"code": r["code"], "title": r["title"], "units": r["units"],
-               "year_level": r["year_level"], "semester": r["semester"]}
+               "year_level": r["year_level"], "semester": r["semester"],
+               "prerequisite": r["prerequisite"]}
               for r in draft["subjects"]]
     edited[0]["title"] = "Intro to Entrepreneurship (reviewed)"
+    edited[0]["prerequisite"] = "BCA 1"
     saved = admin.put(f"/api/prospectus-imports/{draft['id']}",
                       {"expected_revision": 1, "subjects": edited})
     assert saved.status_code == 200 and saved.json()["revision"] == 2
@@ -414,13 +444,80 @@ def test_prospectus_extraction_review_and_commit(db, stage):
     assert done.status_code == 200 and done.json() == {"created": 2, "skipped_existing": 1}
     subject = db.scalar(select(Subject).where(Subject.code == "ENT 101"))
     assert subject.title == "Intro to Entrepreneurship (reviewed)"
+    assert subject.prerequisite == "BCA 1"
     assert str(subject.college_id) == stage["college"]["id"]
     existing = db.scalar(select(Subject).where(Subject.code == "GE 101"))
     assert existing.title == "Existing"                                   # never overwritten
-    assert existing.college_id is None
+    assert str(existing.college_id) == stage["college"]["id"]
     again = admin.post(f"/api/prospectus-imports/{draft['id']}/commit",
                        prospectus_commit(stage, 2))
     assert again.status_code == 409
+
+
+def test_prospectus_same_code_in_another_college_is_created(db, stage):
+    admin = stage["admin"]
+    other_college = admin.post("/api/colleges", {
+        "code": "OTHER", "name": "Other College"}).json()
+    existing = admin.post("/api/subjects", {
+        "code": "GE 101", "title": "Other college subject", "units": "3",
+        "college_id": other_college["id"]})
+    assert existing.status_code == 201, existing.text
+
+    created = admin.upload("/api/prospectus-imports", "prospectus.docx",
+                           docx_bytes(PROSPECTUS))
+    assert created.status_code == 201, created.text
+    draft = created.json()
+    review = admin.get(
+        f"/api/prospectus-imports/{draft['id']}?college_id={stage['college']['id']}")
+    assert review.status_code == 200, review.text
+    assert next(row for row in review.json()["subjects"] if row["code"] == "GE 101")[
+        "exists"] is False
+
+    done = admin.post(f"/api/prospectus-imports/{draft['id']}/commit",
+                      prospectus_commit(stage, 1))
+    assert done.status_code == 200, done.text
+    assert done.json() == {"created": 3, "skipped_existing": 0}
+    matching = db.scalars(select(Subject).where(Subject.code == "GE 101")).all()
+    assert len(matching) == 2
+    assert {str(subject.college_id) for subject in matching} == {
+        stage["college"]["id"], other_college["id"]}
+
+
+def test_prospectus_review_returns_extracted_prerequisite_and_placement(stage):
+    doc = Document()
+    doc.add_paragraph("1st YEAR — 2nd Semester")
+    table = doc.add_table(rows=1, cols=6)
+    for cell, value in zip(table.rows[0].cells, (
+            "Subject Code", "Descriptive Title", "Lec", "Lab", "Units", "Pre-Requisite")):
+        cell.text = value
+    for cell, value in zip(table.add_row().cells, (
+            "AE 113", "Financial Accounting & Reporting", "6", "0", "6", "BCA 1")):
+        cell.text = value
+    buffer = io.BytesIO()
+    doc.save(buffer)
+
+    response = stage["admin"].upload(
+        "/api/prospectus-imports", "curriculum.docx", buffer.getvalue())
+
+    assert response.status_code == 201, response.text
+    subject = response.json()["subjects"][0]
+    assert subject["code"] == "AE 113"
+    assert subject["prerequisite"] == "BCA 1"
+    assert subject["year_level"] == 1 and subject["semester"] == 2
+
+
+def test_subject_prerequisite_can_be_edited_through_catalog_api(stage):
+    admin = stage["admin"]
+    created = admin.post("/api/subjects", {
+        "code": "AE 113", "title": "Financial Accounting", "units": "6",
+        "prerequisite": " BCA 1 "})
+    assert created.status_code == 201, created.text
+    subject = created.json()
+    assert subject["prerequisite"] == "BCA 1"
+
+    updated = admin.patch(f"/api/subjects/{subject['id']}", {"prerequisite": "AE 112"})
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["prerequisite"] == "AE 112"
 
 
 def test_prospectus_commit_requires_an_active_college(db, stage):

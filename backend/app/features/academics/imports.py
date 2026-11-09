@@ -157,8 +157,11 @@ def commit_student_import(db, actor, import_id):
 
 # ---------- prospectus ----------
 
-def validate_draft(db, draft):
-    existing = set(db.scalars(select(Subject.code)))
+def validate_draft(db, draft, college_id=None):
+    existing = set()
+    if college_id is not None:
+        existing = set(db.scalars(select(Subject.code).where(
+            Subject.college_id == college_id)))
     seen, out = set(), []
     for index, row in enumerate(draft, start=1):
         errors = []
@@ -176,6 +179,9 @@ def validate_draft(db, draft):
             units = None
             errors.append("Units must be a number from 0 to 99.")
         year, sem = row.get("year_level"), row.get("semester")
+        prerequisite = str(row.get("prerequisite") or "").strip()
+        if len(prerequisite) > 300:
+            errors.append("Pre-requisite must be at most 300 characters.")
         if year is not None and not (isinstance(year, int) and 1 <= year <= 6):
             errors.append("Year level must be 1-6 or empty.")
         if sem is not None and not (isinstance(sem, int) and 1 <= sem <= 4):
@@ -185,13 +191,15 @@ def validate_draft(db, draft):
         seen.add(code)
         out.append({"index": index, "code": code, "title": title,
                     "units": None if units is None else str(units), "year_level": year,
-                    "semester": sem, "exists": code in existing, "errors": errors})
+                    "semester": sem, "prerequisite": prerequisite,
+                    "exists": code in existing, "errors": errors})
     return out
 
 
-def prospectus_view(db, imp):
+def prospectus_view(db, imp, college_id=None):
     return {"id": imp.id, "status": imp.status, "revision": imp.revision,
-            "warnings": imp.warnings, "subjects": validate_draft(db, imp.draft)}
+            "warnings": imp.warnings,
+            "subjects": validate_draft(db, imp.draft, college_id)}
 
 
 def create_prospectus_import(db, actor, upload):
@@ -245,7 +253,7 @@ def commit_prospectus(db, actor, import_id, expected_revision, college_id):
         fail(404, "college_not_found", "College not found.")
     if college.status != "active":
         fail(409, "college_inactive", "Choose an active college for this prospectus.")
-    rows = validate_draft(db, imp.draft)
+    rows = validate_draft(db, imp.draft, college.id)
     if not rows:
         fail(422, "draft_empty", "Add at least one subject before committing.")
     if any(r["errors"] for r in rows):
@@ -256,6 +264,7 @@ def commit_prospectus(db, actor, import_id, expected_revision, college_id):
             continue   # existing catalog entries are never overwritten by an import
         db.add(Subject(code=r["code"], title=r["title"], units=Decimal(r["units"]),
                        year_level=r["year_level"], semester=r["semester"],
+                       prerequisite=r["prerequisite"],
                        college_id=college.id))
         created += 1
     imp.status, imp.committed_at = "committed", now()

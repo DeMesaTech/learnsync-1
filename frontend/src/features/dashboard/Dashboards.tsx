@@ -97,7 +97,6 @@ export function FacultyHome(){
       <Heading eyebrow="Staff dashboard" title={`${greeting()}, ${d.name}.`} line="Your subjects, teaching tasks and grading at a glance."/>
       <div className="dash-grid">
         <div className="dash-main">
-          <Stats items={[[d.totals.subjects,'Assigned subjects in open terms'],[d.totals.students,'Subject enrollments'],[d.totals.to_grade,'Activity submissions to grade',d.queue[0]?.link],[d.totals.needs_review,'Students with grades to review',d.review_link??undefined]]}/>
           <section aria-labelledby="my-subjects-h"><div className="section-head"><h2 id="my-subjects-h">My Classes</h2><Link state={here} to="/faculty/subjects">{d.closed_subjects?`All subjects, including ${plural(d.closed_subjects,'past one')}`:'All subjects'}</Link></div>
             {d.subjects.length===0?<p className="panel muted">No subjects are assigned to you in an open term.</p>:<div className="cards">{d.subjects.map(s=>{
               const o=`/faculty/offerings/${s.offering_id}`;const drafts=s.drafts_content+s.drafts_assessments;

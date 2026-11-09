@@ -10,6 +10,8 @@ Online quizzes have no per-question time-limit controls or countdowns. During an
 
 Detailed colors, route inventory and theme rules: IMPLEMENTATION_PLAN.md section 5.
 
+Prospectus review groups subjects under year-level navigation tabs and semester headings. Rows with unclear placement stay available under Unplaced and remain editable.
+
 ## Route map as built (supersedes the inventory in IMPLEMENTATION_PLAN.md section 5)
 
 Several plan routes became tabs of one offering page; this is the actual map (source: `frontend/src/app/router.tsx`).

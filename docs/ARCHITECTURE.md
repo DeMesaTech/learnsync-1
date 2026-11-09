@@ -22,7 +22,7 @@ Online quiz scores are computed only from submitted attempts. Faculty may correc
 
 Online quizzes expose one active question at a time. Each published question carries a teacher-configured time limit, stored in seconds. `quiz_question_clock` records the server-side start, expiry, and terminal state (`answered`, `skipped`, or `timed_out`); a refresh or disconnected client cannot pause or reset a deadline. The server accepts answers only for the active question and starts the next question at the skip/answer time or prior expiry time. Students cannot revisit locked questions. Assessment availability and overall deadlines remain enforced.
 
-When committing a reviewed prospectus, the admin confirms an active college. Newly created subjects inherit that college; existing catalog subjects are not overwritten. The API validates the college at commit time.
+When committing a reviewed prospectus, the admin confirms an active college. Newly created subjects inherit that college; a subject is considered existing and skipped only when its code is already in that same college's catalog. The same code may exist in another college as a separate subject. Subject-code uniqueness is enforced per college (and globally only for legacy subjects without a college). The API validates the college at commit time.
 
 Approved schema/lifecycles: IMPLEMENTATION_PLAN.md sections 3-4. AI retrieval restrictions: section 6.
 

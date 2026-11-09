@@ -398,6 +398,11 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
                 aria-expanded={openYearMenu===yearLevel}
                 onClick={()=>setOpenYearMenu(yearLevel)}>{yearLabel(yearLevel)}</button>
               {openYearMenu===yearLevel&&<div className="year-section-menu" role="group" aria-label={`${yearLabel(yearLevel)} sections`}>
+                <button type="button" className="year-section-add"
+                  disabled={closed||bulkActionBusy||subjects.isPending||subjects.isError||colleges.isPending||colleges.isError||programYears.length===0}
+                  onClick={()=>{setActiveYear(yearLevel);setOpenYearMenu(null);setDialog('section')}}>
+                  <span aria-hidden="true">＋</span> Add section
+                </button>
                 {sections.isPending?<span className="muted">Loading sections…</span>
                   :sectionsForYear.length?sectionsForYear.map(section=><button key={section.id} type="button"
                     className={selectedSection?.id===section.id?'selected':''}
@@ -407,11 +412,6 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
                     <span>{section.name}</span><span className="muted">{section.member_count} students</span>
                   </button>)
                   :<span className="muted">No sections for this year level.</span>}
-                <button type="button" className="year-section-add"
-                  disabled={closed||bulkActionBusy||subjects.isPending||subjects.isError||colleges.isPending||colleges.isError||programYears.length===0}
-                  onClick={()=>{setActiveYear(yearLevel);setOpenYearMenu(null);setDialog('section')}}>
-                  <span aria-hidden="true">＋</span> Add section
-                </button>
               </div>}
             </div>})}
           </nav>

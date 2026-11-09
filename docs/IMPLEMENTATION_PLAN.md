@@ -53,7 +53,7 @@ Earlier requirements are superseded where they conflict with later decisions. Sp
 Keep or implement:
 
 - School years and semesters.
-- Initial prospectus upload and reviewed subject extraction. For labeled DOCX curriculum tables, extract only the Subject Code, Descriptive Title, and Units columns. Associate each whole table with the year and semester in its heading (`1st year` → `1`, `2nd semester` → `2`). If either heading is unclear for a table, keep both placement fields blank and flag the subject rows for review rather than inheriting placement from a prior table.
+- Initial prospectus upload and reviewed subject extraction. Place the catalog import action below its filters and require an active college/program selection before reading a prospectus; carry that selection into the reviewed commit. A subject code is considered existing and skipped only when it is already in that same college/program catalog; the same code in another college/program is a separate subject. Enforce subject-code uniqueness within each college/program while preserving uniqueness for legacy unassigned subjects. For labeled DOCX curriculum tables, extract the Subject Code, Descriptive Title, and Units columns, plus the Pre-Requisite column when present. Save reviewed prerequisite text with each catalog subject. Associate each whole table with the year and semester in its heading (`1st year` → `1`, `2nd semester` → `2`). Group review rows by year and semester for navigation; if either heading is unclear for a table, keep both placement fields blank and flag the subject rows under Unplaced rather than inheriting placement from a prior table.
 - Subject catalog management.
 - Sections and student rosters. Admins can create a chosen number of sections at once; names use the next available alphabetical labels for that year level (for example, `BSE 1A`, `BSE 1B`), without duplicating existing section letters. An unused section may be deleted; sections referenced by current or historical academic records are protected.
 - Regular student enrollment through section membership.
@@ -568,7 +568,7 @@ Audit logs must omit passwords, session/reset tokens, provider keys, and unneces
 |---|---|
 | `school_year` | `id`, unique label, start/end dates, status |
 | `academic_term` | `id`, `school_year_id`, name/sequence, start/end dates, `status`, closure metadata |
-| `subject` | `id`, unique code, title, units, catalog year/semester placement, description, active/archive status |
+| `subject` | `id`, unique code, title, units, catalog year/semester placement, prerequisite text, description, active/archive status |
 | `prospectus_import` | `id`, source `file_id`, extracted draft JSON, warnings, revision, review/commit metadata |
 | `section` | `id`, `term_id`, name, year level; unique name within term |
 | `section_member` | `id`, `section_id`, student account, status; unique student/section association |

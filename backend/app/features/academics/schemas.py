@@ -74,6 +74,7 @@ class SubjectInput(BaseModel):
     units: Decimal = Field(ge=0, le=99)
     year_level: int | None = Field(default=None, ge=1, le=6)
     semester: int | None = Field(default=None, ge=1, le=4)
+    prerequisite: str = Field(default="", max_length=300)
     description: str = Field(default="", max_length=5000)
     college_id: uuid.UUID | None = None
 
@@ -83,6 +84,7 @@ class SubjectUpdate(BaseModel):
     units: Decimal | None = Field(default=None, ge=0, le=99)
     year_level: int | None = Field(default=None, ge=1, le=6)
     semester: int | None = Field(default=None, ge=1, le=4)
+    prerequisite: str = Field(default="", max_length=300)
     description: str | None = Field(default=None, max_length=5000)
     college_id: uuid.UUID | None = None
     status: Literal["active", "archived"] | None = None
@@ -163,6 +165,7 @@ class DraftSubject(BaseModel):
     units: str | int | float | None = None
     year_level: int | None = None
     semester: int | None = None
+    prerequisite: str = Field(default="", max_length=300)
 
 
 class DraftSave(BaseModel):

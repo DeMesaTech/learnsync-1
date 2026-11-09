@@ -261,11 +261,13 @@ def delete_college(db, actor, college_id):
 
 def create_subject(db, actor, data):
     code = data.code.strip().upper()
-    if db.scalar(select(Subject.id).where(Subject.code == code)):
-        fail(409, "subject_exists", "A subject with this code already exists.")
     if data.college_id is not None and not db.get(College, data.college_id):
         fail(404, "college_not_found", "College not found.")
-    subject = Subject(**{**data.model_dump(), "code": code})
+    if db.scalar(select(Subject.id).where(
+            Subject.code == code, Subject.college_id == data.college_id)):
+        fail(409, "subject_exists", "A subject with this code already exists in this college.")
+    subject = Subject(**{**data.model_dump(), "code": code,
+                         "prerequisite": data.prerequisite.strip()})
     db.add(subject)
     db.flush()
     audit(db, actor, "subject.created", "subject", subject.id, {"code": code, "college_id": str(subject.college_id) if subject.college_id else None})
@@ -278,6 +280,14 @@ def update_subject(db, actor, subject_id, data):
     changes = data.model_dump(exclude_unset=True)
     if data.college_id is not None and not db.get(College, data.college_id):
         fail(404, "college_not_found", "College not found.")
+    college_id = changes.get("college_id", subject.college_id)
+    if db.scalar(select(Subject.id).where(
+            Subject.code == subject.code,
+            Subject.college_id == college_id,
+            Subject.id != subject.id)):
+        fail(409, "subject_exists", "A subject with this code already exists in this college.")
+    if changes.get("prerequisite") is not None:
+        changes["prerequisite"] = changes["prerequisite"].strip()
     for field, value in changes.items():
         setattr(subject, field, value)
     audit(db, actor, "subject.updated", "subject", subject.id,
