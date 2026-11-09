@@ -8,12 +8,21 @@ import {Dialog} from '../../components/Dialog';
 export interface Issue{id:string;type:'bug'|'account'|'content'|'other';title:string;description:string;page:string;status:'open'|'in_progress'|'resolved';admin_note:string;created_at:string;updated_at:string}
 interface AdminIssue extends Issue{reporter:{id:string;name:string;email:string;role:string};reviewed_at:string|null}
 const TYPE_LABEL={bug:'Something is broken',account:'Account or sign-in',content:'A lesson, quiz or grade looks wrong',other:'Something else'} as const;
+const ISSUE_PRESETS=[
+  {label:"I can't sign in",type:'account',title:"I can't sign in to my account",description:"I can't sign in to my account. I expected to be able to access my dashboard with my usual sign-in details."},
+  {label:"A class or lesson won't open",type:'content',title:"A class or learning material won't open",description:"I can't open a class, lesson, syllabus, or learning material. I expected it to open normally."},
+  {label:"A quiz or assignment isn't working",type:'bug',title:"A quiz or assignment isn't working",description:"A quiz or assignment won't load, save, or submit. I expected to be able to complete it normally."},
+  {label:"A grade or attendance entry looks wrong",type:'content',title:"A grade, result, or attendance entry looks wrong",description:"A grade, result, or attendance entry looks incorrect. I expected the information to match my academic record."},
+  {label:"A page is slow, frozen, or showing an error",type:'bug',title:"A page is slow, frozen, or showing an error",description:"A page is slow, frozen, or showing an error. I expected the page to load and work normally."},
+] as const;
 const STATUS_LABEL={open:'Open',in_progress:'Being looked at',resolved:'Resolved'} as const;
 const when=(iso:string)=>new Date(iso).toLocaleString();
 
 export function MyIssues(){
   const location=useLocation();
   const [error,setError]=useState('');const [sent,setSent]=useState(false);const [busy,setBusy]=useState(false);const [open,setOpen]=useState(false);
+  const [type,setType]=useState<Issue['type']>('bug');const [title,setTitle]=useState('');const [description,setDescription]=useState('');
+  const [selectedPreset,setSelectedPreset]=useState<string|null>(null);
   const list=useInfiniteQuery({queryKey:['issues'],initialPageParam:0,queryFn:({pageParam})=>api<{items:Issue[];has_more:boolean}>(`/issues?limit=25&offset=${pageParam}`),getNextPageParam:(p,all)=>p.has_more?all.length*25:undefined});
   const mine=list.data?.pages.flatMap(p=>p.items)??[];
   async function submit(e:FormEvent<HTMLFormElement>){
@@ -25,12 +34,18 @@ export function MyIssues(){
   }
   return <>
     <div className="page-heading"><div><h1>Report a problem</h1><p className="muted">Tell the administrators what went wrong. Please do not include passwords or other private information.</p></div>
-      <button className="primary" onClick={()=>{setError('');setSent(false);setOpen(true)}}>Report a problem</button></div>
+      <button className="primary" onClick={()=>{setError('');setSent(false);setType('bug');setTitle('');setDescription('');setSelectedPreset(null);setOpen(true)}}>Report a problem</button></div>
     {sent&&<p role="status">Thank you. Your report was sent.</p>}
     {open&&<Dialog title="Report a problem" onClose={()=>setOpen(false)}><form onSubmit={submit}>
-      <label>What kind of problem is it?<select name="type" defaultValue="bug">{Object.entries(TYPE_LABEL).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
-      <label>Short title<input name="title" required minLength={3} maxLength={120}/></label>
-      <label>What happened? What did you expect?<textarea name="description" required minLength={10} maxLength={4000}/></label>
+      <label>What kind of problem is it?<select name="type" value={type} onChange={e=>setType(e.target.value as Issue['type'])}>{Object.entries(TYPE_LABEL).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
+      <div className="problem-presets">
+        <p id="problem-presets-help" className="muted">Choose a common problem to fill in the report. You can edit the details before sending.</p>
+        <div className="problem-preset-list" role="group" aria-label="Common problems" aria-describedby="problem-presets-help">
+          {ISSUE_PRESETS.map(preset=><button key={preset.label} type="button" aria-pressed={selectedPreset===preset.label} onClick={()=>{setSelectedPreset(preset.label);setType(preset.type);setTitle(preset.title);setDescription(preset.description)}}>{preset.label}</button>)}
+        </div>
+      </div>
+      <label>Short title<input name="title" value={title} onChange={e=>setTitle(e.target.value)} required minLength={3} maxLength={120}/></label>
+      <label>What happened? What did you expect?<textarea name="description" value={description} onChange={e=>setDescription(e.target.value)} required minLength={10} maxLength={4000}/></label>
       <label>Where did it happen? (optional)<input name="page" maxLength={200} defaultValue={location.state&&typeof location.state==='object'&&'from' in location.state?String((location.state as {from:string}).from):''} placeholder="For example: Quiz 1 in ENT 101"/></label>
       {error&&<p role="alert">{error}</p>}
       <div className="actions"><button type="button" onClick={()=>setOpen(false)}>Cancel</button><button className="primary" disabled={busy}>{busy?'Sending…':'Send report'}</button></div></form></Dialog>}

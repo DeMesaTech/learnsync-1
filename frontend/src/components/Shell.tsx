@@ -27,7 +27,7 @@ function navigation(role:'admin'|'faculty'|'student', classes:ClassLink[]=[]):{l
   if(role==='admin'){
     return [
       {label:'Management',items:[{to:`${home}/students`,label:'Student',icon:'◫'},{to:`${home}/offerings`,label:'Faculty',icon:'☰'}]},
-      {label:'Oversight',items:[{to:`${home}/subjects`,label:'Subjects',icon:'▤'}/*,{to:`${home}/issues`,label:'Reports',icon:'?'},{to:`${home}/audit`,label:'Audit history',icon:'◷'}*/]},
+      {label:'Oversight',items:[{to:`${home}/subjects`,label:'Subjects',icon:'▤'},{to:`${home}/issues`,label:'Reports',icon:'?'},{to:`${home}/audit`,label:'Audit history',icon:'◷'}]},
       {label:'Settings',items:[{to:`${home}/settings`,label:'Settings',icon:'⚙'}]}
     ];
   }

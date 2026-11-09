@@ -150,7 +150,7 @@ export function AdminHome(){
 export function StudentTodo(){
   const here=useHere();
   const query=useQuery({queryKey:['todo','student'],queryFn:()=>api<{todo:Work[];awaiting_feedback:Work[];another_attempt:Work[]}>('/dashboard/student/todo')});
-  const row=(w:Work,note:string)=><li key={w.assessment_id}><Link state={here} to={workLink(w)}>{w.title}</Link><span className="muted">{w.subject} · {w.kind==='online_quiz'?'Quiz':'Activity'} · {note}</span></li>;
+  const row=(w:Work,note:string)=><li className="todo-row" key={w.assessment_id}><Link state={here} to={workLink(w)}><strong>{w.title}</strong><span className="muted">{w.subject} · {w.kind==='online_quiz'?'Quiz':'Activity'} · {note}</span></Link></li>;
   const group=(title:string,hint:string,items:Work[],note:(w:Work)=>string)=><section className="panel" key={title}><h2>{title}</h2><p className="muted">{hint}</p>
     {items.length===0?<p className="muted">Nothing here.</p>:<ul className="rows">{items.map(w=>row(w,note(w)))}</ul>}</section>;
   return <>

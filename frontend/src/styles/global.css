@@ -283,6 +283,10 @@ p {
   margin: 16px 0
 }
 
+dialog .actions {
+  justify-content: flex-end
+}
+
 .account-row {
   display: flex;
   flex-direction: column;
@@ -558,6 +562,119 @@ dialog.item-editor-dialog,
 dialog.assessment-editor-dialog {
   width: min(920px, calc(100vw - 24px));
   max-height: 92dvh
+}
+
+dialog.assessment-editor-dialog {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden
+}
+
+.assessment-editor-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain
+}
+
+.assessment-editor-actions {
+  flex: 0 0 auto;
+  position: sticky;
+  bottom: -24px;
+  z-index: 1;
+  margin: 16px -24px -24px;
+  padding: 12px 24px;
+  justify-content: flex-end;
+  background: var(--surface);
+  border-top: 1px solid var(--border)
+}
+
+.problem-presets {
+  display: grid;
+  gap: 8px
+}
+
+.problem-presets>p {
+  margin: 0
+}
+
+.problem-preset-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px
+}
+
+.problem-preset-list button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 64px;
+  height: auto;
+  padding: 12px 14px;
+  border: 2px solid var(--border);
+  border-left: 6px solid var(--action);
+  border-radius: 10px;
+  background: var(--surface-alt);
+  color: var(--text);
+  box-shadow: 0 2px 6px rgba(25, 52, 71, .1);
+  font-weight: 650;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal
+}
+
+.problem-preset-list button:hover,
+.problem-preset-list button[aria-pressed="true"] {
+  border-color: var(--action);
+  border-left-color: var(--action);
+  background: color-mix(in srgb, var(--action) 20%, var(--surface));
+  box-shadow: 0 3px 10px rgba(25, 52, 71, .16)
+}
+
+.problem-preset-list button:focus-visible {
+  outline: 3px solid var(--action);
+  outline-offset: 2px
+}
+
+.rows li.todo-row {
+  padding: 0;
+  border: 0;
+  overflow: hidden
+}
+
+.rows li.todo-row>a {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  width: 100%;
+  min-height: 68px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-left: 5px solid var(--action);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none
+}
+
+.rows li.todo-row>a:hover {
+  border-color: var(--action);
+  border-left-color: var(--action);
+  background: var(--surface-alt)
+}
+
+.rows li.todo-row>a:focus-visible {
+  outline: 3px solid var(--action);
+  outline-offset: -3px
+}
+
+.rows li.todo-row>a strong {
+  color: var(--action-text);
+  font-weight: 700
+}
+
+.rows li.todo-row>a .muted {
+  font-size: .85rem
 }
 
 dialog.gradebook-detail-dialog {
@@ -5795,6 +5912,10 @@ dialog.bulk-assignment-dialog {
 }
 
 @media (max-width: 639px) {
+  .problem-preset-list {
+    grid-template-columns: 1fr
+  }
+
   dialog.bulk-assignment-dialog {
     padding: 16px
   }

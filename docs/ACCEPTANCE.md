@@ -1,5 +1,25 @@
 # Acceptance status
 
+### 2026-11-09 (Problem preset visibility, modal actions, and to-do targets)
+- Styled the problem presets as full-width, prominent selectable cards with clear selected and keyboard-focus states.
+- Right-aligned action groups inside all dialogs.
+- Restyled student to-do entries as highlighted cards with the link covering the entire card.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk advisory), `npm run lint`, and `git diff --check`.
+- Browser verified: preset card selection is visible; dialog action buttons align to the content area's right edge; the to-do link exactly covers its card.
+
+### 2026-11-09 (Problem-report shortcuts and assessment editor footer)
+- Replaced the report examples with one-click problem presets that fill the issue category, title, and editable description.
+- Split the assessment editor modal into a scrollable content area and a separate bottom action footer aligned to the right.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk advisory), `npm run lint`, and `git diff --check`.
+- Browser verified: sign-in and quiz/assignment presets fill their categories, titles, and descriptions. The assessment editor footer was not browser-verified because opening that modal requires creating a quiz in the shared database.
+
+### 2026-11-09 (Admin sidebar links and problem-report examples)
+- Restored the admin sidebar links to Reports and Audit history.
+- Added common examples to the problem-report form without changing the existing issue categories or API contract.
+- Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk advisory), `npm run lint`, and `git diff --check`.
+- Browser verified: the report form displays the examples list for the signed-in faculty account.
+- Not browser-verified: admin navigation could not be exercised because the shared browser is authenticated as faculty; both admin routes are registered.
+
 ### 2026-11-09 (Chapter-based AI quiz sources and menu placement)
 - Moved the Faculty Classwork chapter material menu above its trigger button.
 - Grouped readable published AI quiz sources by syllabus chapter, with individual material checkboxes and a chapter-level “Use all materials in this chapter” selector. Materials without a matching published chapter anchor are available under Other materials.

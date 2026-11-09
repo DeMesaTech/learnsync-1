@@ -101,12 +101,12 @@ export function AssessmentEditorDialog({offering,assessmentId,contextLabel,onClo
   }
 
   return <Dialog title={item?.draft?.title||item?.published?.title||'Edit assessment'} className="assessment-editor-dialog" confirmOnClose={false} onClose={closeEditor}>
+    {closeError&&<p role="alert">{closeError}</p>}
     {query.isPending?<p>Loading assessment…</p>:query.error||!item?<p role="alert">{query.error?.message??'Assessment is unavailable.'}</p>
       :requiresQuizWarning&&!quizEditConfirmed?<p>{warningError?<span role="alert">{warningError}</span>:'Confirm both warnings to edit this auto-scored quiz.'}</p>
       :item.draft?<Editor key={item.draft.version} offering={offering} assessment={item} refetch={()=>query.refetch()} modal contextLabel={contextLabel} onDone={onClose} onFlushReady={registerFlush}/>
         :closed?<p className="muted">This term is closed, so the assessment cannot be edited.</p>
           :startError?<p role="alert">{startError}</p>:<p>Preparing a draft…</p>}
-    {closeError&&<p role="alert">{closeError}</p>}
   </Dialog>;
 }
 
@@ -253,6 +253,7 @@ function Editor({offering,assessment,refetch,modal=false,contextLabel,onDone,onF
 
   return <>
     {!modal&&<p className="back"><Link to={back}>← Classwork</Link></p>}
+    <div className={modal?'assessment-editor-scroll':undefined}>
     {modal&&contextLabel&&<p className="eyebrow material-context-label">{contextLabel}</p>}
     <div className="page-heading"><div><p className="eyebrow">{KIND_LABEL[assessment.kind]}{quiz?` · step ${index+1} of ${QUIZ_STEPS.length}`:''}</p><h2>{v.title||'Untitled'}</h2>
       <p className="muted">{assessment.published?`Students see version ${assessment.published.version} until you ${assignLabel.toLowerCase()}.`:'Not visible to students or the gradebook until you assign it.'}</p></div>
@@ -276,7 +277,8 @@ function Editor({offering,assessment,refetch,modal=false,contextLabel,onDone,onF
 
     {!quiz&&<>{reviewBlock}{manage}</>}
     {message&&<p role="alert">{message}</p>}
-    <div className="actions">
+    </div>
+    <div className={modal?'assessment-editor-actions':'actions'}>
       {quiz&&index>0&&<button onClick={()=>void go(QUIZ_STEPS[index-1][0])}>Back</button>}
       {quiz&&index<QUIZ_STEPS.length-1&&<button className="primary" onClick={()=>void go(QUIZ_STEPS[index+1][0])}>Next</button>}
       {(!quiz||step==='review')&&assignButton}
