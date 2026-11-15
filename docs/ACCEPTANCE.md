@@ -1,5 +1,17 @@
 # Acceptance status
 
+### 2026-11-14 (UAT questionnaire prepared)
+- Added [UAT_QUESTIONNAIRE.md](./UAT_QUESTIONNAIRE.md) for administrator, faculty, and student sessions, using the provided Results and Discussion lesson PDF as instructional material.
+- No UAT tasks were performed and no application data was changed; the user requested the questionnaire only.
+
+### 2026-11-14 (Scripted UAT follow-up)
+- Ran scripted checks on the local development stack using the development demo accounts. The user confirmed the database contains disposable dummy data. Sign-in and workspace access passed for admin, faculty, and student.
+- Created test subject `UAT-RD-20261114`, section `UAT-20261114-1A`, offering `018bebfb-f2f1-4141-8493-cb8ba239e25f`, and enrolled the demo faculty and student accounts. These test records remain in the database for inspection.
+- Faculty published the supplied PDF as `Lesson 5 - Results and Discussion (UAT)` and published a companion lesson, `Results and Discussion: Writing Chapter IV (UAT)`. The student account could access both, open the lesson, mark it complete, render the PDF preview, and download the PDF (1,153,641 bytes).
+- Study Help status reported configured and not simulated (`openai/gpt-oss-20b`). One question about the difference between Results and Discussion received an answer citing both the published PDF and companion lesson. This used only the demo account and test lesson; the Study Help UI states that the question and relevant lesson passages are sent to the configured AI provider.
+- Updated `frontend/e2e/lib.mjs` to disambiguate the password textbox from the “Show password” control; the shared helper was exercised by the scripted sign-ins. Two existing broad browser checks did not pass: `e2e:keyboard` expects the obsolete “User accounts” page at `/admin/accounts`, and `e2e:sweep` uses an offering fixture absent from this database. These are stale test assumptions, not passing checks or confirmed application defects.
+- Not completed: real-participant usability sessions, the remaining administrator/faculty/student questionnaire tasks (including assessment, grades, announcements, and issue reporting), and broader permission-boundary testing. Therefore this is partial scripted UAT, not user acceptance or a full UAT pass. No AI-provider credentials or other secrets were recorded.
+
 ### 2026-11-09 (Problem preset visibility, modal actions, and to-do targets)
 - Styled the problem presets as full-width, prominent selectable cards with clear selected and keyboard-focus states.
 - Right-aligned action groups inside all dialogs.

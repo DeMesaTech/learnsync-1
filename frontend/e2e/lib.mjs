@@ -22,7 +22,7 @@ export async function newPage(browser,{width=1280,height=900,scheme='light',stat
 export async function login(page,email){
   await page.goto('/login');
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(PASSWORD);
+  await page.getByRole('textbox',{name:'Password'}).fill(PASSWORD);
   await page.getByRole('button',{name:'Sign in'}).click();
   await page.waitForURL(u=>!u.pathname.startsWith('/login'));
 }
