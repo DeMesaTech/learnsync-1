@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.features.academics import commands
+from app.features.academics import calendar
 from app.features.academics.models import AcademicTerm, SchoolYear
 from app.features.accounts.commands import issue_token
 from app.features.accounts.models import AccountToken, AuditEvent
@@ -601,7 +602,8 @@ def test_excluded_student_without_prior_enrollment_is_visible_to_admin(world):
     assert str(s2.id) not in roster(Api("faculty@example.com"), oid)
 
 
-def test_inactive_term_blocks_writes_and_cannot_be_reopened(world):
+def test_inactive_term_blocks_writes_and_cannot_reopen_outside_schedule(world, monkeypatch):
+    monkeypatch.setattr(calendar, "school_today", lambda: date(2026, 11, 1))
     admin, term = world["admin"], world["term"]
     s1 = world["students"][0]
     assert admin.post(f"/api/terms/{term['id']}/close").status_code == 200
@@ -612,11 +614,44 @@ def test_inactive_term_blocks_writes_and_cannot_be_reopened(world):
     reopened = admin.post(f"/api/terms/{term['id']}/reopen",
                           {"reason": "Late grade correction"})
     assert reopened.status_code == 409
-    assert reopened.json()["error"]["code"] == "term_reactivation_forbidden"
+    assert reopened.json()["error"]["code"] == "term_outside_schedule"
     blocked_again = add_member(world, world["sections"][0], s1)
     assert blocked_again.status_code == 409
+    available = admin.get("/api/school-years").json()[0]["terms"][0]["reopen_available"]
+    assert available is False
     actions = [e["action"] for e in admin.get("/api/audit").json()]
     assert "term.closed" in actions and "term.reopened" not in actions
+
+
+def test_inactive_term_can_reopen_on_scheduled_end_date(world, monkeypatch):
+    monkeypatch.setattr(calendar, "school_today", lambda: date(2026, 10, 31))
+    admin, term = world["admin"], world["term"]
+    assert admin.post(f"/api/terms/{term['id']}/close").status_code == 200
+    listed_term = admin.get("/api/school-years").json()[0]["terms"][0]
+    assert listed_term["reopen_available"] is True
+
+    reopened = admin.post(f"/api/terms/{term['id']}/reopen",
+                          {"reason": "Correct a grading entry"})
+    assert reopened.status_code == 200, reopened.text
+    assert reopened.json()["status"] == "active"
+    assert reopened.json()["reopened_reason"] == "Correct a grading entry"
+    assert add_member(world, world["sections"][0], world["students"][0]).status_code == 204
+    actions = [event["action"] for event in admin.get("/api/audit").json()]
+    assert "term.closed" in actions and "term.reopened" in actions
+
+
+def test_inactive_term_cannot_reopen_while_another_term_is_active(world, monkeypatch):
+    monkeypatch.setattr(calendar, "school_today", lambda: date(2026, 10, 31))
+    admin, term, next_term = world["admin"], world["term"], world["next_term"]
+    assert admin.post(f"/api/terms/{term['id']}/close").status_code == 200
+    assert admin.post(f"/api/terms/{next_term['id']}/schedule").status_code == 200
+    assert admin.post(f"/api/terms/{next_term['id']}/activate").status_code == 200
+
+    reopened = admin.post(f"/api/terms/{term['id']}/reopen",
+                          {"reason": "Correct a grading entry"})
+    assert reopened.status_code == 409
+    assert reopened.json()["error"]["code"] == "active_term_exists"
+    assert admin.get("/api/school-years").json()[0]["terms"][0]["reopen_available"] is False
 
 
 def test_new_year_copies_structure_and_keeps_history(world):

@@ -1,5 +1,10 @@
 # Acceptance status
 
+### 2026-11-15 (Date-scoped semester reopening)
+- Inactive semesters may be reopened only while the current date in `APP_TIMEZONE` is within the scheduled date range (inclusive) and no other semester is active. Reopening requires a reason, restores `active`, and records an audit event; archived terms cannot be reopened.
+- The Settings page offers the action only when the server reports it is available and explains the date and active-term restrictions.
+- Passed: six focused backend tests for the allowed date boundary, out-of-range refusal, active-term conflict, and academic/teaching/study behavior; `npm run build` (with the existing large-chunk advisory), `npm run lint`, and `git diff --check`.
+
 ### 2026-11-09 (Problem preset visibility, modal actions, and to-do targets)
 - Styled the problem presets as full-width, prominent selectable cards with clear selected and keyboard-focus states.
 - Right-aligned action groups inside all dialogs.
@@ -213,7 +218,7 @@
 
 ### 2026-10-17 (Academic calendar lifecycle)
 - The New school year dialog now takes a starting year and generates its consecutive label (for example, 2027 -> 2027-2028). The API validates ISO dates, label/year consistency, strictly chronological semester dates, containment, sequence order, and overlap; it inserts one school year and exactly two draft semesters atomically. Draft creation no longer copies sections or offerings.
-- Added `draft`, `scheduled`, `active`, `inactive`, and `archived` semester states. Only active semesters accept normal academic writes. Scheduling, activation, and closure are audited; a semester cannot activate while another is active or before a prior semester is closed. Generic reopening is refused. PostgreSQL exclusion constraints protect overlapping school-year/semester ranges, and a partial unique index protects the single-active invariant.
+- Added `draft`, `scheduled`, `active`, `inactive`, and `archived` semester states. Only active semesters accept normal academic writes. Scheduling, activation, and closure are audited; a semester cannot activate while another is active or before a prior semester is closed. Generic reopening was refused at this stage (superseded by the 2026-11-15 date-scoped reopening rule). PostgreSQL exclusion constraints protect overlapping school-year/semester ranges, and a partial unique index protects the single-active invariant.
 - Updated shared academic and teaching guards, dashboards, frontend read-only controls, and browser E2E fixtures. Field-level API validation messages are shown in the school-year dialog.
 - Passed: focused calendar tests (11 passed, plus 8 passed after strict date-boundary changes); cross-feature backend regression run (250 passed, 7 deselected); backend Ruff; frontend ESLint and production build; Node syntax checks for all seven updated browser scripts; `git diff --check`. The frontend build reports the existing large-chunk advisory.
 - The unfiltered cross-feature run also exposed seven unrelated failures, which were deselected from the passing regression run: quiz timer timezone serialization; student syllabus projection `KeyError`; two faculty-import failures (unsupported test-helper keyword and permissive header); empty recent admin activity; an AI generation review assertion; and withdrawn-study authorization. These were not changed.

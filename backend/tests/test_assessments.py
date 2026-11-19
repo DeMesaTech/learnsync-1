@@ -1,12 +1,13 @@
 import json
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from helpers import POLICY, Api, publish_syllabus, uid
 from sqlalchemy import func, select
 
+from app.features.academics import calendar
 from app.features.assessments.models import (
     AssessmentRevision,
     QuizAttempt,
@@ -552,7 +553,8 @@ def test_online_quiz_scores_are_only_typed_in_for_no_shows(graded):
 
 # ---------------- closed terms and withdrawn students ----------------
 
-def test_inactive_term_blocks_assessment_work_but_not_own_results(graded):
+def test_inactive_term_blocks_assessment_work_but_not_own_results(graded, monkeypatch):
+    monkeypatch.setattr(calendar, "school_today", lambda: date(2026, 11, 1))
     quiz = make_quiz(graded)
     manual = make_manual(graded, "exam", "Midterm exam")
     st1, fac = graded["st1"], graded["fac"]
@@ -574,7 +576,7 @@ def test_inactive_term_blocks_assessment_work_but_not_own_results(graded):
     reopened = graded["admin"].post(
         f"/api/terms/{graded['term']['id']}/reopen", {"reason": "Correction"})
     assert reopened.status_code == 409
-    assert reopened.json()["error"]["code"] == "term_reactivation_forbidden"
+    assert reopened.json()["error"]["code"] == "term_outside_schedule"
     assert start(st1, graded, second["aid"]).status_code == 409
 
 

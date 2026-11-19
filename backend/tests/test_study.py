@@ -3,7 +3,7 @@ import json
 import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC
+from datetime import UTC, date
 from itertools import pairwise
 from urllib.parse import quote
 
@@ -18,6 +18,7 @@ from test_assessments import make_quiz, start, submit
 from test_teaching import edit_and_publish, new_item
 
 from app.config import settings
+from app.features.academics import calendar
 from app.features.study import provider
 from app.features.study.chunker import chunk_section, chunk_sections
 from app.features.study.friendly import smalltalk, talk_reply
@@ -313,7 +314,8 @@ def test_the_assistant_is_paused_during_an_open_quiz_attempt(graded, ai):
     assert graded["fac"].get(status_url).status_code == 403
 
 
-def test_study_eligibility_ownership_and_privacy(db, course, ai):
+def test_study_eligibility_ownership_and_privacy(db, course, ai, monkeypatch):
+    monkeypatch.setattr(calendar, "school_today", lambda: date(2026, 10, 31))
     from test_assessments import second_offering
     lesson(course, "Markets", "<p>A market is where buyers and sellers meet.</p>")
     st1, st2, fac = course["st1"], course["st2"], course["fac"]
@@ -330,7 +332,8 @@ def test_study_eligibility_ownership_and_privacy(db, course, ai):
     assert st1.get(f"{base}/{cid}").status_code == 200
     reopened = course["admin"].post(
         f"/api/terms/{course['term']['id']}/reopen", {"reason": "Test"})
-    assert reopened.status_code == 409
+    assert reopened.status_code == 200
+    assert reopened.json()["status"] == "active"
     s1 = course["students"][0]
     course["admin"].delete(f"/api/sections/{course['sec_a']['id']}/members/{s1.id}?reason=Left%20the%20programme")
     assert ask(st1, course, cid, "What is a market?").status_code == 404                # withdrawn: nothing new

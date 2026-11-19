@@ -89,7 +89,7 @@ export function Shell(){
     <header className="header">
       <button ref={menuButton} className="menu" aria-label="Toggle navigation" aria-controls="main-navigation" aria-expanded={open} onClick={()=>setOpen(!open)}>☰</button>
       <Link to={home} className="brand"><img className="mark" src={logoUrl} alt="" aria-hidden="true"/>LearnSync</Link>
-      <span className="school">GMVCC · BS Entrepreneurship</span>
+      <span className="school">Governor Mariano Villafuerte Community college</span>
       <div className="identity">
         <div className="who"><strong>{user.display_name}</strong><span>{ROLE_LABEL[user.role]}</span></div>
         <span className="avatar" aria-hidden="true">{initials(user.display_name)}</span>

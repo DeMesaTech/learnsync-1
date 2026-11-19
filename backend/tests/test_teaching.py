@@ -1,10 +1,12 @@
 import io
 import uuid
+from datetime import date
 
 from docx import Document
 from fastapi.testclient import TestClient
 from helpers import PDF, POLICY, Api, learn, make_account, make_outline, publish_syllabus, t, uid
 
+from app.features.academics import calendar
 from app.main import app
 
 
@@ -565,7 +567,8 @@ def test_announcements_are_targeted_and_locked_once_published(course):
 
 # ---------------- closed terms and withdrawn students ----------------
 
-def test_inactive_term_blocks_every_teaching_write_but_not_reads(course):
+def test_inactive_term_blocks_every_teaching_write_but_not_reads(course, monkeypatch):
+    monkeypatch.setattr(calendar, "school_today", lambda: date(2026, 11, 1))
     fac = course["fac"]
     item = new_item(course, "lesson", "Before close")
     counter = fac.get(t(course, f"/items/{item['id']}")).json()["draft"]["counter"]
@@ -583,7 +586,7 @@ def test_inactive_term_blocks_every_teaching_write_but_not_reads(course):
     assert course["st1"].get(learn(course, "/syllabus")).json()["published"]["version"] == 1
     reopened = course["admin"].post(f"/api/terms/{term_id}/reopen", {"reason": "Fix typo"})
     assert reopened.status_code == 409
-    assert reopened.json()["error"]["code"] == "term_reactivation_forbidden"
+    assert reopened.json()["error"]["code"] == "term_outside_schedule"
     assert fac.post(t(course, "/syllabus/draft")).status_code == 409
 
 

@@ -1,5 +1,8 @@
 # Implementation decisions
 
+2026-11-15 (date-scoped semester reopening):
+- An inactive semester may be reopened only when the current date in `APP_TIMEZONE` is within its scheduled date range, inclusive, and no other semester is active. Reopening requires a reason, restores `active` status, and is audited. Archived semesters remain closed.
+
 2026-10-17 (chapter outline fields):
 - Syllabus chapters contain only stable identity, title, time allotment, topics, and subsections. Per-chapter learning outcomes, teaching activities, assessment descriptions, and exam-kind chapter metadata are removed from the UI and JSONB persistence. Assessment records remain separate; former exam outline rows retain their title and become ordinary chapters.
 - The syllabus outline supports chapters only. Remove the Add examination chapter action; this does not remove examination assessments or grades.
@@ -7,7 +10,7 @@
 2026-10-17 (academic calendar lifecycle; supersedes the 2026-10-06 M2 term defaults):
 - School-year labels are generated from a starting year and must match consecutive calendar years. Creation inserts one school year and exactly two draft semesters atomically, with ordered, contained, non-overlapping dates.
 - Semester lifecycle is `draft` -> `scheduled` -> `active` -> `inactive` (or `archived`). Draft is calendar configuration only; normal academic writes are allowed only in an active semester. At most one active semester exists institution-wide.
-- Activation is audited and requires the previous semester to be inactive/archived. Closing an active term makes it inactive. Generic reopening is refused; future correction overrides must be explicitly authorized, narrowly scoped, reasoned, and audited.
+- Activation is audited and requires the previous semester to be inactive/archived. Closing an active term makes it inactive. The generic-reopening restriction was superseded on 2026-11-15 by the date-scoped reopening rule above.
 - PostgreSQL exclusion constraints protect school-year and semester date ranges; a partial unique index protects the single-active invariant. Structure copying is only available after a semester is active, never during draft creation.
 
 2026-10-06: Begin approved rewrite in v2; old project remains unchanged. Product baseline is IMPLEMENTATION_PLAN.md. New technical defaults and deviations will be recorded here with their reason.

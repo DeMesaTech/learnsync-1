@@ -3,6 +3,7 @@ from sqlalchemy import exists, func, or_, select
 from app.errors import fail
 from app.features.accounts.models import Account
 
+from . import calendar
 from .models import (
     AcademicTerm,
     College,
@@ -29,9 +30,15 @@ def term_view(term):
 
 def school_years(db):
     terms = db.scalars(select(AcademicTerm).order_by(AcademicTerm.sequence)).all()
+    today = calendar.school_today()
+    active_term_exists = db.scalar(select(AcademicTerm.id).where(
+        AcademicTerm.status == "active").limit(1)) is not None
     by_year = {}
     for term in terms:
-        by_year.setdefault(term.school_year_id, []).append(term_view(term))
+        can_reopen = (not active_term_exists and term.status == "inactive"
+                      and calendar.is_within_schedule(term, today))
+        by_year.setdefault(term.school_year_id, []).append(
+            {**term_view(term), "reopen_available": can_reopen})
     years = db.scalars(select(SchoolYear).order_by(SchoolYear.start_date.desc())).all()
     return [{"id": y.id, "label": y.label, **_dates(y), "terms": by_year.get(y.id, [])}
             for y in years]

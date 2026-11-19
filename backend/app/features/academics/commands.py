@@ -14,6 +14,7 @@ from app.features.teaching.models import (
     TeachingCoverage,
 )
 
+from . import calendar
 from .access import writable_term
 from .models import (
     AcademicTerm,
@@ -211,9 +212,36 @@ def close_term(db, actor, term_id):
 
 
 def reopen_term(db, actor, term_id, reason):
-    term = get_or_404(db, AcademicTerm, term_id, "Term")
-    fail(409, "term_reactivation_forbidden",
-         f"A {term.status} semester cannot be reopened for normal editing. Use an authorized, audited correction workflow.")
+    term = db.scalar(select(AcademicTerm).where(
+        AcademicTerm.id == term_id).with_for_update())
+    if not term:
+        fail(404, "not_found", "Term not found.")
+    if term.status != "inactive":
+        fail(409, "term_not_inactive", "Only an inactive semester can be reopened.")
+    if not calendar.is_within_schedule(term, calendar.school_today()):
+        fail(409, "term_outside_schedule",
+             "A semester can be reopened only during its scheduled dates.")
+    active_id = db.scalar(select(AcademicTerm.id).where(
+        AcademicTerm.status == "active").with_for_update())
+    if active_id:
+        fail(409, "active_term_exists",
+             "Close the active semester before reopening another semester.")
+    clean_reason = reason.strip()
+    if len(clean_reason) < 3:
+        fail(422, "reason_required", "Give a reason for reopening the semester (at least 3 characters).")
+    term.status = "active"
+    term.reopened_reason = clean_reason
+    try:
+        audit(db, actor, "term.reopened", "term", term.id, {"reason": clean_reason})
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        constraint = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+        if constraint == "one_active_academic_term":
+            fail(409, "active_term_exists",
+                 "Another semester became active. Close it before reopening this semester.")
+        raise
+    return term
 
 
 # ---------- college catalog ----------

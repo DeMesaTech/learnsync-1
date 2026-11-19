@@ -11,6 +11,7 @@ export function SchoolYears(){
   const ask=useConfirm();
   const years=useQuery({queryKey:['school-years'],queryFn:()=>api<SchoolYear[]>('/school-years')});
   const [creating,setCreating]=useState(false);
+  const [reopening,setReopening]=useState<Term|null>(null);
   const [message,setMessage]=useState('');
   const termCount=years.data?.reduce((count,year)=>count+year.terms.length,0)??0;
   const activeTermCount=years.data?.reduce((count,year)=>
@@ -22,9 +23,17 @@ export function SchoolYears(){
   }
 
   async function close(term:Term){
-    if(!await ask({title:`Close ${term.name}?`,message:'Academic records become read-only. Normal reopening is not available.',yes:'Close term',danger:true}))return;
+    if(!await ask({title:`Close ${term.name}?`,message:'Academic records become read-only. Reopening is possible only during the scheduled dates, requires a reason, and is unavailable while another semester is active.',yes:'Close term',danger:true}))return;
     try{await post(`/terms/${term.id}/close`,{});setMessage('Term closed.');queryClient.invalidateQueries({queryKey:['school-years']})}
     catch(e){setMessage(errorText(e))}
+  }
+  async function reopen(term:Term,reason:string){
+    try{
+      await post(`/terms/${term.id}/reopen`,{reason});
+      setMessage('Semester reopened.');
+      queryClient.invalidateQueries({queryKey:['school-years']});
+      return null;
+    }catch(e){return errorText(e)}
   }
   return <>
     <div className="settings-page-heading">
@@ -77,7 +86,9 @@ export function SchoolYears(){
                       {term.status==='draft'&&<button type="button" onClick={()=>transition(term,'schedule')}>Schedule semester</button>}
                       {term.status==='scheduled'&&<button type="button" onClick={()=>transition(term,'activate')}>Activate semester</button>}
                       {term.status==='active'&&<button type="button" onClick={()=>close(term)}>Close semester</button>}
+                      {term.status==='inactive'&&term.reopen_available&&<button type="button" onClick={()=>setReopening(term)}>Reopen semester</button>}
                     </div>
+                    {term.status==='inactive'&&!term.reopen_available&&<p className="muted">Reopening is available only during the scheduled dates and when no other semester is active.</p>}
                   </article>)}</div>
                 </section>;
               })}
@@ -88,7 +99,34 @@ export function SchoolYears(){
       </div>
     </div>
     {creating&&<NewYear onClose={()=>setCreating(false)} onDone={()=>{setCreating(false);setMessage('School year created.');queryClient.invalidateQueries({queryKey:['school-years']})}}/>}
+    {reopening&&<ReopenTerm term={reopening} onClose={()=>setReopening(null)} onSubmit={reason=>reopen(reopening,reason)}/>}
   </>;
+}
+
+function ReopenTerm({term,onClose,onSubmit}:{term:Term;onClose:()=>void;onSubmit:(reason:string)=>Promise<string|null>}){
+  const [reason,setReason]=useState('');
+  const [error,setError]=useState('');
+  const [saving,setSaving]=useState(false);
+
+  async function submit(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    try{
+      const result=await onSubmit(reason);
+      if(result)setError(result);
+      else onClose();
+    }finally{setSaving(false)}
+  }
+
+  return <Dialog title={`Reopen ${term.name}`} onClose={()=>saving?false:onClose()}>
+    <form onSubmit={submit}>
+      <p className="muted">Reopening is allowed only from {term.start_date} through {term.end_date} (inclusive), and only when no other semester is active.</p>
+      <label>Reason (kept in the audit history)<textarea value={reason} onChange={event=>setReason(event.target.value)} minLength={3} maxLength={1000} required autoFocus/></label>
+      {error&&<p role="alert">{error}</p>}
+      <div className="actions"><button type="button" onClick={onClose} disabled={saving}>Cancel</button><button className="primary" type="submit" disabled={saving}>{saving?'Reopening…':'Reopen semester'}</button></div>
+    </form>
+  </Dialog>;
 }
 
 interface TermDraft{name:string;sequence:number;start_date:string;end_date:string}

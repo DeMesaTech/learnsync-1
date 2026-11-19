@@ -1,5 +1,5 @@
 export type TermStatus='draft'|'scheduled'|'active'|'inactive'|'archived';
-export interface Term{id:string;school_year_id:string;name:string;sequence:number;status:TermStatus;start_date:string;end_date:string;reopened_reason:string|null}
+export interface Term{id:string;school_year_id:string;name:string;sequence:number;status:TermStatus;start_date:string;end_date:string;reopened_reason:string|null;reopen_available:boolean}
 export interface SchoolYear{id:string;label:string;start_date:string;end_date:string;terms:Term[]}
 export interface College{id:string;code:string;name:string;description:string;status:'active'|'inactive';created_at:string;updated_at:string}
 export interface Subject{id:string;code:string;title:string;units:string;year_level:number|null;semester:number|null;prerequisite:string;description:string;status:'active'|'archived';college_id:string|null;college?:{id:string;code:string;name:string;status:'active'|'inactive'}|null}
