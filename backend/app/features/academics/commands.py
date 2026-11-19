@@ -493,6 +493,10 @@ def update_section_student(db, actor, section_id, student_id, data):
     changed = {
         field for field, value in (
             ("display_name", data.display_name),
+            ("first_name", data.first_name),
+            ("middle_name", data.middle_name),
+            ("last_name", data.last_name),
+            ("suffix", data.suffix),
             ("email", email),
             ("student_number", data.student_number),
         ) if getattr(account, field) != value
@@ -503,6 +507,10 @@ def update_section_student(db, actor, section_id, student_id, data):
         fail(409, "account_inactive", "Reactivate the account before changing its email.")
 
     account.display_name = data.display_name
+    account.first_name = data.first_name
+    account.middle_name = data.middle_name
+    account.last_name = data.last_name
+    account.suffix = data.suffix
     account.email = email
     account.student_number = data.student_number
     if email_changed:

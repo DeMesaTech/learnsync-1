@@ -29,6 +29,17 @@ def main():
     cleanup.add_argument("--apply", action="store_true", help="apply the cleanup")
     cleanup.add_argument("--confirm-database",
                          help="required with --apply; must exactly match the configured database name")
+    split_names = sub.add_parser(
+        "split-account-names", help="preview or split existing account names")
+    split_names.add_argument("--source", required=True, help="roster workbook with separated student names")
+    split_names.add_argument("--apply", action="store_true", help="update student names")
+    split_names.add_argument("--confirm-database",
+                             help="required with --apply; must exactly match the configured database name")
+    faculty_names = sub.add_parser(
+        "fix-faculty-names", help="preview or correct faculty name parts")
+    faculty_names.add_argument("--apply", action="store_true", help="update deterministic faculty name corrections")
+    faculty_names.add_argument("--confirm-database",
+                               help="required with --apply; must exactly match the configured database name")
     manifest = sub.add_parser("backup-manifest", help="describe the database and uploads for a backup")
     manifest.add_argument("--uploads", required=True)
     manifest.add_argument("--out", required=True)
@@ -41,7 +52,7 @@ def main():
     revoke.add_argument("--database-url", required=True)
     args = parser.parse_args()
     if args.command in ("backup-manifest", "verify-restore", "revoke-restored",
-                        "clean-prospectus"):
+                        "clean-prospectus", "split-account-names", "fix-faculty-names"):
         return maintenance(args)
     with SessionLocal() as db:
         if args.command == "bootstrap-admin":
@@ -55,7 +66,12 @@ def main():
                 password = getpass.getpass("Choose a password (12+ characters): ")
                 if len(password) < 12 or len(password) > 128 or password != getpass.getpass("Confirm password: "):
                     parser.error("Passwords must match and contain 12-128 characters.")
-            account = Account(email=args.email.strip().lower(), display_name=args.name,
+            from .features.accounts.names import format_student_name, split_student_name
+
+            name = split_student_name(args.name)
+            account = Account(email=args.email.strip().lower(), display_name=format_student_name(name),
+                              first_name=name.first_name, middle_name=name.middle_name or None,
+                              last_name=name.last_name, suffix=name.suffix or None,
                               role="admin", status="active", email_verified_at=now(),
                               password_hash=passwords.hash(password))
             db.add(account)
@@ -66,12 +82,17 @@ def main():
         elif args.command == "seed-demo":
             if settings().app_env != "development":
                 parser.error("Demo seeding is restricted to development.")
+            from .features.accounts.names import format_student_name, split_student_name
+
             for role, suffix, number in [("admin", "", None), ("faculty", "1", None),
                                          ("faculty", "2", None), ("student", "1", "DEMO-001"),
                                          ("student", "2", "DEMO-002"), ("student", "3", "DEMO-003")]:
                 email = f"{role}{suffix}@example.com"
                 if not db.scalar(select(Account.id).where(Account.email == email)):
-                    db.add(Account(email=email, display_name=f"Demo {role} {suffix}".strip(), role=role,
+                    name = split_student_name(f"Demo {role} {suffix}".strip())
+                    db.add(Account(email=email, display_name=format_student_name(name),
+                                   first_name=name.first_name, middle_name=name.middle_name or None,
+                                   last_name=name.last_name, suffix=name.suffix or None, role=role,
                                    student_number=number, status="active", email_verified_at=now(),
                                    password_hash=passwords.hash("LearnSync-demo-2026")))
             db.commit()
@@ -123,6 +144,77 @@ def maintenance(args):
                   f"--apply --confirm-database {database.database} to apply.")
         else:
             print("Prospectus cleanup applied.")
+        return
+    if args.command == "split-account-names":
+        from pathlib import Path
+
+        from app.features.accounts.name_backfill import (
+            apply_account_name_backfill,
+            plan_account_name_backfill,
+        )
+
+        database = make_url(settings().database_url)
+        if not database.database:
+            raise SystemExit("Name update refused: the configured database name is unavailable.")
+        if args.apply:
+            if database.database.endswith("_test"):
+                raise SystemExit("Name update refused: test databases cannot be changed by this command.")
+            if args.confirm_database != database.database:
+                raise SystemExit(
+                    "Name update refused: pass --confirm-database with the exact configured database name.")
+        source = Path(args.source).resolve()
+        if not source.is_file():
+            raise SystemExit(f"Roster source not found: {source}")
+        from app.db import SessionLocal
+
+        print(f"Database target: {database.host or 'local'}:{database.port or 'default'}/{database.database}")
+        with SessionLocal() as db:
+            _plan, counts = plan_account_name_backfill(db, source)
+            if counts["unparsed"]:
+                raise SystemExit(
+                    f"Name update refused: {counts['unparsed']} account names could not be split.")
+            print(f"Accounts: {counts['accounts']}")
+            print(f"Exact source matches: {counts['source_exact']}")
+            print(f"Fallback name splits: {counts['fallback_parsed']}")
+            print(f"Already structured: {counts['already_structured']}")
+            print(f"Names to update: {counts['changed']}")
+            if not args.apply:
+                print("Dry run only. Stop the API and make a verified backup before applying.")
+                return
+            counts = apply_account_name_backfill(db, source)
+        print(f"Account names updated: {counts['changed']}.")
+        return
+    if args.command == "fix-faculty-names":
+        from app.features.accounts.faculty_name_correction import (
+            apply_faculty_name_correction,
+            plan_faculty_name_correction,
+        )
+
+        database = make_url(settings().database_url)
+        if not database.database:
+            raise SystemExit("Faculty name correction refused: the configured database name is unavailable.")
+        if args.apply:
+            if database.database.endswith("_test"):
+                raise SystemExit("Faculty name correction refused: test databases cannot be changed by this command.")
+            if args.confirm_database != database.database:
+                raise SystemExit(
+                    "Faculty name correction refused: pass --confirm-database with the exact configured database name.")
+        from app.db import SessionLocal
+
+        print(f"Database target: {database.host or 'local'}:{database.port or 'default'}/{database.database}")
+        with SessionLocal() as db:
+            if args.apply:
+                counts = apply_faculty_name_correction(db)
+            else:
+                _plan, counts = plan_faculty_name_correction(db)
+        print(f"Faculty accounts: {counts['faculty_accounts']}")
+        print(f"Deterministic corrections: {counts['changed']}")
+        print(f"Unchanged: {counts['unchanged']}")
+        print(f"Unresolved and left unchanged: {counts['unresolved']}")
+        if not args.apply:
+            print("Dry run only. Stop the API and make a verified backup before applying.")
+        else:
+            print(f"Faculty name corrections applied: {counts['changed']}.")
         return
     if args.command == "backup-manifest":
         try:

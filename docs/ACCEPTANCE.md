@@ -1,5 +1,30 @@
 # Acceptance status
 
+### 2026-11-19 (Faculty name correction)
+- Corrected 23 real faculty accounts using deterministic normalization of stored name fields: removed leading honorifics from name parts, promoted the recovered given name, and moved three attached surname initials into middle names. Two demo faculty accounts were unchanged; no account was unresolved.
+- Verified all 25 faculty accounts have first and last names, no honorific remains in the first-name field, no attached initial remains in the surname, and each display name matches its stored components. Audit event records 23 updated accounts and zero unresolved.
+- Backup: `../../learnsync-backups/learnsync-20261119-190538-faculty-names`. Docker was unavailable, so local PostgreSQL 18 tools created the dump; the database/upload manifest matched and `pg_restore --list` accepted the archive (384 entries).
+- Passed: 36 focused name/import tests, two faculty-profile API tests, Ruff on changed backend files, `git diff --check`, and post-restart API health (`/api/health` returned 200).
+- The full `test_imports.py` run had 4 failures outside this change: two student-import assertions still expect the old non-standardized display format, one test passes an unsupported `student_number` argument to its fixture helper, and one expects a `name` CSV header to be rejected although the parser accepts it.
+
+### 2026-11-19 (Structured account names)
+- Added separate first, middle, last, and generational-suffix fields to account records. Display names use `LAST NAME, FIRST MIDDLE INITIALS, Suffix`; name entry and student profile editing now capture individual parts.
+- Updated all 474 current accounts: 444 student records matched by student number and normalized full name to `Sectioning.xlsx`; the remaining 30 accounts used the approved suffix-aware, surname-particle fallback. All accounts now have first and last names, and every stored display name matches its components.
+- Applied Alembic revision `ea917a6bd204` and recorded an audit event for the backfill.
+- Backup: `var/backups/learnsync-20261119-174543-account-names`. The source manifest and copied uploads verified, and `pg_restore --list` accepted the custom dump (369 archive entries). Docker was unavailable, so the installed PostgreSQL 18 tools were used directly.
+- Passed: 14 focused account-name/import/profile tests, Ruff on changed backend files, frontend ESLint and production build, and `git diff --check`.
+- Broader `test_accounts.py` run had 2 unrelated failures: one invitation test returned 503 because the local email service was unavailable; another test encountered an expired session. The focused changed-behavior tests passed.
+
+### 2026-11-19 (Admin account and assignment controls)
+- Changed split-name student imports to account names in last-name-first format (`Last Name, First Name Middle Initial`) and updated account invitation labels to request this format.
+- Removed the redundant student-management Add section button, locked bulk assignment subject filtering to the active/current semester, removed the Unplaced year-level choice, removed offering section chips, and changed the assignment summary to distinguish subjects from section assignments.
+- Passed: focused split-name import tests, frontend ESLint and production build, and `git diff --check`.
+
+### 2026-11-19 (Sticky gradebook headings)
+- Raised both sticky gradebook header rows above scrolling score cells and kept the fixed identifying headers above the assessment headings.
+- Passed: `npm --prefix frontend run build` (with the existing large-chunk advisory), `npm --prefix frontend run lint`, and `git diff --check`.
+- Browser verified: after vertical (`300px`) and horizontal (`200px`) scrolling, both header rows remained at the gradebook scroll region's top (`0px` and `36px` offsets), and the fixed Section column stayed pinned.
+
 ### 2026-11-15 (Date-scoped semester reopening)
 - Inactive semesters may be reopened only while the current date in `APP_TIMEZONE` is within the scheduled date range (inclusive) and no other semester is active. Reopening requires a reason, restores `active`, and records an audit event; archived terms cannot be reopened.
 - The Settings page offers the action only when the server reports it is available and explains the date and active-term restrictions.

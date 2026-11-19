@@ -123,7 +123,8 @@ def section_roster_page(db, section_id, page, page_size, search, status, offerin
             fail(404, "not_found", "College not found.")
         if section.college_id != college_id:
             fail(404, "not_found", "Section is not assigned to this college/program.")
-    query = (select(Account.id, Account.display_name, Account.email, Account.student_number,
+    query = (select(Account.id, Account.display_name, Account.first_name, Account.middle_name,
+                    Account.last_name, Account.suffix, Account.email, Account.student_number,
                     Account.status.label("account_status"),
                     SectionMember.status.label("membership_status"))
              .join(SectionMember, SectionMember.student_id == Account.id)
@@ -150,6 +151,8 @@ def section_roster_page(db, section_id, page, page_size, search, status, offerin
     return {"total": total, "page": page, "page_size": page_size,
             "invitation_count": invitation_count,
             "items": [{"student_id": r.id, "display_name": r.display_name, "email": r.email,
+                       "first_name": r.first_name, "middle_name": r.middle_name,
+                       "last_name": r.last_name, "suffix": r.suffix,
                        "student_number": r.student_number, "account_status": r.account_status,
                        "status": r.membership_status} for r in rows]}
 

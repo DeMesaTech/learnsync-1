@@ -10,6 +10,13 @@ from sqlalchemy import select
 from app.errors import fail
 from app.features.accounts.commands import audit, issue_token, send_link
 from app.features.accounts.models import Account, now
+from app.features.accounts.names import (
+    StudentName,
+    canonical_suffix,
+    format_student_name,
+    split_student_name,
+    suffix_from_last_name,
+)
 from app.features.files.storage import path_of, save_upload
 
 from . import commands, documents
@@ -37,13 +44,25 @@ def validate_students(db, rows, term_id):
         errors = []
         email = raw["email"].strip().lower()
         number = raw["student_number"].strip()
-        name = raw["display_name"].strip()
+        if raw.get("first_name") or raw.get("last_name"):
+            last_name, detected_suffix = suffix_from_last_name(raw.get("last_name", ""))
+            name_parts = StudentName(
+                raw.get("first_name", "").strip(),
+                raw.get("middle_name", "").strip(),
+                last_name.strip(),
+                canonical_suffix(raw.get("suffix")) or detected_suffix,
+            )
+        else:
+            name_parts = split_student_name(raw["display_name"].strip())
+        name = format_student_name(name_parts)
         try:
             email = str(EMAIL.validate_python(email)).lower()
         except ValidationError:
             errors.append("Email address is not valid.")
         if not number or len(number) > 50:
             errors.append("Student number is required (max 50 characters).")
+        if not name_parts.first_name or not name_parts.last_name:
+            errors.append("First and last names are required.")
         if not name or len(name) > 150:
             errors.append("Name is required (max 150 characters).")
         if email in seen_email:
@@ -73,7 +92,9 @@ def validate_students(db, rows, term_id):
             if section and current and section in sections and current.section_id != sections[section].id:
                 errors.append("Student already belongs to a different section this term.")
         result = {"row": raw["row"], "student_number": number, "email": email,
-                  "display_name": name, "section": section,
+                  "display_name": name, "first_name": name_parts.first_name,
+                  "middle_name": name_parts.middle_name, "last_name": name_parts.last_name,
+                  "suffix": name_parts.suffix, "section": section,
                   "status": "error" if errors else status, "errors": errors}
         if raw.get("source_sheet"):
             result["source_sheet"] = raw["source_sheet"]
@@ -131,6 +152,8 @@ def commit_student_import(db, actor, import_id):
     for r in importable:
         if r["status"] == "new":
             account = Account(email=r["email"], display_name=r["display_name"], role="student",
+                              first_name=r["first_name"], middle_name=r["middle_name"],
+                              last_name=r["last_name"], suffix=r["suffix"],
                               student_number=r["student_number"], status="invited")
             db.add(account)
             db.flush()

@@ -47,7 +47,7 @@ export function ScoresPage(){
   return <>
     <p className="back"><Link to={origin.to}>← Back to {origin.label}</Link></p>
     <div className="page-heading"><div><p className="eyebrow">{KIND_LABEL[kind]} · out of {fmt(rev.max_points)}</p><h2>{rev.title}</h2>
-      <p className="muted">Students only see a result after you return it. Online quiz totals are returned automatically when a student submits.</p></div>
+      </div>
       <div className="actions">{closed?<Link className="button" to={`/faculty/offerings/${offering.id}/assessments/${assessmentId}/edit`}>View settings</Link>
         :kind==='online_quiz'?<button type="button" onClick={editSettings}>Edit settings</button>
           :<Link className="button" state={here} to={`/faculty/offerings/${offering.id}/assessments/${assessmentId}/edit`}>Edit settings</Link>}
@@ -55,7 +55,7 @@ export function ScoresPage(){
     {message&&<p role="status">{message}</p>}
     {offering.sections.length>0&&<><label>Section<select aria-label="Filter scores by section" value={sectionId} onChange={e=>setSectionId(e.target.value)}>
       <option value="">All sections ({offering.enrolled})</option>{offering.sections.map(s=><option key={s.id} value={s.id}>{s.name} ({s.enrolled})</option>)}
-    </select></label><p className="muted">The section filter only changes the lists below; assessment actions still apply to all applicable students.</p></>}
+    </select></label></>}
     {kind==='online_quiz'&&<Attempts base={base} attempts={attempts} sections={offering.sections} sectionId={sectionId} closed={closed} onChanged={refresh} setMessage={setMessage}/>}
     {rows.isPending||(kind==='online_quiz'&&attempts.isPending)?<p>Loading students…</p>:rows.error?<p role="alert">{rows.error.message}</p>:kind==='online_quiz'&&attempts.error?<p role="alert">{attempts.error.message}</p>:
       kind==='online_quiz'?<NoAttemptStudents rows={visibleRows.filter(r=>!visibleAttempts.some(x=>x.student_id===r.student_id))} sections={offering.sections}/>

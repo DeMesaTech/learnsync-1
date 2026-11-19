@@ -15,6 +15,13 @@ from docx.text.paragraph import Paragraph
 from pypdf import PdfReader
 
 from app.errors import fail
+from app.features.accounts.names import (
+    StudentName,
+    canonical_suffix,
+    format_student_name,
+    split_student_name,
+    suffix_from_last_name,
+)
 
 MAX_ROWS = 1000
 MAX_LINES = 5000
@@ -24,8 +31,9 @@ STUDENT_HEADERS = {
     "email": {"email", "email_address", "e_mail"},
     "display_name": {"display_name", "name", "full_name", "student_name"},
     "first_name": {"first_name", "firstname", "given_name"},
-    "middle_initial": {"middle_initial", "middleinitial", "middle_name"},
+    "middle_name": {"middle_name", "middlename", "middle", "middle_initial", "middleinitial"},
     "last_name": {"last_name", "lastname", "surname"},
+    "suffix": {"suffix", "generational_suffix", "name_suffix"},
     "section": {"section", "section_name", "class"},
 }
 FACULTY_HEADERS = {
@@ -61,11 +69,18 @@ def _student_columns_missing(columns):
 def _student_row(raw, columns, number, source_sheet=None, source_row=None):
     values = {field: _cell(raw[index]) if index < len(raw) else ""
               for field, index in columns.items()}
-    if not values.get("display_name"):
-        values["display_name"] = " ".join(
-            re.sub(r"\s+", " ", values.get(field, "")).strip(" ,")
-            for field in ("first_name", "middle_initial", "last_name")
-            if values.get(field, "").strip(" ,"))
+    if values.get("first_name") or values.get("last_name"):
+        first_name = re.sub(r"\s+", " ", values.get("first_name", "")).strip(" ,")
+        middle_name = re.sub(r"\s+", " ", values.get("middle_name", "")).strip(" ,")
+        last_name = re.sub(r"\s+", " ", values.get("last_name", "")).strip(" ,")
+        last_name, detected_suffix = suffix_from_last_name(last_name)
+        name = StudentName(first_name, middle_name, last_name,
+                           canonical_suffix(values.get("suffix")) or detected_suffix)
+    else:
+        name = split_student_name(values.get("display_name", ""))
+    values.update(first_name=name.first_name, middle_name=name.middle_name,
+                  last_name=name.last_name, suffix=name.suffix,
+                  display_name=format_student_name(name))
     row = {"row": number, **values}
     row.setdefault("section", "")
     if source_sheet is not None:

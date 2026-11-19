@@ -99,7 +99,6 @@ export function GradebookPage(){
       </details></section>
 
     <section className="panel"><h3>Scores and grades</h3>
-      <p className="muted">— means pending (not scored yet). 0.00 is a real recorded zero. “Unreleased change” means the student still sees an older result. Grades and ranks to share or download are on the Class standing tab.</p>
       <div className="gradebook-filters actions" aria-label="Filter students">
         <label>Find a student<input type="search" value={find} onChange={e=>{setFind(e.target.value);setPage(1)}} placeholder="Name or student number"/></label>
         <label>Section<select aria-label="Filter scores and grades by section" value={section} onChange={e=>{setSection(e.target.value);setPage(1)}}><option value="">All sections ({book.rows.length})</option>{offering.sections.map(s=><option key={s.id} value={s.name}>{s.name} ({s.enrolled})</option>)}</select></label>

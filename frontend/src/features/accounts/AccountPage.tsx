@@ -164,7 +164,11 @@ function AccountDirectory({facultyOnly=false}:{facultyOnly?:boolean}){
     const data=new FormData(e.currentTarget);
     const role=facultyOnly?'faculty':data.get('role');
     try{
-      await post('/accounts',{email:data.get('email'),display_name:data.get('display_name'),role,student_number:role==='student'?data.get('student_number'):null});
+      await post('/accounts',{
+        email:data.get('email'),first_name:data.get('first_name'),middle_name:data.get('middle_name'),
+        last_name:data.get('last_name'),suffix:data.get('suffix'),role,
+        student_number:role==='student'?data.get('student_number'):null,
+      });
       setDialog(false);
       setMessage('Invitation sent.');
       queryClient.invalidateQueries({queryKey:['accounts']});
@@ -304,10 +308,10 @@ function AccountDirectory({facultyOnly=false}:{facultyOnly?:boolean}){
       {dialog && (
         <Dialog title={facultyOnly?'Invite teacher':'Invite user'} onClose={()=>setDialog(false)}>
           <form onSubmit={submit}>
-            <label>
-              Full name
-              <input name="display_name" required maxLength={150} />
-            </label>
+            <label>First name<input name="first_name" required maxLength={100}/></label>
+            <label>Middle name<input name="middle_name" maxLength={100}/></label>
+            <label>Last name<input name="last_name" required maxLength={100}/></label>
+            <label>Generational suffix (optional)<input name="suffix" maxLength={20} placeholder="Jr., Sr., II"/></label>
             <label>
               Email
               <input name="email" type="email" required />

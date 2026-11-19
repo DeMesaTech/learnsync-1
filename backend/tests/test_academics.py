@@ -9,8 +9,7 @@ from helpers import Api, make_account
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app.features.academics import commands
-from app.features.academics import calendar
+from app.features.academics import calendar, commands
 from app.features.academics.models import AcademicTerm, SchoolYear
 from app.features.accounts.commands import issue_token
 from app.features.accounts.models import AccountToken, AuditEvent
@@ -359,8 +358,9 @@ def test_section_student_profile_update_is_inline_scoped_and_reverifies_changed_
          "student_number": "S-UPDATED"})
     assert response.status_code == 200, response.text
     assert response.json() == {
-        "student_id": str(student.id), "display_name": "Updated Student",
-        "email": "updated@example.com", "student_number": "S-UPDATED",
+        "student_id": str(student.id), "display_name": "STUDENT, UPDATED",
+        "first_name": "Updated", "middle_name": None, "last_name": "Student",
+        "suffix": None, "email": "updated@example.com", "student_number": "S-UPDATED",
         "account_status": "invited",
     }
     assert len(sent) == 1

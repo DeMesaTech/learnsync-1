@@ -10,7 +10,40 @@ Alembic revision `c91f7a2e4b60` resets every existing semester to `draft`. This 
 
 Alembic revision `41c9e0ab7d52` restores teacher-configurable per-question quiz timers. Apply migrations using the normal stopped-API and verified-backup procedure before deployment. It preserves legacy minute limits by converting them to seconds and adds a clock status used to enforce answer, skip, and timeout lockouts. Timer deadlines are server-authoritative and continue across refreshes, disconnects, and tab switches; the legacy `paused_at` column is retained but not used.
 
+## Account name fields and display
+
+Student, faculty, and admin accounts store first, middle, and last names separately, with an optional generational suffix. The shared display name is generated as `LAST NAME, FIRST MIDDLE INITIALS, Suffix`; middle names remain stored in full while the display uses initials.
+
+Preview the current database split without changing rows:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m app.cli split-account-names --source ..\Sectioning.xlsx
+```
+
+The command uses a student-number and normalized-full-name match to use the roster's separate student name fields. Remaining student names and all faculty/admin names use the approved fallback: recognize a supported generational suffix, use the first word as first name, recognize common surname particles (`DE`, `DEL`, `DELA`, `DE LA`, `DE LAS`, `DE LOS`, `DELAS`, `DELOS`, `SAN`, `SANTA`, `VAN`, `VON`), and treat intervening words as middle names. A comma-separated `Last, First Middle, Suffix` name is parsed as-is. The preview prints counts only, never names.
+
+To apply, stop the API, create and verify a database/uploads backup using the procedure below, run `alembic upgrade head`, then rerun the command with `--apply --confirm-database <exact-database-name>`. Review the dry-run counts first; the command refuses an unrecognized one-word name or a test database. Applying records an audit event. Do not run this against a non-disposable database without the verified backup.
+
 Detailed configuration and backup rules: IMPLEMENTATION_PLAN.md section 7. Verified runnable commands will be added as each milestone passes.
+
+### Correcting existing faculty names
+
+The faculty-only correction recognizes supported honorifics stored as the first-name value and a single initial joined directly to the surname (for example, `D.Marfilla`). When a full given name can be recovered from the stored middle-name field, it is promoted to first name and any attached surname initial is moved to the middle name. Ambiguous or invalid records are left unchanged and counted as unresolved. Student and administrator accounts are not modified; accounts without a deterministic correction remain unchanged.
+
+Preview first; the command prints counts only:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.cli fix-faculty-names
+```
+
+Before applying, stop the API and create and verify a database/uploads backup using the procedure below. Then confirm the exact database name printed by the preview:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.cli fix-faculty-names --apply --confirm-database learnsync_v2
+```
+
+The apply command refuses test databases or a mismatched database confirmation and records the aggregate counts in the audit log. No schema migration is required.
 
 ## Clearing old prospectus imports and catalog entries
 

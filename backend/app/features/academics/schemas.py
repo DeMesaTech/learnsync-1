@@ -5,6 +5,14 @@ from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
+from app.features.accounts.names import (
+    StudentName,
+    canonical_suffix,
+    format_student_name,
+    split_student_name,
+    suffix_from_last_name,
+)
+
 
 class TermInput(BaseModel):
     name: str = Field(min_length=1, max_length=60)
@@ -103,17 +111,44 @@ class SectionBatchInput(BaseModel):
 
 
 class StudentProfileUpdate(BaseModel):
-    display_name: str = Field(min_length=1, max_length=150)
+    display_name: str | None = Field(default=None, max_length=150)
+    first_name: str | None = Field(default=None, max_length=100)
+    middle_name: str | None = Field(default=None, max_length=100)
+    last_name: str | None = Field(default=None, max_length=100)
+    suffix: str | None = Field(default=None, max_length=20)
     email: EmailStr = Field(max_length=254)
     student_number: str = Field(min_length=1, max_length=50)
 
     @model_validator(mode="after")
     def clean_values(self):
-        self.display_name = self.display_name.strip()
+        if any(field in self.model_fields_set
+               for field in ("first_name", "middle_name", "last_name", "suffix")):
+            self.first_name = (self.first_name or "").strip()
+            self.middle_name = (self.middle_name or "").strip() or None
+            last_name, detected_suffix = suffix_from_last_name(self.last_name or "")
+            self.last_name = last_name.strip()
+            supplied_suffix = (self.suffix or "").strip()
+            normalized_suffix = canonical_suffix(supplied_suffix)
+            if supplied_suffix and not normalized_suffix:
+                raise ValueError("Use a valid generational suffix such as Jr., Sr., II, or III")
+            self.suffix = normalized_suffix or detected_suffix or None
+            if not self.first_name or not self.last_name:
+                raise ValueError("First and last names are required")
+            parts = StudentName(
+                self.first_name, self.middle_name or "", self.last_name, self.suffix or "")
+        else:
+            parts = split_student_name(self.display_name or "")
+            if not parts.first_name or not parts.last_name:
+                raise ValueError("Enter a student name as Last name, First name Middle name")
+            self.first_name = parts.first_name
+            self.middle_name = parts.middle_name or None
+            self.last_name = parts.last_name
+            self.suffix = parts.suffix or None
+        self.display_name = format_student_name(parts)
         self.email = str(self.email).strip().lower()
         self.student_number = self.student_number.strip()
-        if not self.display_name or not self.student_number:
-            raise ValueError("Name and ID number are required.")
+        if not self.student_number:
+            raise ValueError("ID number is required.")
         return self
 
 

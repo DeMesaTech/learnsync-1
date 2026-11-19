@@ -11,6 +11,7 @@ from app.errors import fail
 from app.security import digest, passwords, rate_limit
 
 from .models import Account, AccountToken, AuditEvent, AuthSession, now
+from .names import format_student_name, split_faculty_name, split_student_name
 
 
 def audit(db, actor, action, entity_type, entity_id, details=None):
@@ -74,6 +75,8 @@ def invite(db, actor, data):
     if data.student_number and db.scalar(select(Account.id).where(Account.student_number == data.student_number)):
         fail(409, "student_number_exists", "An account already uses this student number.")
     account = Account(email=email, display_name=data.display_name, role=data.role,
+                      first_name=data.first_name, middle_name=data.middle_name,
+                      last_name=data.last_name, suffix=data.suffix,
                       college_id=data.college_id if data.role == "faculty" else None,
                       student_number=data.student_number, status="invited")
     db.add(account)
@@ -117,6 +120,8 @@ def update_faculty_profile(db, actor, account, data):
     email = str(data.email).lower()
     if db.scalar(select(Account.id).where(Account.email == email, Account.id != account.id)):
         fail(409, "email_exists", "Another account already uses this email.")
+    name_changed = account.display_name != data.display_name
+    name_parts = split_faculty_name(data.display_name) if name_changed else None
     changed = {
         field for field, value in (
             ("display_name", data.display_name),
@@ -124,6 +129,13 @@ def update_faculty_profile(db, actor, account, data):
             ("college_id", data.college_id),
         ) if getattr(account, field) != value
     }
+    if name_parts:
+        changed.update(field for field, value in (
+            ("first_name", name_parts.first_name),
+            ("middle_name", name_parts.middle_name or None),
+            ("last_name", name_parts.last_name),
+            ("suffix", name_parts.suffix or None),
+        ) if getattr(account, field) != value)
     if not changed:
         return account
     email_changed = account.email != email
@@ -131,7 +143,12 @@ def update_faculty_profile(db, actor, account, data):
         fail(409, "account_inactive", "Reactivate the account before changing its email.")
 
     previous_college_id = account.college_id
-    account.display_name = data.display_name
+    if name_parts:
+        account.display_name = data.display_name
+        account.first_name = name_parts.first_name
+        account.middle_name = name_parts.middle_name or None
+        account.last_name = name_parts.last_name
+        account.suffix = name_parts.suffix or None
     account.email = email
     account.college_id = data.college_id
     if email_changed:
@@ -166,7 +183,12 @@ def consume_token(db, data, purposes):
         audit(db, account, "account.handed_over", "account", account.id,
               {"previous_owner": account.display_name, "incoming_owner": token.payload["incoming_owner"],
                "reason": token.payload["reason"]})
-        account.display_name = token.payload["incoming_owner"]
+        parts = split_student_name(token.payload["incoming_owner"])
+        account.display_name = format_student_name(parts)
+        account.first_name = parts.first_name
+        account.middle_name = parts.middle_name or None
+        account.last_name = parts.last_name
+        account.suffix = parts.suffix or None
         account.ownership_generation += 1
     else:
         audit(db, account, f"account.{token.purpose}_accepted", "account", account.id)

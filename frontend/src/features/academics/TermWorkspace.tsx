@@ -12,10 +12,10 @@ import {TeacherImport} from '../accounts/TeacherImport';
 import {yearLabel,type College,type OfferingSummary,type SchoolYear,type Section,type Subject} from './types';
 import {OfferingRoster} from './Rosters';
 
-interface SectionRosterRow{student_id:string;display_name:string;email:string;student_number:string;account_status:'active'|'invited'|'inactive';status:'active'|'withdrawn'}
+interface SectionRosterRow{student_id:string;display_name:string;first_name:string|null;middle_name:string|null;last_name:string|null;suffix:string|null;email:string;student_number:string;account_status:'active'|'invited'|'inactive';status:'active'|'withdrawn'}
 interface SectionRosterPage{items:SectionRosterRow[];total:number;page:number;page_size:number;invitation_count:number}
 interface BulkInvitationResult{sent:number;failed:number;results:{id:string;email:string;status:'sent'|'failed';message:string}[]}
-interface StudentDraft{display_name:string;email:string;student_number:string}
+interface StudentDraft{first_name:string;middle_name:string;last_name:string;suffix:string;email:string;student_number:string}
 interface TeacherDraft{display_name:string;email:string;college_id:string}
 
 export function TermWorkspace({initialTab='sections',standalone=false}:{initialTab?:'sections'|'offerings';standalone?:boolean}={}){
@@ -424,7 +424,6 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
               <div className="actions student-section-actions">
                 {!closed&&invitationCount>0&&<button type="button" className="icon-button" aria-label={`Invite all ${invitationCount} students awaiting invitation`} title={`Invite all ${invitationCount} students awaiting invitation`} disabled={sendingSectionInvitations||bulkActionBusy} onClick={sendSectionInvitations}><StudentManagementIcon name="mail"/></button>}
                 {selectedSection&&!closed&&<button type="button" className="danger icon-button" aria-label={`Delete ${selectedSection.name}`} title="Delete section" disabled={deletingSection!==null} onClick={()=>removeSection(selectedSection)}>{deletingSection===selectedSection.id?'…':<StudentManagementIcon name="delete"/>}</button>}
-                <button className={sections.data?.length===0?'primary':''} aria-label="Add section" disabled={closed||bulkActionBusy||subjects.isPending||subjects.isError||colleges.isPending||colleges.isError||programYears.length===0} onClick={()=>setDialog('section')}><span aria-hidden="true">＋</span> Add section</button>
                 <button type="button" disabled={closed} onClick={()=>setStudentImportOpen(true)}>Import students</button>
               </div>
             </div>
@@ -470,14 +469,19 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
                           ?current.some(selected=>selected.student_id===student.student_id)?current:[...current,student]
                           :current.filter(selected=>selected.student_id!==student.student_id))}/></td>
                       <td>{rowDraft?<input aria-label={`ID number for ${student.display_name}`} maxLength={50} value={rowDraft.student_number} onChange={event=>setStudentDraft(current=>current?{...current,student_number:event.target.value}:current)}/>:student.student_number||'—'}</td>
-                      <th scope="row">{rowDraft?<input aria-label={`Name for ${student.display_name}`} maxLength={150} value={rowDraft.display_name} onChange={event=>setStudentDraft(current=>current?{...current,display_name:event.target.value}:current)}/>:student.display_name}</th>
+                      <th scope="row">{rowDraft?<div className="student-name-edit">
+                        <input aria-label={`First name for ${student.display_name}`} maxLength={100} value={rowDraft.first_name} onChange={event=>setStudentDraft(current=>current?{...current,first_name:event.target.value}:current)}/>
+                        <input aria-label={`Middle name for ${student.display_name}`} maxLength={100} value={rowDraft.middle_name} onChange={event=>setStudentDraft(current=>current?{...current,middle_name:event.target.value}:current)}/>
+                        <input aria-label={`Last name for ${student.display_name}`} maxLength={100} value={rowDraft.last_name} onChange={event=>setStudentDraft(current=>current?{...current,last_name:event.target.value}:current)}/>
+                        <input aria-label={`Name suffix for ${student.display_name}`} maxLength={20} value={rowDraft.suffix} placeholder="Suffix (optional)" onChange={event=>setStudentDraft(current=>current?{...current,suffix:event.target.value}:current)}/>
+                      </div>:student.display_name}</th>
                       <td>{rowDraft?<input type="email" aria-label={`Email for ${student.display_name}`} maxLength={254} value={rowDraft.email} onChange={event=>setStudentDraft(current=>current?{...current,email:event.target.value}:current)}/>:student.email}</td>
                       <td><span className={`badge ${student.account_status==='active'?'done':''}`}>{student.account_status==='active'?'Active':student.account_status==='invited'?'Invitation pending':'Inactive'}</span></td>
                       <td><div className="actions student-row-actions">
-                        {isEditing?<><button type="button" className="primary icon-button" aria-label={`Save ${student.display_name}`} title="Save" disabled={bulkActionBusy||savingStudentId===student.student_id||!studentDraft?.display_name.trim()||!studentDraft?.email.trim()||!studentDraft?.student_number.trim()} onClick={()=>saveStudent(student)}>{savingStudentId===student.student_id?'…':<StudentManagementIcon name="save"/>}</button>
+                        {isEditing?<><button type="button" className="primary icon-button" aria-label={`Save ${student.display_name}`} title="Save" disabled={bulkActionBusy||savingStudentId===student.student_id||!studentDraft?.first_name.trim()||!studentDraft?.last_name.trim()||!studentDraft?.email.trim()||!studentDraft?.student_number.trim()} onClick={()=>saveStudent(student)}>{savingStudentId===student.student_id?'…':<StudentManagementIcon name="save"/>}</button>
                           <button type="button" className="icon-button" aria-label={`Cancel editing ${student.display_name}`} title="Cancel" disabled={savingStudentId===student.student_id} onClick={()=>{setEditingStudentId(null);setStudentDraft(null)}}><StudentManagementIcon name="cancel"/></button></>
                           :<><button type="button" className="icon-button" aria-label={`${student.account_status==='invited'?'Send invitation':'Send reset link'} to ${student.display_name}`} title={student.account_status==='invited'?'Send invitation':'Send reset link'} disabled={bulkActionBusy||student.account_status==='inactive'||sendingStudentId!==null} onClick={()=>sendStudentLink(student)}>{sendingStudentId===student.student_id?'…':<StudentManagementIcon name="mail"/>}</button>
-                            <button type="button" className="icon-button" aria-label={`Edit ${student.display_name}`} title="Edit" disabled={bulkActionBusy||closed||savingStudentId!==null} onClick={()=>{setEditingStudentId(student.student_id);setStudentDraft({display_name:student.display_name,email:student.email,student_number:student.student_number})}}><StudentManagementIcon name="edit"/></button>
+                            <button type="button" className="icon-button" aria-label={`Edit ${student.display_name}`} title="Edit" disabled={bulkActionBusy||closed||savingStudentId!==null} onClick={()=>{setEditingStudentId(student.student_id);setStudentDraft({first_name:student.first_name??'',middle_name:student.middle_name??'',last_name:student.last_name??'',suffix:student.suffix??'',email:student.email,student_number:student.student_number})}}><StudentManagementIcon name="edit"/></button>
                             {!closed&&student.status==='active'&&<button type="button" className="danger icon-button" aria-label={`Withdraw ${student.display_name}`} title="Withdraw" disabled={bulkActionBusy} onClick={()=>setLeaving(student)}><StudentManagementIcon name="withdraw"/></button>}</>}
                       </div></td>
                     </tr>
@@ -593,7 +597,7 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
               {index===0&&<th scope="rowgroup" rowSpan={group.rows.length}>{group.name}</th>}
               <th scope="row"><strong>{offering.subject.code}</strong> {offering.subject.title}{offering.status==='archived'&&<> <span className="badge">Archived</span></>}</th>
               <td><div className="offering-sections-cell"><div className="offering-section-list">
-                {offering.sections.length?offering.sections.map(section=><span className="offering-section-entry" key={section.id}>{section.name}</span>):<span className="muted">No sections</span>}
+                {offering.sections.length===0&&<span className="muted">No sections</span>}
                 {!closed&&offering.status==='active'&&<button type="button" className="offering-add-section" aria-label={`Add section to ${offering.subject.code}`} title="Add section"
                   onClick={()=>setAddingSection(offering)}>+</button>}
               </div></div></td>
@@ -709,7 +713,10 @@ function TeacherInviteDialog({colleges,onClose,onDone}:{colleges:College[];onClo
     setBusy(true);setError('');
     const data=new FormData(event.currentTarget);
     try{
-      await post('/accounts',{email:data.get('email'),display_name:data.get('display_name'),role:'faculty',college_id:collegeId});
+      await post('/accounts',{
+        email:data.get('email'),first_name:data.get('first_name'),middle_name:data.get('middle_name'),
+        last_name:data.get('last_name'),suffix:data.get('suffix'),role:'faculty',college_id:collegeId,
+      });
       onDone();
     }catch(err){setError(errorText(err))}
     finally{setBusy(false)}
@@ -717,7 +724,10 @@ function TeacherInviteDialog({colleges,onClose,onDone}:{colleges:College[];onClo
   return <Dialog title="Add teacher" onClose={()=>busy?false:onClose()}>
     <form onSubmit={submit}>
       <p className="muted">The teacher will receive an invitation at their institutional email address to verify the account and choose a password.</p>
-      <label>Full name<input name="display_name" required maxLength={150} autoFocus/></label>
+      <label>First name<input name="first_name" required maxLength={100} autoFocus/></label>
+      <label>Middle name<input name="middle_name" maxLength={100}/></label>
+      <label>Last name<input name="last_name" required maxLength={100}/></label>
+      <label>Generational suffix (optional)<input name="suffix" maxLength={20} placeholder="Jr., Sr., II"/></label>
       <label>Email<input name="email" type="email" required maxLength={254}/></label>
       <label>College / program<select required value={collegeId} onChange={event=>setCollegeId(event.target.value)}>
         <option value="">Choose a college / program</option>{colleges.map(college=><option key={college.id} value={college.id}>{college.name}</option>)}
@@ -1010,7 +1020,6 @@ function BulkAssignDialog({termId,termSequence,termLabel,sections,existing,initi
   const [facultyId,setFacultyId]=useState(initialFacultyId??'');
   const [collegeId,setCollegeId]=useState('');
   const [find,setFind]=useState('');
-  const [semesterFilter,setSemesterFilter]=useState<'current'|'all'>('current');
   const [yearLevelFilter,setYearLevelFilter]=useState('all');
   const [subjectChooserOpen,setSubjectChooserOpen]=useState(false);
   const [pick,setPick]=useState<Record<string,string[]>>({});          // subject id -> chosen section ids; present = subject selected
@@ -1034,7 +1043,7 @@ function BulkAssignDialog({termId,termSequence,termLabel,sections,existing,initi
     .filter(subject=>subject.status==='active'&&(subject.college_id===null||subject.college_id===collegeId))
     .map(subject=>subject.year_level)
     .filter((yearLevel):yearLevel is number=>yearLevel!==null))].sort((a,b)=>a-b);
-  const list=(subjects.data??[]).filter(sub=>sub.status==='active'&&(sub.college_id===null||sub.college_id===collegeId)&&(semesterFilter==='all'||sub.semester===termSequence)&&(!needle||`${sub.code} ${sub.title}`.toLowerCase().includes(needle)))
+  const list=(subjects.data??[]).filter(sub=>sub.status==='active'&&(sub.college_id===null||sub.college_id===collegeId)&&sub.semester===termSequence&&(!needle||`${sub.code} ${sub.title}`.toLowerCase().includes(needle)))
     .sort((a,b)=>Number(pick[b.id]!==undefined)-Number(pick[a.id]!==undefined)||Number(a.semester===termSequence?0:1)-Number(b.semester===termSequence?0:1)||a.code.localeCompare(b.code));
   const availableSubjects=list.filter(subject=>pick[subject.id]===undefined);
   const matchingSubjects=availableSubjects.filter(subject=>yearLevelFilter==='all'||
@@ -1047,6 +1056,7 @@ function BulkAssignDialog({termId,termSequence,termLabel,sections,existing,initi
   const chosen=Object.keys(pick);
   const subjectOf=(id:string)=>subjects.data?.find(x=>x.id===id);
   const offeringsCount=chosen.reduce((total,id)=>total+pick[id].length,0);
+  const selectedSubjectCount=chosen.length;
   const needsReason=(id:string)=>{const sub=subjectOf(id);return !!sub&&pick[id].some(sid=>{const sec=programSections.find(x=>x.id===sid);return !!sec&&!fits(sub,sec)})};
   const ready=!!facultyId&&!!collegeId&&chosen.length>0&&chosen.every(id=>
     pick[id].length>0&&pick[id].every(sectionId=>!assignedSections.has(`${id}:${sectionId}`))&&
@@ -1119,13 +1129,12 @@ function BulkAssignDialog({termId,termSequence,termLabel,sections,existing,initi
       {subjects.isError&&<p role="alert">Could not load subjects: {subjects.error.message}</p>}
       {subjectChooserOpen&&<div className="bulk-assignment-subject-chooser">
         <div className="bulk-assignment-filters">
-          <label>Show subjects<select aria-label="Filter subjects by semester" value={semesterFilter} onChange={event=>setSemesterFilter(event.target.value as 'current'|'all')}>
-            <option value="current">Current semester ({termSequence})</option><option value="all">All semesters</option>
+          <label>Show subjects<select aria-label="Filter subjects by semester" value="current" disabled>
+            <option value="current">Current semester ({termSequence})</option>
           </select></label>
           <label>Year level<select aria-label="Filter subjects by year level" value={yearLevelFilter} onChange={event=>setYearLevelFilter(event.target.value)}>
             <option value="all">All year levels</option>
             {subjectYearLevels.map(yearLevel=><option key={yearLevel} value={yearLevel}>Year {yearLevel}</option>)}
-            <option value="unplaced">Unplaced</option>
           </select></label>
           <label>Filter subjects<input type="search" value={find} onChange={event=>setFind(event.target.value)} placeholder="Code or title"/></label>
         </div>
@@ -1148,7 +1157,8 @@ function BulkAssignDialog({termId,termSequence,termLabel,sections,existing,initi
       </button>
     </section>
     <div className="bulk-assignment-summary">
-      <strong>Total selected</strong><strong>{offeringsCount} subject-section assignment{offeringsCount===1?'':'s'}</strong>
+      <strong>{selectedSubjectCount} subject{selectedSubjectCount===1?'':'s'} selected</strong>
+      <strong>{offeringsCount} section assignment{offeringsCount===1?'':'s'} across {selectedSubjectCount} subject{selectedSubjectCount===1?'':'s'}</strong>
     </div>
     <p className="muted">Before saving, LearnSync checks for duplicate assignments, unavailable offerings, and sections already assigned to another faculty member. Subjects with a year-level placement only show sections for that year; an off-semester placement requires a reason. Nothing is saved unless every selected assignment is valid.</p>
     {error&&<p role="alert">{error}</p>}

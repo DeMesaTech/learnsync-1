@@ -1447,6 +1447,17 @@ code {
   line-height: 1.2
 }
 
+.student-name-edit {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 4px;
+  min-width: 248px
+}
+
+.student-name-edit input {
+  min-height: 44px
+}
+
 .student-management-panel .student-management-table thead th {
   padding-top: 6px;
   padding-bottom: 6px;
@@ -2978,7 +2989,7 @@ a.touch {
   position: sticky;
   top: 0;
   background: var(--surface);
-  z-index: 2
+  z-index: 4
 }
 
 .gradebook thead tr:first-child {
@@ -2989,12 +3000,12 @@ a.touch {
   position: sticky;
   top: 36px;
   background: var(--surface);
-  z-index: 1
+  z-index: 3
 }
 
 .gradebook thead th.sticky {
   left: 0;
-  z-index: 3
+  z-index: 5
 }
 
 .seq .grow a {

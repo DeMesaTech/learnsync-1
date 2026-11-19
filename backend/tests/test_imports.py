@@ -164,7 +164,7 @@ def test_student_import_combines_split_name_columns(tmp_path, middle_header):
 
     rows = documents.read_student_rows(path, ".xlsx")
 
-    assert [row["display_name"] for row in rows] == ["Juan Adan Dela Cruz", "Ana Reyes"]
+    assert [row["display_name"] for row in rows] == ["DELA CRUZ, JUAN A.", "REYES, ANA"]
 
 
 def test_student_xlsx_import_reads_each_sheet_and_keeps_source_location(tmp_path):
@@ -183,7 +183,7 @@ def test_student_xlsx_import_reads_each_sheet_and_keeps_source_location(tmp_path
 
     rows = documents.read_student_rows(path, ".xlsx")
 
-    assert [row["display_name"] for row in rows] == ["Ana Reyes Cruz", "Ben Santos"]
+    assert [row["display_name"] for row in rows] == ["CRUZ, ANA R.", "SANTOS, BEN"]
     assert [(row["source_sheet"], row["source_row"]) for row in rows] == [
         ("1A", 2), ("2A", 4)]
 
@@ -238,6 +238,21 @@ def test_faculty_import_preview_and_commit(db, stage):
     assert stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit").status_code == 409
 
 
+def test_faculty_import_removes_titles_and_recovers_attached_surname_initial(db, stage):
+    preview = faculty_upload(
+        stage,
+        b"email,display_name\nteacher.name@example.com,MRS. TERESA D.MARFILLA\n",
+    ).json()
+
+    assert preview["summary"] == {"new": 1, "existing": 0, "errors": 0, "total": 1}
+    assert preview["rows"][0]["display_name"] == "MARFILLA, TERESA D."
+    done = stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit")
+    assert done.status_code == 200, done.text
+    teacher = db.scalar(select(Account).where(Account.email == "teacher.name@example.com"))
+    assert (teacher.first_name, teacher.middle_name, teacher.last_name) == (
+        "TERESA", "D.", "MARFILLA")
+
+
 def test_faculty_import_reports_duplicates_and_non_faculty_accounts_without_partial_create(db, stage):
     make_account(db, "taken@example.com", "student", student_number="S-1")
     before = account_count(db)
@@ -266,7 +281,7 @@ def test_faculty_import_preview_edits_are_revalidated_and_persisted(db, stage):
     ]})
     assert saved.status_code == 200, saved.text
     assert saved.json()["summary"] == {"new": 1, "existing": 0, "errors": 0, "total": 1}
-    assert saved.json()["rows"][0]["display_name"] == "Corrected Teacher"
+    assert saved.json()["rows"][0]["display_name"] == "TEACHER, CORRECTED"
     assert stage["sent"] == []
 
     done = stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit")

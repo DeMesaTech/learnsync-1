@@ -31,6 +31,23 @@ def test_invitation_password_and_replay(client, db, actors, headers, sent):
     assert response.status_code == 200
     assert client.get("/api/accounts").status_code == 403
 
+
+def test_student_invitation_splits_name_and_stores_formatted_display(client, db, actors, headers, sent):
+    auth = sign_in(client, headers)
+    response = client.post("/api/accounts", headers=auth, json={
+        "email": "new-student@example.com",
+        "display_name": "JUAN ALVARO DELA CRUZ JR.",
+        "role": "student",
+        "student_number": "ST-NEW",
+    })
+
+    assert response.status_code == 201, response.text
+    assert response.json()["display_name"] == "DELA CRUZ, JUAN A., Jr"
+    assert response.json()["first_name"] == "JUAN"
+    assert response.json()["middle_name"] == "ALVARO"
+    assert response.json()["last_name"] == "DELA CRUZ"
+    assert response.json()["suffix"] == "Jr"
+
 def test_roles_cannot_administer(client,db,actors,headers):
     for role in ("faculty","student"):
         auth=sign_in(client,headers,role)
@@ -71,7 +88,7 @@ def test_handover_retains_previous_actor(client,db,actors,headers,sent):
     assert client.get("/api/accounts").status_code == 401
     db.expire_all()
     account=db.get(Account,actors[0].id)
-    assert account.display_name == "Incoming head" and account.ownership_generation == 2
+    assert account.display_name == "HEAD, INCOMING" and account.ownership_generation == 2
     event=db.scalar(select(AuditEvent).where(AuditEvent.action=="account.handed_over"))
     assert event.actor_label == "Admin" and event.ownership_generation == 1
 
@@ -152,7 +169,7 @@ def test_admin_can_update_faculty_profile_and_email_change_requires_verification
         "college_id": None,
     })
     assert updated.status_code == 200, updated.text
-    assert updated.json()["display_name"] == "Updated Faculty"
+    assert updated.json()["display_name"] == "FACULTY, UPDATED"
     assert updated.json()["email"] == "updated-faculty@example.com"
     assert updated.json()["status"] == "invited"
     assert sent[-1][0] == "updated-faculty@example.com" and sent[-1][2] == "invite"
@@ -161,7 +178,7 @@ def test_admin_can_update_faculty_profile_and_email_change_requires_verification
     event = db.scalar(select(AuditEvent).where(
         AuditEvent.action == "account.faculty_profile_updated",
         AuditEvent.entity_id == str(teacher.id)))
-    assert set(event.details["fields"]) == {"display_name", "email"}
+    assert set(event.details["fields"]) == {"display_name", "first_name", "last_name", "email"}
     assert event.details["email_changed_requires_verification"] is True
 
 

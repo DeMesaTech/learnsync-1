@@ -31,7 +31,7 @@ export function StudentImport({termId:providedTermId,onClose,onDone}:{termId?:st
     }catch(err){setError(errorText(err))}finally{setBusy(false)}
   }
   const content=<>
-    <p className="muted">Upload a CSV or Excel file with <code>student_number</code> and <code>email</code>, plus either <code>display_name</code> or <code>firstName</code>, <code>Middle Initial</code> and <code>lastName</code>. Split names are combined as first, middle, last; the middle part is optional. Excel imports read each worksheet with student columns; CSV imports read the file as one table. You may also include <code>section</code> (an existing section name in this term). Review the result before anything is created. New students receive an invitation email.</p>
+    <p className="muted">Upload a CSV or Excel file with <code>student_number</code> and <code>email</code>, plus either <code>display_name</code> or <code>firstName</code>, <code>Middle Initial</code> and <code>lastName</code>. Split names are displayed as Last Name, First Name and optional Middle Initial. Excel imports read each worksheet with student columns; CSV imports read the file as one table. You may also include <code>section</code> (an existing section name in this term). Review the result before anything is created. New students receive an invitation email.</p>
     <section className="panel"><form onSubmit={submit}>
       <label>Student list<input name="file" type="file" required accept=".csv,.xlsx" disabled={busy}/></label>
       <button className="primary" disabled={busy}>{busy?'Checking…':'Preview import'}</button>

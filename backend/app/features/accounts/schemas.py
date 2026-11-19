@@ -3,12 +3,26 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
+from .names import (
+    StudentName,
+    canonical_suffix,
+    format_student_name,
+    normalize_faculty_name_parts,
+    split_faculty_name,
+    split_student_name,
+    suffix_from_last_name,
+)
+
 
 class AccountView(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     email: str
     display_name: str
+    first_name: str | None
+    middle_name: str | None
+    last_name: str | None
+    suffix: str | None
     role: str
     status: str
     college_id: UUID | None
@@ -21,7 +35,11 @@ class Login(BaseModel):
 
 class Invite(BaseModel):
     email: EmailStr
-    display_name: str = Field(min_length=1, max_length=150)
+    display_name: str | None = Field(default=None, max_length=150)
+    first_name: str | None = Field(default=None, max_length=100)
+    middle_name: str | None = Field(default=None, max_length=100)
+    last_name: str | None = Field(default=None, max_length=100)
+    suffix: str | None = Field(default=None, max_length=20)
     role: Literal["admin", "faculty", "student"]
     college_id: UUID | None = None
     student_number: str | None = Field(default=None, min_length=1, max_length=50)
@@ -30,9 +48,39 @@ class Invite(BaseModel):
     def student_id_required(self):
         if self.role == "student" and not self.student_number:
             raise ValueError("Student number is required")
-        self.display_name = self.display_name.strip()
-        if not self.display_name:
-            raise ValueError("Name is required")
+        if self.first_name or self.last_name:
+            self.first_name = (self.first_name or "").strip()
+            self.middle_name = (self.middle_name or "").strip() or None
+            last_name, detected_suffix = suffix_from_last_name(self.last_name or "")
+            self.last_name = last_name.strip()
+            supplied_suffix = (self.suffix or "").strip()
+            normalized_suffix = canonical_suffix(supplied_suffix)
+            if supplied_suffix and not normalized_suffix:
+                raise ValueError("Use a valid generational suffix such as Jr., Sr., II, or III")
+            self.suffix = normalized_suffix or detected_suffix or None
+            if not self.first_name or not self.last_name:
+                raise ValueError("First and last names are required")
+            parts = StudentName(
+                self.first_name, self.middle_name or "", self.last_name, self.suffix or "")
+        else:
+            parts = (split_faculty_name(self.display_name or "")
+                     if self.role == "faculty"
+                     else split_student_name(self.display_name or ""))
+            if not parts.first_name or not parts.last_name:
+                raise ValueError("Enter a name as Last name, First name Middle name")
+            self.first_name = parts.first_name
+            self.middle_name = parts.middle_name or None
+            self.last_name = parts.last_name
+            self.suffix = parts.suffix or None
+        if self.role == "faculty":
+            parts = normalize_faculty_name_parts(parts)
+            if not parts:
+                raise ValueError("Enter a teacher's name without a title and include a first and last name")
+        self.first_name = parts.first_name
+        self.middle_name = parts.middle_name or None
+        self.last_name = parts.last_name
+        self.suffix = parts.suffix or None
+        self.display_name = format_student_name(parts)
         return self
 
 class EmailRequest(BaseModel):
@@ -55,10 +103,11 @@ class FacultyProfileUpdate(BaseModel):
 
     @model_validator(mode="after")
     def clean_values(self):
-        self.display_name = self.display_name.strip()
+        name = split_faculty_name(self.display_name.strip())
+        if not name.first_name or not name.last_name:
+            raise ValueError("Enter a teacher's name without a title and include a first and last name")
+        self.display_name = format_student_name(name)
         self.email = str(self.email).strip().lower()
-        if not self.display_name:
-            raise ValueError("Name is required")
         return self
 
 class BulkSendLinks(BaseModel):

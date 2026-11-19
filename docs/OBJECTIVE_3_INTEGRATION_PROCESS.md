@@ -79,11 +79,13 @@ This available interface screenshot shows the assessment types from which facult
 
 ### Expected test scenario
 
-1. Create and publish one online quiz (for example, 10 points) and one manual examination (for example, 50 points) under the same subject and grading period.
-2. Log in as a student, submit the online quiz, and verify that its score appears in the teacher's Scores page/Gradebook without manual score entry.
-3. Log in as the teacher, enter examination scores for enrolled students, and save.
-4. Confirm that the Gradebook shows both columns and recalculates each student’s current standing according to the grading policy.
-5. Release one assessment result and verify, using the student account, that the released score is visible while unreleased working scores remain private.
+| Expected Test Scenarios | Result |
+| --- | --- |
+| 1. Create and publish one online quiz (for example, 10 points) and one manual examination (for example, 50 points) under the same subject and grading period. | Both assessments are published for the subject and grading period and appear as separate Gradebook columns. |
+| 2. Log in as a student, submit the online quiz, and verify that its score appears in the teacher's Scores page/Gradebook without manual score entry. | The submitted quiz is scored automatically, and its score is recorded for the teacher to view in Scores and the Gradebook. |
+| 3. Log in as the teacher, enter examination scores for enrolled students, and save. | The teacher-entered examination scores are validated and saved to the students’ assessment records. |
+| 4. Confirm that the Gradebook shows both columns and recalculates each student’s current standing according to the grading policy. | The Gradebook displays both assessment columns and recalculates each student’s current standing using the grading policy. |
+| 5. Release one assessment result and verify, using the student account, that the released score is visible while unreleased working scores remain private. | The student can see the released result; unreleased working scores remain private to faculty. |
 
 ### Result based on implementation and recorded checks
 

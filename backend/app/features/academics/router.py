@@ -182,6 +182,8 @@ def update_section_student(section_id: UUID, student_id: UUID, data: StudentProf
                            actor=Depends(admin), db: Session = Depends(get_db)):
     account = commands.update_section_student(db, actor, section_id, student_id, data)
     return {"student_id": account.id, "display_name": account.display_name,
+            "first_name": account.first_name, "middle_name": account.middle_name,
+            "last_name": account.last_name, "suffix": account.suffix,
             "email": account.email, "student_number": account.student_number,
             "account_status": account.status}
 
