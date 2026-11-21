@@ -75,13 +75,15 @@ export function StudentHome(){
   }}</Page>;
 }
 
-export function SubjectCard({code,title,meta,progress,detail,to,action,links}:{code:string;title:string;meta:string;progress?:number|null;detail?:string;to:string;action:string;links:[string,string][]}){
+export function SubjectCard({code,title,meta,progress,detail,to,action,links,cardLink=false}:{code:string;title:string;meta:string;progress?:number|null;detail?:string;to:string;action:string;links:[string,string][];cardLink?:boolean}){
   const here=useHere();
-  return <article className="subject-card"><div className="subject-top"><span className="eyebrow">{code}</span><span className="badge">{meta}</span></div>
+  return <article className={`subject-card${cardLink?' has-card-link':''}`}><div className="subject-top"><span className="eyebrow">{code}</span><span className="badge">{meta}</span></div>
+    {cardLink&&<Link state={here} className="subject-card-main-link" to={to} aria-label={`Open ${title} Stream`}/>}
     <h3>{title}</h3>
     {progress!==undefined&&progress!==null&&<><div className="bar-track" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label={`${title} progress`}><span style={{width:`${progress}%`}}/></div></>}
     {detail&&<p className="muted">{detail}</p>}
-    <div className="subject-foot"><span>{links.map(([l,h],i)=><span key={h}>{i>0&&' · '}<Link state={here} to={h}>{l}</Link></span>)}</span><Link state={here} className="open" to={to}>{action} →</Link></div></article>;
+    <div className="subject-foot"><span>{links.map(([l,h],i)=><span key={h}>{i>0&&' · '}<Link state={here} to={h}>{l}</Link></span>)}</span>
+      {!cardLink&&<Link state={here} className="open" to={to}>{action} →</Link>}</div></article>;
 }
 
 // ---------------------------------------------------------------- faculty
@@ -101,7 +103,7 @@ export function FacultyHome(){
             {d.subjects.length===0?<p className="panel muted">No subjects are assigned to you in an open term.</p>:<div className="cards">{d.subjects.map(s=>{
               const o=`/faculty/offerings/${s.offering_id}`;const drafts=s.drafts_content+s.drafts_assessments;
               return <SubjectCard key={s.offering_id} code={s.code} title={s.title} meta="Assigned" detail={`${s.sections.join(', ')||'No sections'} · ${plural(s.students,'student')}${s.to_grade?` · ${s.to_grade} to grade`:''}${s.needs_review?` · ${s.needs_review} to review`:''}${drafts?` · ${plural(drafts,'draft')}`:''}`}
-                to={o} action="Teach" links={[['Classwork',`${o}/classwork`],['Gradebook',`${o}/gradebook`]]}/>})}</div>}</section>
+                to={`${o}/stream`} action="Teach" cardLink links={[['Classwork',`${o}/classwork`],['Gradebook',`${o}/gradebook`]]}/>})}</div>}</section>
         </div>
         <div className="dash-side">
           {d.task?<Hero eyebrow="Your next teaching task" title={d.task.headline} detail={d.task.detail} action={d.task.action} to={d.task.link} icon={d.task.icon}/>

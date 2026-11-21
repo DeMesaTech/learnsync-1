@@ -1,5 +1,23 @@
 # Acceptance status
 
+### 2026-11-21 (Stream, pagination, and gradebook refinements)
+- Removed the inline New announcement row from the faculty Stream and moved Classwork announcements into the selected chapter's material list without a separate Announcements heading. Student Stream and Classwork materials now use consistent full-row links and row styling. Chapter choices have a clearer hover/focus state.
+- Attendance's unmark actions now sit at the left of the top pagination navigator. Gradebook's Ready to publish panel now opens from a button in a modal.
+- Passed: `npm --prefix frontend run build` (with the existing large-chunk advisory), `npm --prefix frontend run lint`, and `git diff --check`.
+- Browser verified: Classwork has no inline New announcement row or Announcements heading; announcements share the material list with resources and remain in that list for an empty chapter; the chapter hover changes its background/border/shadow; Attendance actions render inside the pagination navigator; and the Ready to publish button opens its dialog. Student screens were not browser-verified because the available session is authenticated as faculty.
+
+### 2026-11-21 (Setup-safe Classwork and Attendance refinements)
+- Classwork now treats active subjects without a published syllabus as read-only: chapter creation, material editing links, reordering, unpublishing, and announcement create/edit/publish controls are unavailable until setup is complete. New announcements are created from the chapter's Add material menu, and the chapter announcement section is no longer collapsible. The Section selector now follows the KPI cards.
+- Attendance section filtering now sits beside the Class days and Export controls; the Export dialog uses a compact menu-like surface. Stream material rows now match Classwork's full-row link and hover treatment.
+- Passed: `npm --prefix frontend run build` (with the existing large-chunk advisory), `npm --prefix frontend run lint`, and `git diff --check`.
+- Browser verification was not completed: the local app opened at `/login`, so the affected authenticated faculty screens were unavailable.
+
+### 2026-11-21 (Faculty Classwork and Attendance UX)
+- Removed the faculty dashboard Teach link and made each subject card's main link target its Stream tab. Faculty Classwork now shows one selected chapter at a time, uses a labeled category selector, places Add material beside the selector, makes material rows clickable, and keeps announcements within the chapter panel. Removed chapter-material search and the redundant Classwork description.
+- Moved the setup notice into a dialog, added category filtering to the faculty Stream, and updated Attendance navigation, paging, and class-day editing to use icon controls, duplicated pagers, and a modal.
+- Passed: `npm --prefix frontend run build` (TypeScript and production build; existing large-chunk advisory), `npm --prefix frontend run lint`, and `git diff --check`.
+- Browser verified: Faculty Classwork has the category selector and chapter-local announcements, with no search input; the selected chapter and Add material control render, and its 7 material rows expose full-row links. Stream filtering returned 13 published rows for All, 6 for Lessons, and 7 for Quizzes. Attendance rendered two pagers, accessible previous/next icons, no selected-cell prompt, and a class-day dialog with seven checkboxes. The setup-notice dialog and setup link opened correctly. The faculty dashboard DOM showed the Stream target and no Teach link; a later direct click check was blocked when the dashboard request stayed in its loading state.
+
 ### 2026-11-19 (Faculty name correction)
 - Corrected 23 real faculty accounts using deterministic normalization of stored name fields: removed leading honorifics from name parts, promoted the recovered given name, and moved three attached surname initials into middle names. Two demo faculty accounts were unchanged; no account was unresolved.
 - Verified all 25 faculty accounts have first and last names, no honorific remains in the first-name field, no attached initial remains in the surname, and each display name matches its stored components. Audit event records 23 updated accounts and zero unresolved.

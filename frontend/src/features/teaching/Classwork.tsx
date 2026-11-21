@@ -15,11 +15,11 @@ import {AssessmentEditorDialog} from '../assessments/AssessmentEditor';
 import {detail as workDetail} from '../assessments/Work';
 import {KIND_LABEL,fmt,type Assessment,type Kind,type LearnItem as Work} from '../assessments/types';
 import {ItemEditorDialog,KIND,NewItemDialog,itemTitle,stateLabel,useNodes} from './Content';
-import {FacultyAnnouncements} from './Announcements';
+import {AnnouncementCreateDialog,FacultyAnnouncements} from './Announcements';
 import {SaveIndicator,DraftNotices,draftKey,useAutosave,useFlushOnLeave} from './autosave';
 import {emptyChapter,newId,type Chapter,type Item,type LearnItem,type LearnSyllabus,type Outline,type SyllabusDraftContent,type SyllabusRev,type SyllabusState} from './types';
 
-type Create={type:'item';kind:Item['kind']}|{type:'item-editor';itemId:string}|{type:'assessment';kind:Kind}|{type:'assessment-editor';assessmentId:string}|{type:'ai'}|null;
+type Create={type:'item';kind:Item['kind']}|{type:'item-editor';itemId:string}|{type:'assessment';kind:Kind}|{type:'assessment-editor';assessmentId:string}|{type:'ai'}|{type:'announcement'}|null;
 interface MaterialContext{anchorNodeId:string|null;label:string}
 interface Row{canUnpublish:boolean;pending:boolean;key:string;type:'item'|'assessment';kind:string;sectionIds:string[];id:string;title:string;label:string;anchor:string|null;archived:boolean;status:string;published:boolean;to:string;meta:string}
 type MaterialFilter='all'|'lesson'|'quiz'|'activity'|'exam';
@@ -29,11 +29,12 @@ const CREATE_GROUPS:{label:string;options:[string,Create][]}[]=[
   {label:'Quizzes',options:[['Online quiz',{type:'assessment',kind:'online_quiz'}],['Paper quiz',{type:'assessment',kind:'offline_quiz'}],['Quiz drafted by AI',{type:'ai'}]]},
   {label:'Activities',options:[['Activity',{type:'assessment',kind:'activity'}],['Teacher-scored item',{type:'assessment',kind:'manual'}]]},
   {label:'Exams',options:[['Examination',{type:'assessment',kind:'exam'}]]},
+  {label:'Announcements',options:[['New announcement',{type:'announcement'}]]},
 ];
 
 /** Teachers: everything you teach and assign in one place, grouped by syllabus topic, with one Create menu. */
 export function FacultyClasswork(){
-  const {offering}=useOutletContext<{offering:OfferingSummary}>();
+  const {offering,setupRequired=false}=useOutletContext<{offering:OfferingSummary;setupRequired?:boolean}>();
   const closed=offering.term_status!=='active';
   const base=`/faculty/offerings/${offering.id}`;
   const items=useQuery({queryKey:['items',offering.id],queryFn:()=>api<Item[]>(`/teach/offerings/${offering.id}/items`)});
@@ -43,9 +44,8 @@ export function FacultyClasswork(){
   const offer=useUndo();
   const [create,setCreate]=useState<Create>(null);
   const [addingChapter,setAddingChapter]=useState(false);
-  const [search,setSearch]=useState('');const [archived,setArchived]=useState(false);
+  const [archived,setArchived]=useState(false);
   const [materialFilter,setMaterialFilter]=useState<MaterialFilter>('all');
-  const [chapterDisplay,setChapterDisplay]=useState<'single'|'all'>('single');
   const [sectionId,setSectionId]=useState(offering.sections[0]?.id??'all');
   const [activeChapter,setActiveChapter]=useState('');
   const [materialContext,setMaterialContext]=useState<MaterialContext>({anchorNodeId:null,label:'Other materials'});
@@ -80,8 +80,7 @@ export function FacultyClasswork(){
     (materialFilter==='quiz'&&r.type==='assessment'&&['online_quiz','offline_quiz'].includes(r.kind))||
     (materialFilter==='activity'&&r.type==='assessment'&&['activity','manual'].includes(r.kind))||
     (materialFilter==='exam'&&r.kind==='exam');
-  const match=(r:Row)=>r.title.toLowerCase().includes(search.trim().toLowerCase());
-  const shown=(r:Row)=>isVisibleToSection(r)&&(archived||!r.archived)&&match(r)&&matchesFilter(r);
+  const shown=(r:Row)=>isVisibleToSection(r)&&(archived||!r.archived)&&matchesFilter(r);
   const outline=syllabus.data?.draft?.outline??syllabus.data?.published?.outline;
   const known=new Set(nodes.map(n=>n.id));
   const visibleRows=rows.filter(shown);
@@ -90,9 +89,6 @@ export function FacultyClasswork(){
   const selectedChapter=activeChapter==='other'?undefined:chapters.find(chapter=>chapter.id===activeChapter)??chapters[0];
   const selectedChapterId=selectedChapter?.id??'other';
   const selectedTree=tree.find(node=>node.id===selectedChapterId);
-  const chapterTrees=chapters.map(chapter=>tree.find(node=>node.id===chapter.id)??{id:chapter.id,title:chapter.title||'Untitled chapter',rows:[],kids:[]} as TNode<Row>);
-  const otherTree=tree.find(node=>node.id==='other');
-  const published=syllabus.data?.published;const draft=syllabus.data?.draft;
   const contextFor=(chapter:Chapter|undefined,index=-1):MaterialContext=>{
     if(!chapter)return {anchorNodeId:null,label:'Other materials'};
     const title=chapter.title||'Untitled chapter';
@@ -133,88 +129,65 @@ export function FacultyClasswork(){
   const activeRows=rows.filter(row=>!row.archived);
   const publishedCount=activeRows.filter(row=>row.published&&!row.pending).length;
   const draftCount=activeRows.filter(row=>!row.published||row.pending).length;
-  const branch=(n:TNode<Row>,depth:number,bare=false):React.ReactElement=>{
+  const branch=(n:TNode<Row>,depth:number,bare=false,extraRows?:React.ReactNode):React.ReactElement=>{
     const Heading=(['h3','h4','h5'] as const)[Math.min(depth,2)];
     const items=n.rows.filter(r=>r.type==='item');
     return <section key={n.id} className={`tree d${Math.min(depth,2)}`} aria-labelledby={`c-${n.id}`}>
       {bare?<Heading id={`c-${n.id}`} className="sr-only">{n.title}</Heading>:<header><Heading id={`c-${n.id}`}>{n.title}</Heading><span className="count">{total(n)}</span>
-        {items.length>1&&!closed&&!stranded&&<button type="button" className="linklike" aria-pressed={reorder===n.id} onClick={()=>setReorder(reorder===n.id?null:n.id)}>{reorder===n.id?'Done reordering':'Reorder'}</button>}</header>}
-      {n.rows.length>0&&<ul className="seq compact manager-material-list">{n.rows.map(r=><li className="manager-material-row" key={r.key}>
+        {items.length>1&&!closed&&!setupRequired&&!stranded&&<button type="button" className="linklike" aria-pressed={reorder===n.id} onClick={()=>setReorder(reorder===n.id?null:n.id)}>{reorder===n.id?'Done reordering':'Reorder'}</button>}</header>}
+      {(n.rows.length>0||extraRows)&&<ul className="seq compact manager-material-list">{n.rows.map(r=><li className={`manager-material-row${setupRequired?'':' manager-material-row-clickable'}`} key={r.key}>
+        {!setupRequired&&<Link className="manager-material-row-link" to={r.to} aria-label={`Open ${r.title}`}/>}
         <span className={`material-kind-icon kind-${r.kind}`} aria-hidden="true">{materialIcon(r.kind)}</span>
-        <span className="grow"><Link to={r.to}>{r.title}</Link><span className="muted">{r.label}{r.meta?` · ${r.meta}`:''}</span>
+        <span className="grow"><strong>{r.title}</strong><span className="muted">{r.label}{r.meta?` · ${r.meta}`:''}</span>
           <span className={r.published&&!r.pending&&!r.archived?'badge done':'badge'}>{r.status}</span></span>
         <span className="manager-material-actions">
-          {r.canUnpublish&&!closed&&<button type="button" className="linklike" onClick={()=>unpublish(r)}>Unpublish</button>}
-          {reorder===n.id&&r.type==='item'&&<span className="actions"><button type="button" aria-label={`Move ${r.title} up`} disabled={closed||items.indexOf(r)===0} onClick={()=>move(n,items,r,-1)}>↑</button>
-            <button type="button" aria-label={`Move ${r.title} down`} disabled={closed||items.indexOf(r)===items.length-1} onClick={()=>move(n,items,r,1)}>↓</button></span>}
-        </span></li>)}</ul>}
+          {r.canUnpublish&&!closed&&!setupRequired&&<button type="button" className="linklike" onClick={()=>unpublish(r)}>Unpublish</button>}
+          {reorder===n.id&&r.type==='item'&&<span className="actions"><button type="button" aria-label={`Move ${r.title} up`} disabled={closed||setupRequired||items.indexOf(r)===0} onClick={()=>move(n,items,r,-1)}>↑</button>
+            <button type="button" aria-label={`Move ${r.title} down`} disabled={closed||setupRequired||items.indexOf(r)===items.length-1} onClick={()=>move(n,items,r,1)}>↓</button></span>}
+        </span></li>)}{extraRows}</ul>}
       {n.kids.map(k=>branch(k,depth+1))}</section>};
   return <>
     <section className="content-manager-header">
-      <div><p className="eyebrow">SUBJECT CONTENT</p><h2>Subject Content Manager</h2>
-        <p className="muted">Manage chapters, lessons, assessments, and learning resources in one place.</p></div>
+      <div><p className="eyebrow">SUBJECT CONTENT</p><h2>Subject Content Manager</h2></div>
     </section>
-    <div className="content-manager-context">
-      <label>Section<select aria-label="Section" value={selectedSection?.id??'all'} onChange={event=>setSectionId(event.target.value)}>
-        <option value="all">All sections</option>{offering.sections.map(section=><option key={section.id} value={section.id}>{section.name}</option>)}
-      </select></label>
-    </div>
     <section className="content-manager-overview" aria-label="Content overview">
       <article><span aria-hidden="true">▤</span><div><strong>{chapters.length}</strong><small>Chapters</small></div></article>
       <article><span aria-hidden="true">▣</span><div><strong>{activeRows.length}</strong><small>Resources</small></div></article>
       <article><span aria-hidden="true">✓</span><div><strong>{publishedCount}</strong><small>Published</small></div></article>
       <article><span aria-hidden="true">✎</span><div><strong>{draftCount}</strong><small>Drafts</small></div></article>
     </section>
-    {!published&&!draft&&!closed&&<section className="panel" aria-labelledby="syl-h"><h3 id="syl-h">Set up this subject</h3><p className="muted">Not set up yet. A guided setup creates the syllabus, grading policy and first topics in a few steps.</p>
-      <Link className="button primary" to={`${base}/setup`}>Set up this subject</Link></section>}
+    <div className="content-manager-context">
+      <label>Section<select aria-label="Section" value={selectedSection?.id??'all'} onChange={event=>setSectionId(event.target.value)}>
+        <option value="all">All sections</option>{offering.sections.map(section=><option key={section.id} value={section.id}>{section.name}</option>)}
+      </select></label>
+    </div>
     {moved&&<p role="status" className="muted">{moved}</p>}
     {(items.isPending||assessments.isPending)?<p>Loading…</p>:items.error||assessments.error?<p role="alert">{(items.error??assessments.error)!.message}</p>:
       <div className="chapter-workspace">
-        <details className="panel classwork-announcements" open>
-          <summary aria-labelledby="classwork-announcements-heading">
-            <h3 id="classwork-announcements-heading">Announcements</h3>
-          </summary>
-          <FacultyAnnouncements embedded manageActions/>
-        </details>
-        <ChapterNavigation outline={outline} rows={visibleRows} selected={selectedChapterId} onSelect={id=>{setActiveChapter(id);if(chapterDisplay==='all')document.getElementById(`chapter-${id}`)?.scrollIntoView({behavior:'smooth',block:'start'})}} onAdd={()=>setAddingChapter(true)} canAdd={!closed}/>
+        <ChapterNavigation outline={outline} rows={visibleRows} selected={selectedChapterId} onSelect={setActiveChapter} onAdd={()=>setAddingChapter(true)} canAdd={!closed&&!setupRequired}/>
         <section className="chapter-detail panel">
-          <div className="chapter-display-options">
-            <span className="muted">Chapter view</span>
-            <div className="segmented" role="group" aria-label="Chapter display">
-              <button type="button" className={chapterDisplay==='all'?'on':''} aria-label="Show all chapters" title="Show all chapters" aria-pressed={chapterDisplay==='all'} onClick={()=>setChapterDisplay('all')}>▤</button>
-              <button type="button" className={chapterDisplay==='single'?'on':''} aria-label="Show one chapter at a time" title="Show one chapter at a time" aria-pressed={chapterDisplay==='single'} onClick={()=>setChapterDisplay('single')}>▣</button>
-            </div>
-          </div>
           <header className="chapter-detail-heading">
-            <div><p className="eyebrow">{chapterDisplay==='all'?'ALL CHAPTERS':selectedChapter?(selectedChapter.is_intro?'SUBJECT INTRODUCTION':`CHAPTER ${chapters.slice(0,chapters.indexOf(selectedChapter)).filter(chapter=>!chapter.is_intro).length+1}`):'OTHER MATERIALS'}</p>
-              <h2>{chapterDisplay==='all'?'All chapters':selectedChapter?(selectedChapter.is_intro?(selectedChapter.title||'Subject Introduction'):`Chapter ${chapters.slice(0,chapters.indexOf(selectedChapter)).filter(chapter=>!chapter.is_intro).length+1}: ${selectedChapter.title||'Untitled'}`):'Other materials'}</h2>
-              <p className="muted">{chapterDisplay==='all'?'Browse all chapters in syllabus order.':'Manage learning resources for this chapter.'}</p></div>
+            <div><p className="eyebrow">{selectedChapter?(selectedChapter.is_intro?'SUBJECT INTRODUCTION':`CHAPTER ${chapters.slice(0,chapters.indexOf(selectedChapter)).filter(chapter=>!chapter.is_intro).length+1}`):'OTHER MATERIALS'}</p>
+              <h2>{selectedChapter?(selectedChapter.is_intro?(selectedChapter.title||'Subject Introduction'):`Chapter ${chapters.slice(0,chapters.indexOf(selectedChapter)).filter(chapter=>!chapter.is_intro).length+1}: ${selectedChapter.title||'Untitled'}`):'Other materials'}</h2>
+              <p className="muted">Manage learning resources for this chapter.</p></div>
           </header>
-          {stranded&&<p className="warn" role="status">Items cannot be reordered because some are attached to a topic that is no longer in the syllabus. <Link to={stranded.to}>Open “{stranded.title}”</Link> and choose a current topic.</p>}
+          {stranded&&<p className="warn" role="status">Items cannot be reordered because some are attached to a topic that is no longer in the syllabus. {setupRequired?'Complete subject setup before editing the item placement.':<> <Link to={stranded.to}>Open “{stranded.title}”</Link> and choose a current topic.</>}</p>}
           <div className="chapter-materials">
-            <div className="section-head"><h3>Learning materials</h3><span className="muted">{chapterDisplay==='all'?`${visibleRows.length} items`:`${selectedTree?total(selectedTree):0} items`}</span></div>
+            <div className="section-head"><h3>Learning materials</h3><span className="muted">{selectedTree?total(selectedTree):0} items</span></div>
             <div className="chapter-material-tools">
-              <label className="chapter-material-search">Search chapter materials<input type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="Search chapter materials…"/></label>
               <div className="chapter-material-filters" role="group" aria-label="Filter chapter materials">
-                {([['all','All'],['lesson','Lessons'],['quiz','Quizzes'],['activity','Activities'],['exam','Exams']] as const).map(([key,label])=>
-                  <button key={key} type="button" className={materialFilter===key?'active':''} aria-pressed={materialFilter===key} aria-label={key==='all'?'Show all materials':`Show ${label.toLowerCase()}`}
-                    onClick={()=>setMaterialFilter(key)}>{label}</button>)}
+                <label>Material category<select value={materialFilter} onChange={event=>setMaterialFilter(event.target.value as MaterialFilter)}>
+                  <option value="all">All materials</option><option value="lesson">Lessons</option><option value="quiz">Quizzes</option>
+                  <option value="activity">Activities</option><option value="exam">Exams</option>
+                </select></label>
+                {!closed&&!setupRequired&&createMenu(contextFor(selectedChapter,selectedChapter?chapters.indexOf(selectedChapter):-1))}
               </div>
               <label className="inline chapter-archived"><input type="checkbox" checked={archived} onChange={event=>setArchived(event.target.checked)}/> Show archived</label>
             </div>
-            {chapterDisplay==='single'
-              ?selectedTree?branch(selectedTree,0,true):<p className="muted">{search||materialFilter!=='all'||archived?'Nothing matches the current filters.':'No learning materials in this chapter yet.'}</p>
-              :<div className="chapter-all-list">
-                {chapterTrees.map((node,index)=>{const context=contextFor(chapters[index],index);return <details key={node.id} id={`chapter-${node.id}`} className="chapter-all-entry" open>
-                  <summary><h3>{context.label}</h3><span className="count">{total(node)}</span></summary>
-                  {total(node)>0?branch(node,0,true):<p className="muted">No learning materials in this chapter yet.</p>}
-                  {!closed&&<div className="chapter-all-actions">{createMenu(context)}</div>}
-                </details>})}
-                {otherTree&&<details id="chapter-other" className="chapter-all-entry" open><summary><h3>Other materials</h3><span className="count">{total(otherTree)}</span></summary>
-                  {branch(otherTree,0,true)}
-                  {!closed&&<div className="chapter-all-actions">{createMenu(contextFor(undefined))}</div>}</details>}
-              </div>}
-            {chapterDisplay==='single'&&!closed&&<div className="chapter-all-actions">{createMenu(contextFor(selectedChapter,selectedChapter?chapters.indexOf(selectedChapter):-1))}</div>}
+            {selectedTree?branch(selectedTree,0,true,<FacultyAnnouncements embedded itemsOnly manageActions={!closed&&!setupRequired}/>)
+              :<><p className="muted">{materialFilter!=='all'||archived?'Nothing matches the current filters.':'No learning materials in this chapter yet.'}</p>
+                {selectedChapter?<ul className="seq compact manager-material-list"><FacultyAnnouncements embedded itemsOnly manageActions={!closed&&!setupRequired}/></ul>
+                  :<FacultyAnnouncements embedded manageActions={!closed&&!setupRequired}/>}</>}
           </div>
         </section>
       </div>}
@@ -223,6 +196,7 @@ export function FacultyClasswork(){
     {create?.type==='assessment'&&<NewDialog offering={offering} kind={create.kind} anchorNodeId={materialContext.anchorNodeId} contextLabel={materialContext.label} onClose={()=>setCreate(null)} onCreated={assessmentCreated}/>}
     {create?.type==='assessment-editor'&&<AssessmentEditorDialog offering={offering} assessmentId={create.assessmentId} contextLabel={materialContext.label} onClose={()=>{setCreate(null);queryClient.invalidateQueries({queryKey:['assessments',offering.id]})}}/>}
     {create?.type==='ai'&&<GenerateDialog offering={offering} anchorNodeId={materialContext.anchorNodeId} contextLabel={materialContext.label} onClose={()=>setCreate(null)} onCreated={assessmentCreated}/>}
+    {create?.type==='announcement'&&<AnnouncementCreateDialog offering={offering} onClose={()=>setCreate(null)} onDone={()=>setCreate(null)}/>}
     {addingChapter&&<ChapterDialog offering={offering} onClose={()=>setAddingChapter(false)} onAdded={id=>{setAddingChapter(false);if(id)setActiveChapter(id);void queryClient.invalidateQueries({queryKey:['syllabus',offering.id]})}}/>}
   </>;
 }
@@ -327,7 +301,7 @@ function ChapterDraftEditor({offering,draft,closeRef,onCloseReady,onAdded}:{offe
 }
 
 interface WorkRow extends Work{anchor_node_id?:string|null}
-interface SRow{key:string;kind:'item'|'work';cat:'lesson'|'quiz'|'activity';title:string;anchor:string|null;to:string;label:string;detail:string;chips:{text:string;cls?:string}[];todo:boolean;done:boolean;result?:string}
+interface SRow{key:string;kind:'item'|'work';icon:string;cat:'lesson'|'quiz'|'activity';title:string;anchor:string|null;to:string;label:string;detail:string;chips:{text:string;cls?:string}[];todo:boolean;done:boolean;result?:string}
 type Filter='all'|'todo'|'done';
 
 interface TNode<T=SRow>{id:string;title:string;rows:T[];kids:TNode<T>[]}
@@ -393,10 +367,13 @@ function Branch({node,depth,here,bare=false}:{node:TNode;depth:number;here:{from
   const Heading=(['h3','h4','h5'] as const)[Math.min(depth,2)];
   return <section className={`tree d${Math.min(depth,2)}`} aria-labelledby={`t-${node.id}`}>
     {bare?<h3 id={`t-${node.id}`} className="sr-only">{node.title}</h3>:<header><Heading id={`t-${node.id}`}>{node.title}</Heading><span className="count">{total(node)}</span></header>}
-    {node.rows.length>0&&<ul className="seq compact">{[...node.rows].sort((a,b)=>rank(a)-rank(b)).map(r=><li key={r.key} className={r.chips.some(c=>c.cls==='next')?'next':undefined}>
-      <span className="grow"><Link state={here} to={r.to}>{r.title}</Link>{(r.detail||r.result)&&<span className="muted">{r.detail}{r.detail&&r.result?' · ':''}{r.result&&<strong>{r.result}</strong>}</span>}</span>
-      {r.chips.map(c=><span key={c.text} className={`badge ${c.cls??''}`}>{c.text}</span>)}
-      {r.kind==='item'&&r.todo&&<Link state={here} className="start" to={r.to} title="Open this" aria-hidden="true" tabIndex={-1}>▶</Link>}</li>)}</ul>}
+    {node.rows.length>0&&<ul className="seq compact manager-material-list">{[...node.rows].sort((a,b)=>rank(a)-rank(b)).map(r=><li key={r.key} className={`manager-material-row manager-material-row-clickable${r.chips.some(c=>c.cls==='next')?' next':''}`}>
+      <Link state={here} className="manager-material-row-link" to={r.to} aria-label={`Open ${r.title}`}/>
+      <span className={`material-kind-icon kind-${r.icon}`} aria-hidden="true">{materialIcon(r.icon)}</span>
+      <span className="grow"><strong>{r.title}</strong>{(r.detail||r.result)&&<span className="muted">{r.detail}{r.detail&&r.result?' · ':''}{r.result&&<strong>{r.result}</strong>}</span>}</span>
+      <span className="manager-material-actions">{r.chips.map(c=><span key={c.text} className={`badge ${c.cls??''}`}>{c.text}</span>)}
+        {r.kind==='item'&&r.todo&&<Link state={here} className="start" to={r.to} title="Open this" aria-hidden="true" tabIndex={-1}>▶</Link>}</span>
+    </li>)}</ul>}
     {node.kids.map(k=><Branch key={k.id} node={k} depth={depth+1} here={here}/>)}
   </section>;
 }
@@ -423,10 +400,10 @@ export function StudentClasswork(){
   const next=items.data.find(i=>i.up_next);
   const KIND_NAME={lesson:'Lesson',file:'File',reference:'Link'} as const;
   const rows:SRow[]=[
-    ...items.data.map(i=>({key:'i'+i.id,kind:'item' as const,cat:'lesson' as const,title:i.title,anchor:i.anchor_node_id,to:`${base}/lessons/${i.id}`,label:KIND_NAME[i.kind],
+    ...items.data.map(i=>({key:'i'+i.id,kind:'item' as const,icon:i.kind,cat:'lesson' as const,title:i.title,anchor:i.anchor_node_id,to:`${base}/lessons/${i.id}`,label:KIND_NAME[i.kind],
       detail:i.kind==='file'?(i.file?.name??''):'',chips:[...(i.up_next?[{text:'Up next',cls:'next'}]:[]),...[i.completed?{text:'✓ Completed',cls:'done'}:{text:'Not marked complete'}]],
       todo:!i.completed,done:!!i.completed})),
-    ...work.data.map(w=>({key:'w'+w.id,kind:'work' as const,cat:(w.kind==='online_quiz'?'quiz':'activity') as 'quiz'|'activity',title:w.title,anchor:w.anchor_node_id??null,to:`${base}/work/${w.id}`,label:w.kind==='online_quiz'?'Quiz':'Activity',
+    ...work.data.map(w=>({key:'w'+w.id,kind:'work' as const,icon:w.kind,cat:(w.kind==='online_quiz'?'quiz':'activity') as 'quiz'|'activity',title:w.title,anchor:w.anchor_node_id??null,to:`${base}/work/${w.id}`,label:w.kind==='online_quiz'?'Quiz':'Activity',
       detail:workDetail(w),
       chips:[...(w===nearest?[{text:'Up next',cls:'next'}]:[]),...(w.state==='in_progress'?[{text:'In progress'}]:[]),...(w.late_allowed?[{text:'Late submission allowed',cls:'warn'}]:[])],
       todo:w.bucket==='todo'||w.bucket==='again',done:w.bucket==='done'||w.bucket==='awaiting',

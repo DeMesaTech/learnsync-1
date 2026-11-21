@@ -1,3 +1,4 @@
+import {createPortal} from 'react-dom';
 import {useToast} from '../../components/undo';
 import {useState,type FormEvent,type ReactNode} from 'react';
 import {useOutletContext} from 'react-router-dom';
@@ -12,7 +13,7 @@ import type {Announcement} from './types';
 const PAGE=25;   // newest first; "Load more" asks the server for the next page
 const uploadedAt=(iso:string)=>new Date(iso).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
 interface Page{items:Announcement[];has_more:boolean}
-export function FacultyAnnouncements({embedded=false,manageActions=false,children}:{embedded?:boolean;manageActions?:boolean;children?:ReactNode}={}){
+export function FacultyAnnouncements({embedded=false,manageActions=false,itemsOnly=false,children}:{embedded?:boolean;manageActions?:boolean;itemsOnly?:boolean;children?:ReactNode}={}){
   const ask=useConfirm();
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const closed=offering.term_status!=='active';
@@ -32,13 +33,8 @@ export function FacultyAnnouncements({embedded=false,manageActions=false,childre
     <div className="actions">
       {a.state==='draft'&&<><button disabled={closed} onClick={()=>setEditing(a)}>Edit</button><button className="primary" disabled={closed} onClick={()=>act(a,'publish')}>Publish</button></>}
       {a.state==='published'&&<button disabled={closed} onClick={()=>act(a,'archive')}>Archive</button>}</div></article>);
-  if(embedded)return <>
-    <ul className="seq compact manager-material-list">
+  const announcementItems=<>
       {children}
-      <li className="manager-material-row stream-announcement-create">
-        <span className="material-kind-icon kind-announcement" aria-hidden="true">▤</span>
-        <span className="grow"><button className="linklike" disabled={closed} onClick={()=>{setMessage('');setEditing('new')}}>New announcement</button></span>
-      </li>
       {message&&<li className="manager-material-row stream-announcement-message" role="alert">{message}</li>}
       {query.isPending?<li className="manager-material-row stream-announcement-message">Loading announcements…</li>
         :query.error?<li className="manager-material-row stream-announcement-message" role="alert">{query.error.message}</li>
@@ -53,8 +49,11 @@ export function FacultyAnnouncements({embedded=false,manageActions=false,childre
               </span>}
             </li>)}
       {query.hasNextPage&&<li className="manager-material-row stream-announcement-more"><button disabled={query.isFetchingNextPage} onClick={()=>query.fetchNextPage()}>{query.isFetchingNextPage?'Loading…':'Load more announcements'}</button></li>}
-    </ul>
-    {editing&&<Editor offering={offering} existing={editing==='new'?null:editing} onClose={()=>setEditing(null)} onDone={()=>{setEditing(null);refresh()}}/>}
+  </>;
+  if(embedded)return <>
+    {itemsOnly?announcementItems:<ul className="seq compact manager-material-list">{announcementItems}</ul>}
+    {editing&&(itemsOnly?createPortal(<Editor offering={offering} existing={editing==='new'?null:editing} onClose={()=>setEditing(null)} onDone={()=>{setEditing(null);refresh()}}/>,document.body)
+      :<Editor offering={offering} existing={editing==='new'?null:editing} onClose={()=>setEditing(null)} onDone={()=>{setEditing(null);refresh()}}/>)}
   </>;
   return <>
     <div className="page-heading"><div><h2>Announcements</h2><p className="muted">Short notices for your sections. Save a draft, then publish when ready.</p></div>

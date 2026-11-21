@@ -2740,6 +2740,7 @@ a.touch {
 }
 
 .subject-card {
+  position: relative;
   display: grid;
   gap: 8px;
   align-content: start;
@@ -2747,6 +2748,23 @@ a.touch {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface)
+}
+
+.subject-card-main-link {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit
+}
+
+.subject-card-main-link:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px
+}
+
+.subject-foot {
+  position: relative;
+  z-index: 2
 }
 
 .subject-card h3 {
@@ -4309,6 +4327,18 @@ tbody th.sticky {
   background: var(--surface-alt)
 }
 
+.notice-trigger {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer
+}
+
+.notice-trigger .touch {
+  margin-left: 6px;
+  font-weight: 600
+}
+
 .more {
   margin-top: 12px;
   border-top: 1px solid var(--border);
@@ -4495,19 +4525,50 @@ dialog[data-confirm] {
   margin-top: 12px
 }
 
+.attendance-filter-tools {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px
+}
+
+.attendance-filter-tools>label {
+  min-width: 180px;
+  margin: 0
+}
+
+.attendance-filter-tools .attendance-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0
+}
+
 .attendance-tools-row {
   display: flex;
   align-items: center;
   min-width: 0
 }
 
-.attendance-tools-row .more {
-  width: 100%;
-  margin-top: 0
+dialog.attendance-export-dialog {
+  width: min(440px, calc(100vw - 24px));
+  padding: 16px
 }
 
-.attendance-tools-row .more fieldset {
-  margin-top: 8px
+.attendance-export-dialog fieldset {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface)
+}
+
+.attendance-export-dialog fieldset>label.inline {
+  margin: 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--surface-alt)
 }
 
 .attendance-grid-actions {
@@ -4518,8 +4579,15 @@ dialog[data-confirm] {
   margin-bottom: 8px
 }
 
-.attendance-grid-actions p {
-  flex: 1 1 280px;
+.pager-leading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  min-width: 0
+}
+
+.pager-leading .attendance-grid-actions {
   margin: 0
 }
 
@@ -4539,6 +4607,10 @@ dialog[data-confirm] {
   flex: 1 1 200px;
   max-width: 340px;
   margin: 0
+}
+
+.gradebook-publish-trigger {
+  margin-bottom: 16px
 }
 
 /* ---- Classroom-style navigation: sub tabs and the Create menu ---- */
@@ -5027,10 +5099,6 @@ details.topic[open]>summary::before {
   min-width: 0
 }
 
-.chapter-workspace>.classwork-announcements {
-  grid-column: 1 / -1
-}
-
 .chapter-navigation {
   display: grid;
   align-content: start;
@@ -5096,11 +5164,19 @@ details.topic[open]>summary::before {
   border-radius: 8px;
   background: transparent;
   color: var(--text);
-  text-align: left
+  text-align: left;
+  transition: background .15s ease, border-color .15s ease, box-shadow .15s ease
 }
 
 .chapter-choice:hover {
-  background: var(--surface-alt)
+  background: var(--surface-alt);
+  border-color: var(--action);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .08)
+}
+
+.chapter-choice:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px
 }
 
 .chapter-choice.active {
@@ -5295,23 +5371,28 @@ details.topic[open]>summary::before {
 
 .chapter-material-filters {
   display: flex;
+  align-items: flex-end;
   flex-wrap: wrap;
-  gap: 6px
+  gap: 10px
 }
 
-.chapter-material-filters button {
-  min-height: 44px;
-  padding: 4px 12px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text)
+.chapter-material-filters>label {
+  min-width: 180px;
+  margin: 0
 }
 
-.chapter-material-filters button.active {
-  border-color: var(--action);
-  background: var(--action);
-  color: var(--action-text)
+.chapter-material-filters select {
+  width: auto;
+  min-width: 180px
+}
+
+.chapter-material-filters .chapter-material-dropdown {
+  margin-left: auto
+}
+
+.stream-material-category {
+  max-width: 280px;
+  margin: 12px 0
 }
 
 .chapter-material-dropdown {
@@ -5320,6 +5401,15 @@ details.topic[open]>summary::before {
 
 .chapter-material-dropdown>summary {
   min-height: 44px
+}
+
+.chapter-material-dropdown>summary:hover {
+  filter: brightness(.94)
+}
+
+.chapter-material-dropdown>summary:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px
 }
 
 .chapter-material-dropdown .menu-list {
@@ -5390,35 +5480,6 @@ details.topic[open]>summary::before {
   margin-top: 4px
 }
 
-.classwork-announcements {
-  margin-top: 20px
-}
-
-.classwork-announcements>summary {
-  justify-content: space-between;
-  list-style: none;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border)
-}
-
-.classwork-announcements>summary::-webkit-details-marker {
-  display: none
-}
-
-.classwork-announcements>summary::after {
-  content: '▸';
-  color: var(--muted);
-  font-size: 1.1rem
-}
-
-.classwork-announcements[open]>summary::after {
-  content: '▾'
-}
-
-.classwork-announcements>summary h3 {
-  margin: 0
-}
-
 .manager-material-list li {
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr) auto;
@@ -5428,13 +5489,44 @@ details.topic[open]>summary::before {
   border-bottom: 1px solid var(--border)
 }
 
+.manager-material-row-clickable {
+  position: relative
+}
+
+.manager-material-row-clickable:hover {
+  background: var(--surface-alt)
+}
+
+.manager-material-row-link {
+  position: absolute;
+  inset: 0;
+  z-index: 1
+}
+
+.manager-material-row-link:focus-visible {
+  border-radius: 8px;
+  outline: 3px solid var(--focus);
+  outline-offset: -3px
+}
+
+.manager-material-row-clickable .manager-material-actions {
+  position: relative;
+  z-index: 2
+}
+
+.manager-material-row-clickable .start {
+  position: relative;
+  z-index: 2
+}
+
 .manager-material-list .grow {
   display: grid;
   gap: 3px;
   min-width: 0
 }
 
-.manager-material-list .grow>a {
+.manager-material-list .grow>a,
+.manager-material-list .grow>strong {
   font-weight: 600;
   overflow-wrap: anywhere
 }
@@ -5476,14 +5568,6 @@ details.topic[open]>summary::before {
   margin-bottom: 8px
 }
 
-.stream-announcement-create .grow {
-  align-items: flex-start
-}
-
-.stream-announcement-create .linklike {
-  padding-left: 0
-}
-
 .stream-announcement-body {
   display: block;
   white-space: pre-wrap;
@@ -5499,6 +5583,19 @@ details.topic[open]>summary::before {
 }
 
 @media(max-width:620px) {
+  .attendance-filter-tools {
+    align-items: stretch;
+    flex-direction: column
+  }
+
+  .attendance-filter-tools>label {
+    min-width: 0
+  }
+
+  .attendance-filter-tools .attendance-tools {
+    justify-content: flex-start
+  }
+
   .content-manager-overview {
     grid-template-columns: repeat(2, minmax(0, 1fr))
   }
