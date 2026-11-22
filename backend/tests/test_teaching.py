@@ -146,6 +146,23 @@ def test_invalid_grading_policy_blocks_publish_but_valid_one_passes(course):
                     {"expected_counter": saved["counter"]}).status_code == 200
 
 
+def test_syllabus_category_allowlists_must_reference_usable_categories(course):
+    fac = course["fac"]
+    outline, _, _ = make_outline()
+    draft = fac.post(t(course, "/syllabus/draft")).json()
+    policy = {"categories": [{"key": "quiz", "label": "Quizzes", "weight": 50},
+                             {"key": "attendance", "label": "Attendance", "weight": 50}],
+              "online_quiz_categories": ["missing"],
+              "activity_categories": ["attendance"]}
+    saved = fac.put(t(course, "/syllabus/draft"), {
+        "expected_counter": draft["counter"], "outline": outline, "grading_policy": policy})
+    assert saved.status_code == 200, saved.text
+    refused = fac.post(t(course, "/syllabus/draft/publish"),
+                       {"expected_counter": saved.json()["counter"]})
+    assert refused.status_code == 422
+    assert refused.json()["error"]["message"].count("existing, non-attendance categories") == 2
+
+
 def test_outline_validation_rejects_duplicate_ids(course):
     fac = course["fac"]
     outline, chapter_id, _ = make_outline()

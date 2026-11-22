@@ -1,6 +1,6 @@
 """Skeleton-first setup: planned drafts, class meeting days, and copying a previous subject into an empty one."""
 from helpers import POLICY, make_account
-from test_assessments import make_manual, make_quiz, second_offering
+from test_assessments import make_manual, make_quiz, republish_policy, second_offering
 from test_dashboard import home
 from test_teaching import PDF, edit_and_publish, new_item
 
@@ -47,6 +47,17 @@ def test_a_plan_is_checked_against_the_grading_policy_and_limits_and_roles(db, g
     assert Api(other.email).post(base(oid) + "/assessments/plan", PLAN).status_code == 404
     assert c["st1"].post(base(oid) + "/assessments/plan", PLAN).status_code == 403
     assert c["admin"].post(base(oid) + "/assessments/plan", PLAN).status_code == 403
+
+
+def test_planned_quizzes_and_activities_follow_syllabus_category_allowlists(graded):
+    policy = {**POLICY, "online_quiz_categories": ["exam"],
+              "activity_categories": ["activity"]}
+    assert republish_policy(graded, policy).status_code == 200
+    plan = {"plan_key": "restricted-plan-01", "items": [
+        {"kind": "online_quiz", "title": "Quiz in wrong category", "category_key": "quiz"}]}
+    refused = graded["fac"].post(base(graded["oid"]) + "/assessments/plan", plan)
+    assert refused.status_code == 422
+    assert refused.json()["error"]["code"] == "category_not_allowed"
 
 
 def test_meeting_days_are_stored_per_subject_by_its_teacher_only(db, graded):

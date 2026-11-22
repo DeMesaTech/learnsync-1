@@ -2,11 +2,12 @@
 rules that freeze answer keys once students have started attempts."""
 from decimal import Decimal
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 
 from app.errors import fail
 from app.features.accounts.commands import audit
 from app.features.accounts.models import now
+from app.features.study.models import AiGeneration
 from app.features.teaching.items import check_sections, outline_ids
 
 from .models import (
@@ -20,7 +21,7 @@ from .models import (
     ResultPublication,
     SubmissionPermission,
 )
-from .policy import category_keys, period_keys, published_policy
+from .policy import category_keys, category_keys_for_kind, period_keys, published_policy
 from .reviews import flag_graded_change, flag_review
 from .scoring import normalize_text
 
@@ -232,6 +233,8 @@ def delete_assessment(db, actor, assessment):
         AssessmentScore.assessment_id == assessment.id))
     if published or superseded or scored or has_attempts(db, assessment.id):
         fail(409, "has_history", "Published assessments are archived, not deleted.")
+    db.execute(update(AiGeneration).where(AiGeneration.assessment_id == assessment.id).values(
+        assessment_id=None))
     for rev in db.scalars(select(AssessmentRevision).where(
             AssessmentRevision.assessment_id == assessment.id)):
         db.execute(delete(QuizQuestion).where(QuizQuestion.revision_id == rev.id))
@@ -328,6 +331,9 @@ def publish(db, actor, offering, assessment, expected_counter):
                             "Choose another category.")
         elif draft.category_key not in category_keys(policy):
             problems.append("Choose a grading category from your syllabus policy.")
+        elif draft.category_key not in category_keys_for_kind(policy, assessment.kind):
+            label = "online quizzes" if assessment.kind == "online_quiz" else "activities"
+            problems.append(f"Choose a grading category allowed for {label} in your syllabus policy.")
         if draft.period not in period_keys(policy):
             problems.append("Choose the grading period (midterm or finals).")
     if draft.anchor_node_id and draft.anchor_node_id not in outline_ids(

@@ -28,7 +28,15 @@ def require_policy(db, offering_id):
 
 
 def category_keys(policy):
-    return {c["key"] for c in policy["categories"]}
+    return {c["key"] for c in policy.get("categories", [])}
+
+
+def category_keys_for_kind(policy, kind):
+    field = {"online_quiz": "online_quiz_categories",
+             "activity": "activity_categories"}.get(kind)
+    if not field or policy.get(field) is None:
+        return category_keys(policy)
+    return set(policy[field])
 
 
 def period_keys(policy):
@@ -44,12 +52,14 @@ def assessments_outside_policy(db, offering_id, policy):
     periods = {p["key"] for p in (policy or {}).get("periods", [])}
     titles = []
     rows = db.execute(
-        select(AssessmentRevision.title, AssessmentRevision.category_key, AssessmentRevision.period)
+        select(AssessmentRevision.title, AssessmentRevision.category_key, AssessmentRevision.period,
+               Assessment.kind)
         .join(Assessment, Assessment.id == AssessmentRevision.assessment_id)
         .where(Assessment.offering_id == offering_id, Assessment.archived.is_(False),
                AssessmentRevision.state == "published",
                AssessmentRevision.include_in_grade.is_(True)))
-    for title, category, period in rows:
-        if category not in categories or period not in periods:
+    for title, category, period, kind in rows:
+        if category not in category_keys_for_kind(policy or {}, kind) or category not in categories \
+                or period not in periods:
             titles.append(title)
     return sorted(set(titles))

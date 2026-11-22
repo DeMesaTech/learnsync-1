@@ -70,6 +70,11 @@ def test_generation_saves_a_reviewable_unpublished_draft_with_sources(db, graded
     assert record.status == "succeeded" and str(record.assessment_id) == quiz["id"]
     # students never see drafts, and AI metadata never reaches a student
     assert graded["st1"].get(la(graded, "/assessments")).json() == []
+    deleted = graded["fac"].delete(t(graded, f"/assessments/{quiz['id']}"))
+    assert deleted.status_code == 204, deleted.text
+    assert graded["fac"].get(t(graded, f"/assessments/{quiz['id']}")).status_code == 404
+    db.refresh(record)
+    assert record.assessment_id is None
 
 
 def test_unpublishable_until_the_latest_version_is_reviewed(graded, ai):  # noqa: F811

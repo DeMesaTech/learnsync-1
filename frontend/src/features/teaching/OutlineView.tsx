@@ -5,6 +5,9 @@ import type {GradingPolicy,Outline} from './types';
 export function OutlineView({outline,policy,coveredOn,extra}:{outline:Outline;policy?:GradingPolicy|null;coveredOn?:Map<string,string>;extra?:(nodeId:string)=>ReactNode}){
   const c=outline.course;
   const tag=(id:string)=>coveredOn?.has(id)?<span className="badge covered">Covered in class · {coveredOn.get(id)}</span>:null;
+  const allowedCategories=(keys:string[]|null|undefined)=>policy?.categories
+    .filter(category=>category.key!=='attendance'&&(keys==null||keys.includes(category.key)))
+    .map(category=>category.label).join(', ')||'None';
   return <div className="outline">
     <section className="panel"><h2>{c.name||'Untitled course'}</h2>
       <p className="muted">{[c.code,c.units&&`${c.units} units`,c.contact_hours,c.prerequisite&&`Pre-requisite: ${c.prerequisite}`].filter(Boolean).join(' · ')}</p>
@@ -24,6 +27,7 @@ export function OutlineView({outline,policy,coveredOn,extra}:{outline:Outline;po
       {c.references&&<><h2>References</h2><p className="pre">{c.references}</p></>}</section>}
     {policy&&<section className="panel"><h2>Grading</h2>
       <ul>{policy.categories.map(k=><li key={k.key}>{k.label}: {k.weight}%</li>)}</ul>
+      <p className="muted">Online quizzes: {allowedCategories(policy.online_quiz_categories)} · Activities: {allowedCategories(policy.activity_categories)}</p>
       <p className="muted">{policy.periods.map(p=>`${p.label} ${p.share}%`).join(' · ')} · Passing {policy.passing}</p></section>}
   </div>;
 }

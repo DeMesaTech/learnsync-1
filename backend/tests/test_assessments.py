@@ -702,6 +702,33 @@ def test_a_policy_change_cannot_silently_drop_graded_work(graded):
     assert republish_policy(graded, renamed).status_code == 200
 
 
+def test_syllabus_category_allowlists_are_enforced_by_assessment_type(graded):
+    restricted = {**POLICY, "online_quiz_categories": ["quiz", "exam"],
+                  "activity_categories": ["activity"]}
+    assert republish_policy(graded, restricted).status_code == 200
+
+    quiz_id = create(graded, "online_quiz", "Restricted quiz")["id"]
+    refused = publish(graded, quiz_id, category_key="activity", questions=standard_questions())
+    assert refused.status_code == 422
+    assert "allowed for online quizzes" in refused.json()["error"]["message"]
+    assert publish(graded, quiz_id, category_key="quiz", questions=standard_questions()).status_code == 200
+
+    activity_id = create(graded, "activity", "Restricted activity")["id"]
+    refused = publish(graded, activity_id, category_key="quiz", max_points="10")
+    assert refused.status_code == 422
+    assert "allowed for activities" in refused.json()["error"]["message"]
+    assert publish(graded, activity_id, category_key="activity", max_points="10").status_code == 200
+
+
+def test_syllabus_cannot_restrict_category_away_from_published_assessment(graded):
+    make_quiz(graded, title="Quiz using quizzes category", category_key="quiz")
+    restricted = {**POLICY, "online_quiz_categories": ["activity"],
+                  "activity_categories": ["activity"]}
+    refused = republish_policy(graded, restricted)
+    assert refused.status_code == 422
+    assert "Quiz using quizzes category" in refused.json()["error"]["message"]
+
+
 def test_attendance_cannot_be_used_as_an_assessment_category(graded):
     aid = create(graded, "exam", "Odd one")["id"]
     refused = publish(graded, aid, category_key="attendance", max_points="10", period="midterm")

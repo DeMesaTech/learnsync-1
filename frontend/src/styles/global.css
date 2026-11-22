@@ -259,6 +259,35 @@ p {
   margin-bottom: 24px
 }
 
+.gradebook-heading {
+  margin-bottom: 8px
+}
+
+/* Shared control hover: keep keyboard and pointer affordances consistent. */
+@media (hover: hover) {
+  button:not(.linklike):not(:disabled):hover,
+  .button:not(.disabled):hover,
+  summary:not(.disabled):hover,
+  select:not(:disabled):hover {
+    border-color: var(--action);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--action) 16%, transparent);
+    filter: brightness(.985)
+  }
+
+  select option:hover,
+  select option:checked {
+    background: var(--surface-alt);
+    color: var(--text)
+  }
+}
+
+button,
+.button,
+summary,
+select {
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease, filter .15s ease
+}
+
 .offering-heading {
   align-items: flex-start;
   margin-bottom: 12px
@@ -978,6 +1007,20 @@ h3 {
   margin-top: 8px;
   font-size: 1.06rem;
   font-weight: 700
+}
+
+.grading-category-allowlist {
+  display: grid;
+  gap: 4px
+}
+
+.grading-category-allowlist>legend {
+  font-weight: 650
+}
+
+.grading-category-allowlist>label,
+.grading-category-allowlist>p {
+  margin: 0
 }
 
 .optional-label {
@@ -2775,7 +2818,16 @@ a.touch {
   padding: 18px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--surface)
+  background: var(--surface);
+  transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease, transform .15s ease
+}
+
+.subject-card:hover,
+.subject-card:focus-within {
+  border-color: var(--action);
+  background: color-mix(in srgb, var(--action) 4%, var(--surface));
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 12%, transparent);
+  transform: translateY(-2px)
 }
 
 .subject-card-main-link {
@@ -4560,6 +4612,10 @@ dialog[data-confirm] {
   gap: 12px
 }
 
+.attendance-calendar-heading {
+  margin-bottom: 8px
+}
+
 .attendance-filter-tools>label {
   min-width: 180px;
   margin: 0
@@ -4638,7 +4694,44 @@ dialog.attendance-export-dialog {
 }
 
 .gradebook-publish-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 16px
+}
+
+.gradebook-publish-chevron {
+  display: inline-block;
+  font-size: .78em;
+  transition: transform .15s ease
+}
+
+.gradebook-publish-chevron.open {
+  transform: rotate(180deg)
+}
+
+.gradebook-publish-anchor {
+  position: relative;
+  width: fit-content
+}
+
+.gradebook-publish-popover {
+  position: absolute;
+  top: calc(100% - 10px);
+  left: 0;
+  z-index: 20;
+  width: min(520px, calc(100vw - 36px));
+  max-height: min(70vh, 520px);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 16px 42px color-mix(in srgb, var(--text) 20%, transparent)
+}
+
+.gradebook-publish-popover h3 {
+  margin: 0 0 12px
 }
 
 /* ---- Classroom-style navigation: sub tabs and the Create menu ---- */
@@ -5479,12 +5572,87 @@ details.topic[open]>summary::before {
   gap: 10px
 }
 
+.study-source-browser {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-alt)
+}
+
+.study-source-browser>label {
+  margin: 0
+}
+
+.study-source-chapter-filters {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px
+}
+
+.study-source-chapter-filters>legend {
+  padding: 0 6px;
+  font-weight: 650
+}
+
+.study-source-chapter-options {
+  display: grid;
+  gap: 8px
+}
+
+.study-source-chapter-entry {
+  display: grid;
+  gap: 4px
+}
+
+.study-source-chapter-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 44px;
+  margin: 0
+}
+
+.study-source-chapter-option input {
+  flex: none;
+  margin-top: .35em
+}
+
+.study-source-chapter-option-name {
+  font-weight: 650
+}
+
+.study-source-filter-help {
+  margin: 0
+}
+
+.study-source-selection-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px
+}
+
+.study-source-selection-summary .linklike {
+  min-height: 44px;
+  padding: 0
+}
+
 .study-source-chapter {
   min-width: 0;
   margin: 0;
   padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: 10px
+}
+
+.study-source-chapter-entry>.study-source-chapter {
+  margin-left: 24px
 }
 
 .study-source-chapter>legend {
@@ -5593,6 +5761,7 @@ details.topic[open]>summary::before {
 }
 
 .stream-classwork-panel>h3 {
+  font-size: 1.25rem;
   margin-bottom: 8px
 }
 

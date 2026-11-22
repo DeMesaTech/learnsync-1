@@ -4,7 +4,7 @@ export interface Chapter{id:string;title:string;weeks:string;topics:Topic[];subs
 export interface Outcome{id:string;text:string}
 export interface Course{code:string;name:string;description:string;units:string;contact_hours:string;prerequisite:string;values:string;references:string;requirements:string;evaluation_note:string}
 export interface Outline{course:Course;outcomes:Outcome[];chapters:Chapter[]}
-export interface GradingPolicy{categories:{key:string;label:string;weight:number}[];periods:{key:'midterm'|'finals';label:string;share:number}[];transmutation:'raw'|'transmuted';passing:number;late_attendance_fraction:number}
+export interface GradingPolicy{categories:{key:string;label:string;weight:number}[];periods:{key:'midterm'|'finals';label:string;share:number}[];online_quiz_categories?:string[]|null;activity_categories?:string[]|null;transmutation:'raw'|'transmuted';passing:number;late_attendance_fraction:number}
 export interface SyllabusRev{id:string;version:number;state:string;counter:number;outline:Outline;grading_policy:GradingPolicy|null;updated_at:string;published_at:string|null;source_file:{id:string;name:string}|null}
 export interface SyllabusState{published:SyllabusRev|null;draft:SyllabusRev|null;history:{version:number;state:string;published_at:string|null}[]}
 export interface SyllabusDraftContent{outline:Outline;grading_policy:GradingPolicy|null}

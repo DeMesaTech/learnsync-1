@@ -22,6 +22,7 @@ from app.features.teaching.models import (
 
 from .definitions import section_ids_of
 from .models import Assessment, AssessmentRevision, AssessmentSection, QuizQuestion
+from .policy import category_keys_for_kind
 
 
 def draft_or_published_policy(db, offering_id):
@@ -47,6 +48,9 @@ def plan(db, actor, offering, data):
         for item in data.items:
             if item.category_key and item.category_key not in known:
                 fail(422, "category_unknown", f"“{item.title}” uses a grading category the policy does not have.")
+            if item.category_key and item.category_key not in category_keys_for_kind(policy, item.kind):
+                fail(422, "category_not_allowed",
+                     f"“{item.title}” uses a category not allowed for this assessment type.")
             if item.period and item.period not in periods:
                 fail(422, "period_unknown", f"“{item.title}” uses a grading period the policy does not have.")
     ids = []

@@ -1,5 +1,5 @@
 import {useToast} from '../../components/undo';
-import {useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {Link,useOutletContext} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
 import {ApiError,api,post,send,errorText} from '../../app/api';
@@ -31,6 +31,22 @@ export function GradebookPage(){
   const [detail,setDetail]=useState<GradeRow|null>(null);
   const [publishing,setPublishing]=useState<string|null>(null);
   const [showPublishing,setShowPublishing]=useState(false);
+  const publishPopover=useRef<HTMLDivElement>(null);
+  useEffect(()=>{
+    if(!showPublishing)return;
+    const closeOutside=(event:MouseEvent)=>{
+      if(!publishPopover.current?.contains(event.target as Node))setShowPublishing(false);
+    };
+    const closeEscape=(event:KeyboardEvent)=>{
+      if(event.key==='Escape')setShowPublishing(false);
+    };
+    document.addEventListener('mousedown',closeOutside);
+    document.addEventListener('keydown',closeEscape);
+    return ()=>{
+      document.removeEventListener('mousedown',closeOutside);
+      document.removeEventListener('keydown',closeEscape);
+    };
+  },[showPublishing]);
   const [message,setMessage]=useState('');
   const [find,setFind]=useState('');const [section,setSection]=useState('');const [only,setOnly]=useState('');   // view filters: they never change what Publish acts on
   const [page,setPage]=useState(1);const [pageSize,setPageSize]=useState(25);
@@ -44,7 +60,7 @@ export function GradebookPage(){
   if(query.error){
     const code=query.error instanceof ApiError?query.error.code:'';
     return <section className="panel"><h2>The gradebook is not ready</h2><p role="alert">{query.error.message}</p>
-      {(code==='policy_missing'||code==='policy_incomplete')&&<Link className="button primary" to={`/faculty/offerings/${offering.id}/syllabus`}>Open the syllabus</Link>}</section>;
+      {(code==='policy_missing'||code==='policy_incomplete')&&<Link className="button primary" to={`/faculty/offerings/${offering.id}/setup`}>Set up this subject</Link>}</section>;
   }
   const book=query.data;
   const periods=[...book.policy.periods.map(p=>p.key),'course'];
@@ -86,23 +102,23 @@ export function GradebookPage(){
     <button className={p===next?'primary':''} disabled={closed||stats[p].ready===0||(p==='course'&&!courseUnlocked)} title={p==='course'&&!courseUnlocked?'Publish Midterm and Finals first':undefined} onClick={()=>{setShowPublishing(false);setPublishing(p)}}>Publish {PERIOD_LABEL[p]??p}…</button></li>;
 
   return <>
-    <div className="page-heading"><div><h2>Gradebook</h2>
-      <p className="muted">Working values: students see only the results you return and the grades you publish. Policy version {book.policy_version} · {book.policy.transmutation==='transmuted'?'transmuted':'raw'} scores · passing {book.policy.passing}.</p></div></div>
+    <div className="page-heading gradebook-heading"><div><h2>Gradebook</h2>
+      </div></div>
     {message&&<p role="status">{message}</p>}
 
-    <button type="button" className="gradebook-publish-trigger" aria-haspopup="dialog" onClick={()=>setShowPublishing(true)}>
-      Ready to publish{next?` · ${PERIOD_LABEL[next]??next}`:''}{flaggedRows.length>0?` · ${flaggedRows.length} need review`:''}
-    </button>
-    {showPublishing&&<Dialog title="Ready to publish" onClose={()=>setShowPublishing(false)}>
-      {next?<ul className="rows">{periodRow(next)}</ul>:<p className="muted">{periods.some(p=>stats[p].ready>0)?'Everything that is ready has been published.':'No grades are ready yet. They appear when all graded work for a period is scored.'}</p>}
-      <details className="more"><summary>All periods{flaggedRows.length>0?` · ${flaggedRows.length} need review`:''}</summary>
-        <ul className="rows">{periods.filter(p=>p!==next).map(periodRow)}</ul>
+    <div className="gradebook-publish-anchor" ref={publishPopover}>
+      <button type="button" className="gradebook-publish-trigger" aria-haspopup="true" aria-expanded={showPublishing} aria-controls="gradebook-publish-popover" onClick={()=>setShowPublishing(value=>!value)}>
+        <span>Ready to publish{next?` · ${PERIOD_LABEL[next]??next}`:''}{flaggedRows.length>0?` · ${flaggedRows.length} need review`:''}</span>
+        <span className={`gradebook-publish-chevron${showPublishing?' open':''}`} aria-hidden="true">▾</span>
+      </button>
+      {showPublishing&&<section id="gradebook-publish-popover" className="gradebook-publish-popover" aria-label="Ready to publish">
+        <h3>Ready to publish</h3>
+        <ul className="rows">{periods.map(periodRow)}</ul>
         {periods.includes('course')&&!courseUnlocked&&<p className="muted">The Course grade unlocks once Midterm and Finals have each been published.</p>}
-        {flaggedRows.length>0&&<><p className="warn" role="status">{flaggedRows.length} student{flaggedRows.length===1?' has':'s have'} a published grade that needs your review because working data changed. Students keep seeing the last published grade until you republish.</p>
+        {flaggedRows.length>0&&<><p className="warn" role="status">{flaggedRows.length} student{flaggedRows.length===1?' has':'s have'} a published grade that needs review because working data changed. Students keep seeing the last published grade until you republish.</p>
           <ul className="rows" aria-label="Grades needing review">{flaggedRows.map(r=><li key={r.student_id}><span className="grow"><strong>{r.display_name}</strong><span className="muted">{Object.entries(r.published).filter(([,p])=>p.needs_review).map(([k,p])=>`${PERIOD_LABEL[k]??k}: ${p.review_reason??'working data changed'}`).join(' · ')}</span></span><button onClick={()=>{setShowPublishing(false);setDetail(r)}}>Review</button></li>)}</ul></>}
-      </details>
-      <div className="actions"><button type="button" onClick={()=>setShowPublishing(false)}>Close</button></div>
-    </Dialog>}
+      </section>}
+    </div>
 
     <section className="panel"><h3>Scores and grades</h3>
       <div className="gradebook-filters actions" aria-label="Filter students">

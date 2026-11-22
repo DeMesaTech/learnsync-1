@@ -1,5 +1,56 @@
 # Acceptance status
 
+### 2026-11-23 (Shared hovers and gradebook period modal)
+- Added shared hover states for enabled buttons, button-style links, summaries and selects, including border, shadow and surface feedback.
+- Excluded link-style gradebook student names and other `.linklike` table buttons from the shared hover treatment.
+- Changed the Gradebook Ready to publish panel from a modal dialog to a popover anchored beside the trigger. The All periods rows and review notes now remain in that popover; period publishing still opens the dedicated confirmation dialog.
+- Browser verified Ready to publish opens a positioned popover with no open dialog, and hovering a gradebook student link keeps it without shadow/filter/background hover changes.
+- Added a dropdown chevron to the Ready to publish trigger, rotating to indicate when the popover is open.
+- Reduced the Gradebook heading's bottom margin from 24px to 8px.
+- Increased the Stream “Published materials and assessments” heading from 1.05rem to 1.25rem.
+- Replaced the “All periods” details disclosure in Ready to publish with a separate “View all periods” dialog and an All periods modal.
+- Passed frontend production build/type-check, frontend ESLint, and `git diff --check`.
+- Browser verified the Gradebook heading margin at 8px and approximately 7.2px visual gap to the publish control.
+- Browser verified “View all periods” opens the All periods dialog without a disclosure, and live hover changes the Classwork section select and Add-material summary border/shadow.
+- Browser verified the Stream heading is 20px.
+
+### 2026-11-23 (Live dashboard date and time)
+- Updated the dashboard date chip to show the local date together with the current time.
+- The dashboard clock refreshes every 30 seconds and uses a semantic `<time>` element.
+- Passed frontend production build/type-check, frontend ESLint, and `git diff --check`.
+- Browser verified the live faculty dashboard chip displays `Monday, November 23 at 12:50 AM` in a semantic `<time>` element.
+
+### 2026-11-23 (Subject cards and AI draft deletion)
+- Removed the faculty subject-card “Open →” link and made the entire faculty subject card open Classwork.
+- Added subject-card hover, focus, and elevation styling. Existing bottom Classwork and Gradebook links remain usable above the card link.
+- Removed the “All subjects” shortcut from the faculty dashboard heading.
+- Fixed draft deletion for AI-generated quizzes by clearing the nullable `ai_generation.assessment_id` audit link before deleting a draft-only assessment. Published, superseded, scored, or attempted assessments remain protected.
+- Passed: the focused AI draft deletion test (1 passed), frontend production build/type-check, frontend ESLint, and `git diff --check`.
+- Browser verified: the My Classes page has no subject-card “Open →” link and each card is a full-area Classwork link; the faculty dashboard has no “All subjects” link.
+- Live API/browser verified after restarting API port 8001: the reported `Practice quiz` draft (ID `8ae05ab8-c031-4956-b940-b29db2f69315`) deleted successfully and a follow-up assessment GET returned 404.
+
+### 2026-11-23 (Setup blocking and setup-plan controls)
+- Tightened attendance spacing by giving the attendance calendar heading an 8px bottom margin; the browser measured a 7.1875px visual gap from the heading box to the filter tools.
+- Added a Clear counts action to the Subject Setup assessment planner. Browser verified all six numeric fields reset from their defaults to zero and that the draft-create control becomes unavailable.
+- Removed the Create more drafts follow-up behavior; after drafts are created in the setup flow, the repeated-create control is hidden rather than allowing duplicate planning.
+- Made active subjects without a published syllabus open a blocking setup dialog instead of a dismissible setup notice. The dialog offers setup or a return to My Classes, and native modal behavior makes the underlying subject controls unavailable. The gradebook and class-standing grading-policy links now redirect to guided setup instead of the published syllabus route.
+- Passed: frontend production build/type-check, frontend ESLint, and `git diff --check`.
+- Browser verified: the 73533459 subject setup page loaded, the blocking dialog appeared for the unconfigured subject, and the Assessment step showed Clear counts with all six values resetting to zero. The FNCC 113 attendance view measured an 8px CSS margin and approximately 7.2px gap to filter tools.
+
+### 2026-11-23 (Syllabus assessment category allowlists)
+- Added syllabus grading-policy allowlists for online quizzes and activities. Faculty can enable one or more weighted categories per type; the assessment editor limits category choices accordingly. Assessment publishing and skeleton planning enforce the rule server-side, and syllabus publication refuses changes that would invalidate existing published graded work. Legacy policies without allowlists retain their prior unrestricted behavior.
+- Passed: frontend production build/type-check, frontend ESLint, backend Ruff on changed files, and `git diff --check`.
+- Passed focused backend regressions: 4 tests for per-type assessment publication, syllabus restriction changes, planning, and invalid category keys.
+- Browser verified: syllabus setup's Grading step shows separate category checklists for online quizzes and activities, excluding Attendance. No checkbox was changed.
+- Broader backend check: 69 passed, 4 failed in unchanged score/no-show behavior, a student syllabus projection ID expectation, and subject-copy indexing. The focused allowlist tests passed; the broader failures remain unresolved.
+
+### 2026-11-22 (AI quiz source browsing)
+- Added title search, retained-selection feedback, and a clear-selection action. Replaced chapter filter chips with checkboxes and an indeterminate All chapters control; uncheck All chapters to choose one or multiple chapters. A chapter's bulk checkbox selects all currently matching materials; individual material checkboxes remain available.
+- Passed: frontend production build/type-check, frontend ESLint, and `git diff --check`.
+- Browser verified: select one and then multiple chapters, uncheck one, and confirm the All chapters checkbox becomes indeterminate. Selecting all materials in a chapter selected three; unchecking one left two, and Clear selection returned the count to zero. Closed the dialog without creating an AI quiz draft.
+- Chapter material lists now render directly below their corresponding chapter checkbox. Browser verified that selecting a chapter displays its material fieldset beneath that checkbox.
+- Removed the repeated chapter legend from the material fieldset, retained its accessible group name, and bolded the corresponding chapter checkbox label.
+
 ### 2026-11-22 (Chronological Classwork announcements)
 - Interleaved announcements with materials in the selected faculty chapter, newest first. Published materials use their publication date; drafts use their latest update date. Added dates to material rows and retained announcement actions and pagination.
 - Passed: `npm run build`, `npm run lint`, and `git diff --check`.

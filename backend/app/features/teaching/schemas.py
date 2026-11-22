@@ -95,9 +95,19 @@ class GradingPeriod(BaseModel):
 class GradingPolicy(BaseModel):
     categories: list[GradingCategory] = Field(default_factory=list, max_length=10)
     periods: list[GradingPeriod] = Field(default_factory=list, max_length=2)
+    online_quiz_categories: list[str] | None = Field(default=None, max_length=10)
+    activity_categories: list[str] | None = Field(default=None, max_length=10)
     transmutation: Literal["raw", "transmuted"] = "raw"
     passing: float = Field(default=75, ge=0, le=100)
     late_attendance_fraction: float = Field(default=0.5, ge=0, le=1)
+
+    @model_validator(mode="after")
+    def unique_assessment_categories(self):
+        for field in ("online_quiz_categories", "activity_categories"):
+            keys = getattr(self, field)
+            if keys is not None and len(keys) != len(set(keys)):
+                raise ValueError(f"{field} must not contain duplicate category keys.")
+        return self
 
 
 class SyllabusSave(BaseModel):

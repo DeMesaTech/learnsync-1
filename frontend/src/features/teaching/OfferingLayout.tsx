@@ -1,6 +1,5 @@
 import {Link,NavLink,Outlet,useLocation,useMatch,useParams} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
-import {useState} from 'react';
 import {api} from '../../app/api';
 import type {OfferingSummary} from '../academics/types';
 import type {SyllabusState} from './types';
@@ -27,7 +26,6 @@ export function OfferingLayout({role}:{role:'faculty'|'student'}){
   const base=`/${role}/offerings/${offeringId}`;
   const query=useQuery({queryKey:['offering',offeringId],queryFn:()=>api<OfferingSummary&{enrollment_status?:string}>(role==='faculty'?`/offerings/${offeringId}`:`/learn/offerings/${offeringId}`)});
   const setup=!!useMatch('/faculty/offerings/:offeringId/setup');
-  const [showSetupNotice,setShowSetupNotice]=useState(false);
   // a teacher whose subject has no published syllabus yet is pointed at the guided setup (faculty only)
   const syllabus=useQuery({queryKey:['syllabus',offeringId],queryFn:()=>api<SyllabusState>(`/teach/offerings/${offeringId}/syllabus`),enabled:role==='faculty'});
   const setupRequired=role==='faculty'&&!setup&&query.data?.term_status==='active'&&!syllabus.data?.published;
@@ -42,14 +40,11 @@ export function OfferingLayout({role}:{role:'faculty'|'student'}){
       {role==='student'&&query.data.enrollment_status==='withdrawn'?<>
         <p className="warn" role="status">You are no longer enrolled in this subject. Course content is not available, but you can still see your own results and your earlier study chats.</p>
         <nav className="tabs offering-tabs" aria-label="Subject sections"><NavLink to={`/student/study-buddy?subject=${query.data.id}`}>Study buddy chats</NavLink><NavLink to={`${base}/results`}>Grades & results</NavLink></nav></>:<>
-      {needsSetup&&<button type="button" className="notice notice-trigger" aria-haspopup="dialog" onClick={()=>setShowSetupNotice(true)}>
-        <strong>This subject is not set up yet.</strong> A guided setup takes a few minutes. <span className="touch">Set up this subject</span>
-      </button>}
       {!setup&&<MainTabs role={role} base={base}/>}</>}
       <Outlet context={{offering:query.data,setupRequired}}/>
-      {showSetupNotice&&<Dialog title="This subject is not set up yet" confirmOnClose={false} onClose={()=>setShowSetupNotice(false)}>
-        <p>A guided setup creates the syllabus, grading policy and first topics in a few steps.</p>
-        <div className="actions"><button type="button" onClick={()=>setShowSetupNotice(false)}>Close</button><Link className="button primary" to={`${base}/setup`} onClick={()=>setShowSetupNotice(false)}>Set up this subject</Link></div>
+      {needsSetup&&<Dialog title="This subject is not set up yet" confirmOnClose={false} dismissible={false} onClose={()=>false}>
+        <p>Set up this subject before using its classwork, attendance, or gradebook.</p>
+        <div className="actions"><Link className="button" to="/faculty/subjects">Back to subjects</Link><Link className="button primary" to={`${base}/setup`}>Set up this subject</Link></div>
       </Dialog>}
     </>}
   </>;

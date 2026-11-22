@@ -18,6 +18,8 @@ Files remain outside webroot and are delivered by an authorized API. Drafts use 
 
 Syllabus outlines may mark one chapter as the subject introduction. If present, the introduction must be the first chapter; ordinary chapters follow it, and chapter numbering excludes the introduction.
 
+Grading-policy JSON may restrict `online_quiz_categories` and `activity_categories` to category keys defined by that same policy. An omitted or null list is treated as unrestricted for compatibility with existing syllabus revisions; an explicit empty list allows no graded work of that type. Faculty assessment editors show only allowed categories, and assessment publication plus bulk planning independently enforce the restriction. Publishing a syllabus revision is refused if it would make any existing published graded assessment invalid.
+
 Faculty Classwork chapter-level creation anchors new learning items and assessments to the selected chapter before opening their editors. Assessment creation validates the anchor against the offering's current draft or published syllabus; AI-generated quizzes follow the same validation. Creation dialogs display the chapter hierarchy rather than offering an independent chapter selector. AI quiz source selection groups published readable materials by syllabus chapter, lets teachers select individual materials or all materials in a chapter, and retains a bounded total source-text budget.
 
 Online quiz scores are computed only from submitted attempts. Faculty may correct a submitted answer, which recomputes the score, but cannot enter or overwrite a quiz score through individual-score or gradebook batch APIs.

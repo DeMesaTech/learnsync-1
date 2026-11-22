@@ -245,15 +245,23 @@ function Editor({offering,assessment,refetch,modal=false,onDone,onFlushReady}:{o
     if(await auto.flush())finish();else setMessage('Resolve the save problem above first.')
   }
   async function go(next:QuizStep){setMessage('');if(await auto.flush())setStep(next);else setMessage('Resolve the save problem above first.')}
-  const categories=policy?.categories.filter(c=>c.key!=='attendance')??[];
+  const allowedCategoryKeys=assessment.kind==='online_quiz'
+    ?policy?.online_quiz_categories
+    :assessment.kind==='activity'?policy?.activity_categories:null;
+  const categories=policy?.categories.filter(c=>c.key!=='attendance'
+    &&(allowedCategoryKeys==null||allowedCategoryKeys.includes(c.key)))??[];
+  const categoryIsAllowed=categories.some(category=>category.key===v.category_key);
 
   const essentials=<section className="panel">
     <label>Title<input value={v.title} maxLength={200} onChange={e=>set({title:e.target.value})}/></label>
     <label>Instructions for students<textarea value={v.instructions} maxLength={10000} onChange={e=>set({instructions:e.target.value})}/></label>
     <label className="inline"><input type="checkbox" checked={v.include_in_grade} onChange={e=>set({include_in_grade:e.target.checked})}/> Counts toward the grade</label>
     {v.include_in_grade&&<div className="grid-2">
-      <label>Grading category<select value={v.category_key} onChange={e=>set({category_key:e.target.value})}><option value="">Choose…</option>{categories.map(c=><option key={c.key} value={c.key}>{c.label} ({c.weight}%)</option>)}</select></label>
+      <label>Grading category<select value={v.category_key} onChange={e=>set({category_key:e.target.value})}><option value="">Choose…</option>
+        {v.category_key&&!categoryIsAllowed&&<option value={v.category_key} disabled>Current category is not allowed by the syllabus</option>}
+        {categories.map(c=><option key={c.key} value={c.key}>{c.label} ({c.weight}%)</option>)}</select></label>
       <label>Grading period<select value={v.period} onChange={e=>set({period:e.target.value})}><option value="">Choose…</option>{(policy?.periods??[]).map(p=><option key={p.key} value={p.key}>{p.label}</option>)}</select></label></div>}
+    {v.include_in_grade&&policy&&categories.length===0&&<p className="warn" role="status">The published syllabus allows no grading categories for this assessment type. Update the syllabus category settings or turn off “Counts toward the grade”.</p>}
     {v.include_in_grade&&!policy&&<p className="warn" role="status">No confirmed grading policy yet. Publish a syllabus with one first, or turn off “Counts toward the grade”.</p>}
     {!quiz&&<label>Maximum points<input type="number" min="0" step="0.5" required value={v.max_points} onChange={e=>set({max_points:e.target.value})}/></label>}
     {interactive&&<label>Due<input type="datetime-local" value={v.deadline} onChange={e=>set({deadline:e.target.value})}/></label>}

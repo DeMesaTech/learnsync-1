@@ -40,6 +40,8 @@ const USUAL_POLICY: GradingPolicy = {
     { key: 'activity', label: 'Activities', weight: 20 },
     { key: 'exam', label: 'Examinations', weight: 45 },
   ],
+  online_quiz_categories: ['quiz'],
+  activity_categories: ['activity'],
   periods: [
     { key: 'midterm', label: 'Midterm', share: 50 },
     { key: 'finals', label: 'Finals', share: 50 },
@@ -56,6 +58,11 @@ const KINDS = [
   ['exam', 'Examinations', 'Examination', 'exam'],
 ] as const;
 type Counts = Record<string, { midterm: number; finals: number }>;
+const EMPTY_COUNTS: Counts = {
+  online_quiz: { midterm: 0, finals: 0 },
+  activity: { midterm: 0, finals: 0 },
+  exam: { midterm: 0, finals: 0 },
+};
 const PERIODS = [
   ['midterm', 'Midterm'],
   ['finals', 'Finals'],
@@ -70,7 +77,12 @@ interface PlanItem {
 }
 
 export function buildPlan(counts: Counts, policy: GradingPolicy | null): PlanItem[] {
-  const categories = new Set(policy?.categories.map((c) => c.key));
+  const allCategories=policy?.categories.map((category)=>category.key)??[];
+  const categoryFor=(kind:string,preferred:string)=>{
+    const field=kind==='online_quiz'?'online_quiz_categories':kind==='activity'?'activity_categories':null;
+    const allowed=field?policy?.[field]??allCategories:allCategories;
+    return allowed.includes(preferred)?preferred:allowed.length===1?allowed[0]:null;
+  };
   const out: PlanItem[] = [];
   for (const [kind, , label, key] of KINDS) {
     let n = 0;
@@ -84,7 +96,7 @@ export function buildPlan(counts: Counts, policy: GradingPolicy | null): PlanIte
               ? `${name === 'Finals' ? 'Final' : name} examination`
               : `${name} examination ${i + 1}`
             : `${label} ${n}`;
-        out.push({ kind, title, category_key: categories.has(key) ? key : null, period });
+        out.push({ kind, title, category_key: categoryFor(kind,key), period });
       }
     }
   }
@@ -383,13 +395,14 @@ function Flow({offering,draft,published,warnings,onChanged,onFinished}:{offering
       <p className="muted">How many of each will you give? They are created as drafts with the right grading category and period, so the subject looks complete now. You fill in the details later.</p>
       {!grading_policy&&<p className="warn" role="status">No grading policy yet, so the drafts will have no category. Set grading up in the previous step for better results.</p>}
       {(existing.data?.length??0)>0&&<p className="muted" role="status">This subject already has {existing.data!.length} assessment{existing.data!.length===1?'':'s'}. New drafts are added to them.</p>}
+      <div className="actions"><button type="button" disabled={plan.length===0} onClick={()=>setCounts(EMPTY_COUNTS)}>Clear counts</button></div>
       <div className="table-wrap"><table><thead><tr><th>Type</th>{PERIODS.map(([,n])=><th key={n}>{n}</th>)}</tr></thead>
         <tbody>{KINDS.map(([kind,label])=><tr key={kind}><td>{label}</td>{PERIODS.map(([period,n])=><td key={period}>
           <label className="sr-only" htmlFor={`${kind}-${period}`}>{label}, {n}</label>
           <input id={`${kind}-${period}`} type="number" min={0} max={10} value={counts[kind][period]} onChange={e=>setCounts({...counts,[kind]:{...counts[kind],[period]:Math.max(0,Math.min(10,Number(e.target.value)||0))}})}/></td>)}</tr>)}</tbody></table></div>
       <p role="status" className={plan.length>MAX_PLANNED?'error':'muted'}>{plan.length===0?'Nothing planned yet.':`${plan.length} draft${plan.length===1?'':'s'} will be created: ${plan.slice(0,4).map(p=>p.title).join(', ')}${plan.length>4?', …':''}`}</p>
       {planned>0&&<p role="status"><strong>✓ {planned} draft{planned===1?'':'s'} created.</strong> Planning again would add more.</p>}
-      <button className="primary" disabled={plan.length===0||plan.length>MAX_PLANNED} onClick={createDrafts}>{planned>0?'Create more drafts':`Create ${plan.length} draft${plan.length===1?'':'s'}`}</button></section>}
+      {planned===0&&<button className="primary" disabled={plan.length===0||plan.length>MAX_PLANNED} onClick={createDrafts}>Create {plan.length} draft{plan.length===1?'':'s'}</button>}</section>}
 
     {step==='schedule'&&<section className="panel"><h3>When does the class meet? <span className="optional-label">Optional</span></h3>
       <p className="muted">The attendance register will show these days. You can add or change dates later. Skip this if the schedule varies.</p>

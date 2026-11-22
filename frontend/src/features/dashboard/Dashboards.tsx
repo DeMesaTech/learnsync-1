@@ -1,4 +1,4 @@
-import {useEffect,useRef} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {Link} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
 import {api} from '../../app/api';
@@ -8,7 +8,7 @@ import {markSeen,readSeen} from '../../components/seen';
 
 export const when=(iso:string)=>new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric'});
 const dateTime=(iso:string)=>new Date(iso).toLocaleString(undefined,{weekday:'short',hour:'numeric',minute:'2-digit',month:'short',day:'numeric'});
-const today=()=>new Date().toLocaleDateString(undefined,{weekday:'long',day:'2-digit',month:'long'});
+const todayAndTime=()=>new Date().toLocaleString(undefined,{weekday:'long',day:'2-digit',month:'long',hour:'numeric',minute:'2-digit'});
 const greeting=()=>{const h=new Date().getHours();return h<12?'Good morning':h<18?'Good afternoon':'Good evening'};
 const plural=(n:number,one:string,many=one+'s')=>`${n} ${n===1?one:many}`;
 
@@ -17,8 +17,14 @@ function Page<T>({query,children}:{query:{isPending:boolean;error:Error|null;dat
   if(query.error)return <section className="panel"><h2>The dashboard could not be loaded</h2><p role="alert">{query.error.message}</p></section>;
   return <>{children(query.data as T)}</>;
 }
-const Heading=({eyebrow,title,line}:{eyebrow:string;title:string;line:string})=>
-  <div className="page-heading dash-heading"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p className="muted">{line}</p></div><span className="date-chip">{today()}</span></div>;
+const Heading=({eyebrow,title,line}:{eyebrow:string;title:string;line:string})=>{
+  const [now,setNow]=useState(todayAndTime);
+  useEffect(()=>{
+    const timer=window.setInterval(()=>setNow(todayAndTime()),30_000);
+    return ()=>window.clearInterval(timer);
+  },[]);
+  return <div className="page-heading dash-heading"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p className="muted">{line}</p></div><time className="date-chip" dateTime={new Date().toISOString()}>{now}</time></div>;
+};
 const Stats=({items}:{items:[number|string,string,string?][]})=>{
   const here=useHere();
   return <section className="stats" aria-label="At a glance">{items.map(([n,l,to])=><div key={l}><strong>{n}</strong>{to?<Link state={here} to={to}>{l}</Link>:<span>{l}</span>}</div>)}</section>;
@@ -99,7 +105,7 @@ export function FacultyHome(){
       <Heading eyebrow="Staff dashboard" title={`${greeting()}, ${d.name}.`} line="Your subjects, teaching tasks and grading at a glance."/>
       <div className="dash-grid">
         <div className="dash-main">
-          <section aria-labelledby="my-subjects-h"><div className="section-head"><h2 id="my-subjects-h">My Classes</h2><Link state={here} to="/faculty/subjects">{d.closed_subjects?`All subjects, including ${plural(d.closed_subjects,'past one')}`:'All subjects'}</Link></div>
+          <section aria-labelledby="my-subjects-h"><div className="section-head"><h2 id="my-subjects-h">My Classes</h2></div>
             {d.subjects.length===0?<p className="panel muted">No subjects are assigned to you in an open term.</p>:<div className="cards">{d.subjects.map(s=>{
               const o=`/faculty/offerings/${s.offering_id}`;const drafts=s.drafts_content+s.drafts_assessments;
               return <SubjectCard key={s.offering_id} code={s.code} title={s.title} meta="Assigned" detail={`${s.sections.join(', ')||'No sections'} · ${plural(s.students,'student')}${s.to_grade?` · ${s.to_grade} to grade`:''}${s.needs_review?` · ${s.needs_review} to review`:''}${drafts?` · ${plural(drafts,'draft')}`:''}`}

@@ -1,4 +1,4 @@
-import {useState,type FormEvent} from 'react';
+import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {api,post,errorText} from '../../app/api';
 import {Dialog} from '../../components/Dialog';
@@ -15,6 +15,9 @@ export function GenerateDialog({offering,anchorNodeId,contextLabel,onClose,onCre
   const syllabus=useQuery({queryKey:['syllabus',offering.id],queryFn:()=>api<SyllabusState>(`/teach/offerings/${offering.id}/syllabus`)});
   const sources=(items.data??[]).filter(i=>i.published&&!i.archived&&(i.published.study_chunks??0)>0);
   const [chosen,setChosen]=useState<string[]>([]);const [error,setError]=useState('');const [busy,setBusy]=useState(false);
+  const [chapterFilter,setChapterFilter]=useState<string[]|null>(null);
+  const allChaptersRef=useRef<HTMLInputElement>(null);
+  const [sourceSearch,setSourceSearch]=useState('');
   const chapters=syllabus.data?.published?.outline.chapters??[];
   const chapterGroups=chapters.map((chapter,index)=>{
     const nodeIds=new Set([chapter.id,...chapter.topics.map(topic=>topic.id),
@@ -22,12 +25,31 @@ export function GenerateDialog({offering,anchorNodeId,contextLabel,onClose,onCre
     const chapterSources=sources.filter(item=>nodeIds.has(item.published?.anchor_node_id??''));
     const number=chapters.slice(0,index).filter(item=>!item.is_intro).length+1;
     return {id:chapter.id,label:chapter.is_intro?`Subject introduction · ${chapter.title||'Untitled chapter'}`:
-      `Chapter ${number} · ${chapter.title||'Untitled chapter'}`,sources:chapterSources};
+      `Chapter ${number} · ${chapter.title||'Untitled chapter'}`,filterLabel:chapter.is_intro?'Introduction':`Chapter ${number}`,sources:chapterSources};
   }).filter(group=>group.sources.length>0);
+  useEffect(()=>{
+    if(allChaptersRef.current)allChaptersRef.current.indeterminate=chapterFilter!==null&&chapterFilter.length>0;
+  },[chapterFilter]);
   const groupedIds=new Set(chapterGroups.flatMap(group=>group.sources.map(item=>item.id)));
   const otherSources=sources.filter(item=>!groupedIds.has(item.id));
+  const searchTerm=sourceSearch.trim().toLowerCase();
+  const matchesSearch=(item:Item)=>!searchTerm||item.published!.title.toLowerCase().includes(searchTerm);
+  const visibleChapterGroups=chapterGroups
+    .filter(group=>chapterFilter===null||chapterFilter.includes(group.id))
+    .map(group=>({...group,sources:group.sources.filter(matchesSearch)}))
+    .filter(group=>group.sources.length>0);
+  const visibleChapterGroupsById=new Map(visibleChapterGroups.map(group=>[group.id,group]));
+  const visibleOtherSources=otherSources.filter(matchesSearch);
   function chooseSources(ids:string[],checked:boolean){
     setChosen(current=>checked?[...new Set([...current,...ids])]:current.filter(id=>!ids.includes(id)));
+  }
+  function toggleChapterFilter(id:string,checked:boolean){
+    setChapterFilter(current=>{
+      const selected=new Set(current??chapterGroups.map(group=>group.id));
+      if(checked)selected.add(id);else selected.delete(id);
+      const next=chapterGroups.filter(group=>selected.has(group.id)).map(group=>group.id);
+      return next.length===chapterGroups.length?null:next;
+    });
   }
   async function submit(e:FormEvent<HTMLFormElement>){
     e.preventDefault();const f=new FormData(e.currentTarget);   // read before awaiting
@@ -48,23 +70,49 @@ export function GenerateDialog({offering,anchorNodeId,contextLabel,onClose,onCre
     <fieldset className="study-source-picker"><legend>Based on (published lessons and files with readable text)</legend>
       {items.isPending||syllabus.isPending?<p>Loading published materials and chapters…</p>:items.error?<p role="alert">{items.error.message}</p>:syllabus.error?<p role="alert">Could not load the syllabus chapters. Refresh and try again.</p>:sources.length===0?<p className="muted">Publish a lesson or a file with readable text first. Links need approved text, and scanned PDFs cannot be used.</p>:
         <>
-          {chapterGroups.map(group=><fieldset className="study-source-chapter" key={group.id}>
-            <legend>{group.label}</legend>
-            <label className="inline study-source-select-all"><input type="checkbox"
-              checked={group.sources.every(item=>chosen.includes(item.id))}
-              onChange={e=>chooseSources(group.sources.map(item=>item.id),e.target.checked)}/> Use all materials in this chapter</label>
-            {group.sources.map(item=><label className="inline study-source-item" key={item.id}>
-              <input type="checkbox" checked={chosen.includes(item.id)}
-                onChange={e=>chooseSources([item.id],e.target.checked)}/> {item.published!.title} <span className="muted">({item.kind})</span>
-            </label>)}
-          </fieldset>)}
-          {otherSources.length>0&&<fieldset className="study-source-chapter">
+          <div className="study-source-browser">
+            <label>Search materials<input type="search" value={sourceSearch} onChange={e=>setSourceSearch(e.target.value)} placeholder="Search by title"/></label>
+            {chapterGroups.length>0&&<fieldset className="study-source-chapter-filters">
+              <legend>Filter chapters</legend>
+              <label className="inline study-source-chapter-option study-source-chapter-option-all">
+                <input ref={allChaptersRef} type="checkbox" checked={chapterFilter===null} onChange={e=>setChapterFilter(e.target.checked?null:[])}/> All chapters
+              </label>
+              <div className="study-source-chapter-options">
+                {chapterGroups.map(group=>{
+                  const visibleGroup=visibleChapterGroupsById.get(group.id);
+                  return <div className="study-source-chapter-entry" key={group.id}>
+                    <label className="inline study-source-chapter-option">
+                      <input type="checkbox" checked={chapterFilter===null||chapterFilter.includes(group.id)} onChange={e=>toggleChapterFilter(group.id,e.target.checked)}/>
+                      <span className="study-source-chapter-option-name">{group.label}</span>
+                    </label>
+                    {visibleGroup&&<fieldset className="study-source-chapter" aria-label={visibleGroup.label}>
+                      <label className="inline study-source-select-all"><input type="checkbox"
+                        checked={visibleGroup.sources.every(item=>chosen.includes(item.id))}
+                        onChange={e=>chooseSources(visibleGroup.sources.map(item=>item.id),e.target.checked)}/> Use all {searchTerm?'matching materials':'materials'} in this chapter</label>
+                      {visibleGroup.sources.map(item=><label className="inline study-source-item" key={item.id}>
+                        <input type="checkbox" checked={chosen.includes(item.id)}
+                          onChange={e=>chooseSources([item.id],e.target.checked)}/> {item.published!.title} <span className="muted">({item.kind})</span>
+                      </label>)}
+                    </fieldset>}
+                  </div>
+                })}
+              </div>
+              <p className="muted study-source-filter-help">Leave All chapters checked, or uncheck it to choose one or more chapters.</p>
+            </fieldset>}
+            <div className="study-source-selection-summary" aria-live="polite">
+              <span>{chosen.length} {chosen.length===1?'material':'materials'} selected</span>
+              {chosen.length>0&&<button type="button" className="linklike" onClick={()=>setChosen([])}>Clear selection</button>}
+              {(chapterFilter!==null||searchTerm)&&<span className="muted">Filters only change what is shown; your selection is kept.</span>}
+            </div>
+          </div>
+          {visibleOtherSources.length>0&&<fieldset className="study-source-chapter">
             <legend>Other materials</legend>
-            {otherSources.map(item=><label className="inline study-source-item" key={item.id}>
+            {visibleOtherSources.map(item=><label className="inline study-source-item" key={item.id}>
               <input type="checkbox" checked={chosen.includes(item.id)}
                 onChange={e=>chooseSources([item.id],e.target.checked)}/> {item.published!.title} <span className="muted">({item.kind})</span>
             </label>)}
           </fieldset>}
+          {visibleChapterGroups.length===0&&visibleOtherSources.length===0&&<p className="muted">No materials match these filters. Change the chapter filter or search terms to see more.</p>}
         </>}</fieldset>
     <div className="grid-2"><label>Multiple choice<input name="mc" type="number" min="0" max="30" defaultValue="3"/></label><label>True / false<input name="tf" type="number" min="0" max="30" defaultValue="2"/></label>
       <label>Short answer<input name="sa" type="number" min="0" max="30" defaultValue="1"/></label><label>Points per question<input name="points" type="number" min="0.5" step="0.5" defaultValue="1"/></label></div>

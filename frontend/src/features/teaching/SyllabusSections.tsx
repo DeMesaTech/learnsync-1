@@ -69,19 +69,39 @@ export function GradingStep({policy,onChange}:{policy:GradingPolicy|null;onChang
   const undo=useUndo();const latestChange=useRef(onChange);latestChange.current=onChange;
   if(!policy)return <section className="panel"><h2>Grading policy</h2>
     <p>No grading policy yet. You must confirm one before grades can be calculated. LearnSync does not guess percentages for you.</p>
-    <button type="button" className="primary" onClick={()=>onChange({categories:[],periods:[{key:'midterm',label:'Midterm',share:50},{key:'finals',label:'Finals',share:50}],transmutation:'raw',passing:75,late_attendance_fraction:0.5})}>Set up grading policy</button></section>;
+    <button type="button" className="primary" onClick={()=>onChange({categories:[],periods:[{key:'midterm',label:'Midterm',share:50},{key:'finals',label:'Finals',share:50}],online_quiz_categories:[],activity_categories:[],transmutation:'raw',passing:75,late_attendance_fraction:0.5})}>Set up grading policy</button></section>;
   const total=policy.categories.reduce((a,c)=>a+Number(c.weight||0),0);
   const shares=policy.periods.reduce((a,p)=>a+Number(p.share||0),0);
   const set=(patch:Partial<GradingPolicy>)=>onChange({...policy,...patch});
+  const selectableCategories=policy.categories.filter(category=>category.key!=='attendance');
+  const allowed=(keys:string[]|null|undefined)=>keys??selectableCategories.map(category=>category.key);
+  const updateCategories=(categories:GradingPolicy['categories'])=>{
+    const keep=(keys:string[]|null|undefined)=>keys==null?keys:keys.filter(key=>categories.some(category=>category.key===key));
+    set({categories,online_quiz_categories:keep(policy.online_quiz_categories),activity_categories:keep(policy.activity_categories)});
+  };
+  const categoryChoices=(kind:'online_quiz_categories'|'activity_categories',label:string)=>{
+    const selected=allowed(policy[kind]);
+    return <fieldset className="grading-category-allowlist"><legend>{label}</legend>
+      {selectableCategories.length===0?<p className="muted">Add a non-attendance grading category first.</p>:selectableCategories.map(category=><label className="inline" key={category.key}>
+        <input type="checkbox" checked={selected.includes(category.key)} onChange={event=>{
+          const next=event.target.checked?[...selected,category.key]:selected.filter(key=>key!==category.key);
+          set({[kind]:next});
+        }}/> {category.label||'Unnamed category'} ({category.weight}%)
+      </label>)}
+      <p className="muted">Select every category this type of assessment may use.</p>
+    </fieldset>;
+  };
   return <section className="panel"><h2>Grading policy</h2>
     <fieldset><legend>Category weights</legend>
       {policy.categories.map((c,i)=><div className="topic-row" key={i}>
         <input aria-label="Category name" value={c.label} maxLength={80} onChange={e=>set({categories:replace(policy.categories,i,{...c,label:e.target.value})})}/>
         <input aria-label={`${c.label||'Category'} weight (%)`} type="number" min={0} max={100} step="any" value={c.weight===0?'':c.weight} onChange={e=>set({categories:replace(policy.categories,i,{...c,weight:Number(e.target.value)||0})})}/>
-        <button type="button" className="icon-button" aria-label={`Remove ${c.label||'category'}`} title={`Remove ${c.label||'category'}`} onClick={()=>set({categories:remove(policy.categories,i)})}>×</button></div>)}
+        <button type="button" className="icon-button" aria-label={`Remove ${c.label||'category'}`} title={`Remove ${c.label||'category'}`} onClick={()=>updateCategories(remove(policy.categories,i))}>×</button></div>)}
       <div className="actions">{PRESETS.filter(([k])=>!policy.categories.some(c=>c.key===k)).map(([k,l])=><button type="button" key={k} onClick={()=>set({categories:[...policy.categories,{key:k,label:l,weight:0}]})}>Add {l.toLowerCase()}</button>)}
         <button type="button" className="primary" onClick={()=>set({categories:[...policy.categories,{key:`custom-${newId().slice(0,8)}`,label:'Other',weight:0}]})}>＋ Add another category</button></div>
       <p className={`grading-total ${Math.abs(total-100)>0.01?'error':'muted'}`} role="status">Total: {total}% {Math.abs(total-100)>0.01?'(must equal 100%)':'✓'}</p></fieldset>
+    {categoryChoices('online_quiz_categories','Categories allowed for online quizzes')}
+    {categoryChoices('activity_categories','Categories allowed for activities')}
     <fieldset><legend>Period shares</legend>
       {policy.periods.map((p,i)=><label key={p.key}>{p.label} share (%)<input type="number" min={0} max={100} step="any" value={p.share} onChange={e=>set({periods:replace(policy.periods,i,{...p,share:Number(e.target.value)})})}/></label>)}
       <p className={`grading-total ${Math.abs(shares-100)>0.01?'error':'muted'}`} role="status">Total: {shares}% {Math.abs(shares-100)>0.01?'(must equal 100%)':'✓'}</p></fieldset>

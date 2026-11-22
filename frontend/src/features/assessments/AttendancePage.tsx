@@ -249,7 +249,7 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
   },[active,currentPage,hasActiveCell]);
 
   return <>
-    <section className="panel"><div className="page-heading"><h3>{title}</h3>
+    <section className="panel"><div className="page-heading attendance-calendar-heading"><h3>{title}</h3>
       <div className="actions"><ModeToggle mode="grid" onChange={m=>go(()=>setMode(m))}/>
         <div className="tabs" role="group" aria-label="Attendance calendar range">{(['week','month'] as const).map(v=><button key={v} className={range===v?'active':''} aria-pressed={range===v} onClick={()=>go(()=>setRange(v))}>{v==='week'?'Week':'Month'}</button>)}</div>
         <button type="button" className="icon-button" aria-label={`Previous ${range}`} title={`Previous ${range}`} onClick={()=>step(-1)}>«</button>

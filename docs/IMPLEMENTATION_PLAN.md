@@ -618,6 +618,7 @@ Syllabus JSON contains:
 - Stable UUIDs for outline nodes.
 - Teaching schedule/week information.
 - Grading policy.
+- Grading policy category allowlists for online quizzes and activities; assessment editors may select only categories allowed for that type.
 
 Stable node UUIDs survive reordering and renaming. They are not array indexes.
 

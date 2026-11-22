@@ -107,8 +107,14 @@ def start_draft(db, actor, offering):
 def save_draft(db, actor, offering, data):
     _, draft = locked_draft(db, offering, data.expected_counter)
     draft.outline = data.outline.model_dump(mode="json")
-    draft.grading_policy = data.grading_policy.model_dump(mode="json") \
-        if data.grading_policy else None
+    if data.grading_policy:
+        policy = data.grading_policy.model_dump(mode="json")
+        for field in ("online_quiz_categories", "activity_categories"):
+            if field not in data.grading_policy.model_fields_set:
+                policy.pop(field)
+        draft.grading_policy = policy
+    else:
+        draft.grading_policy = None
     draft.draft_counter += 1
     db.commit()
     return {"counter": draft.draft_counter, "updated_at": draft.updated_at}
@@ -155,6 +161,11 @@ def policy_errors(policy):
         return []
     errors = []
     policy = GradingPolicy.model_validate(policy)
+    category_keys = {category.key for category in policy.categories}
+    for label, keys in (("online quizzes", policy.online_quiz_categories),
+                        ("activities", policy.activity_categories)):
+        if keys is not None and any(key not in category_keys or key == "attendance" for key in keys):
+            errors.append(f"Choose existing, non-attendance categories for {label}.")
     if any(not c.label.strip() for c in policy.categories):
         errors.append("Name every grading category.")
     if len({c.key for c in policy.categories}) != len(policy.categories) \
