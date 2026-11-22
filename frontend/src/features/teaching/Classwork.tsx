@@ -10,25 +10,25 @@ import {queryClient,useAuth} from '../../app/providers';
 import type {OfferingSummary} from '../academics/types';
 import {useUndo} from '../../components/undo';
 import {GenerateDialog} from '../study/Generate';
-import {NewDialog,assessmentStatus,assessmentTitle} from '../assessments/Assessments';
+import {assessmentStatus,assessmentTitle} from '../assessments/Assessments';
 import {AssessmentEditorDialog} from '../assessments/AssessmentEditor';
 import {detail as workDetail} from '../assessments/Work';
 import {KIND_LABEL,fmt,type Assessment,type Kind,type LearnItem as Work} from '../assessments/types';
-import {ItemEditorDialog,KIND,NewItemDialog,itemTitle,stateLabel,useNodes} from './Content';
+import {ItemEditorDialog,KIND,itemTitle,stateLabel,useNodes} from './Content';
 import {AnnouncementCreateDialog,FacultyAnnouncements} from './Announcements';
 import {SaveIndicator,DraftNotices,draftKey,useAutosave,useFlushOnLeave} from './autosave';
 import {emptyChapter,newId,type Chapter,type Item,type LearnItem,type LearnSyllabus,type Outline,type SyllabusDraftContent,type SyllabusRev,type SyllabusState} from './types';
 
-type Create={type:'item';kind:Item['kind']}|{type:'item-editor';itemId:string}|{type:'assessment';kind:Kind}|{type:'assessment-editor';assessmentId:string}|{type:'ai'}|{type:'announcement'}|null;
+type CreateTarget={type:'item';kind:Item['kind']}|{type:'assessment';kind:Kind}|{type:'ai'}|{type:'announcement'};
+type Create={type:'item-editor';itemId:string}|{type:'assessment-editor';assessmentId:string}|{type:'ai'}|{type:'announcement'}|null;
 interface MaterialContext{anchorNodeId:string|null;label:string}
-interface Row{canUnpublish:boolean;pending:boolean;key:string;type:'item'|'assessment';kind:string;sectionIds:string[];id:string;title:string;label:string;anchor:string|null;archived:boolean;status:string;published:boolean;to:string;meta:string}
+interface Row{canUnpublish:boolean;pending:boolean;key:string;type:'item'|'assessment';kind:string;sectionIds:string[];id:string;title:string;label:string;anchor:string|null;archived:boolean;status:string;published:boolean;to:string;meta:string;sortAt:string}
 type MaterialFilter='all'|'lesson'|'quiz'|'activity'|'exam';
 
-const CREATE_GROUPS:{label:string;options:[string,Create][]}[]=[
+const CREATE_GROUPS:{label:string;options:[string,CreateTarget][]}[]=[
   {label:'Lessons',options:[['Lesson',{type:'item',kind:'lesson'}],['Module',{type:'item',kind:'file'}],['Link',{type:'item',kind:'reference'}]]},
-  {label:'Quizzes',options:[['Online quiz',{type:'assessment',kind:'online_quiz'}],['Paper quiz',{type:'assessment',kind:'offline_quiz'}],['Quiz drafted by AI',{type:'ai'}]]},
-  {label:'Activities',options:[['Activity',{type:'assessment',kind:'activity'}],['Teacher-scored item',{type:'assessment',kind:'manual'}]]},
-  {label:'Exams',options:[['Examination',{type:'assessment',kind:'exam'}]]},
+  {label:'Quizzes',options:[['Online quiz',{type:'assessment',kind:'online_quiz'}],['Quiz drafted by AI',{type:'ai'}]]},
+  {label:'Activities',options:[['Activity',{type:'assessment',kind:'activity'}]]},
   {label:'Announcements',options:[['New announcement',{type:'announcement'}]]},
 ];
 
@@ -43,6 +43,7 @@ export function FacultyClasswork(){
   const {nodes}=useNodes(offering.id);
   const offer=useUndo();
   const [create,setCreate]=useState<Create>(null);
+  const [creationError,setCreationError]=useState('');
   const [addingChapter,setAddingChapter]=useState(false);
   const [archived,setArchived]=useState(false);
   const [materialFilter,setMaterialFilter]=useState<MaterialFilter>('all');
@@ -60,18 +61,35 @@ export function FacultyClasswork(){
     document.addEventListener('click',outside);document.addEventListener('keydown',escape);
     return()=>{document.removeEventListener('click',outside);document.removeEventListener('keydown',escape)};
   },[]);
-  const choose=(c:Create,context:MaterialContext,event:React.MouseEvent<HTMLButtonElement>)=>{
+  const choose=async(c:CreateTarget,context:MaterialContext,event:React.MouseEvent<HTMLButtonElement>)=>{
     const dropdown=event.currentTarget.closest<HTMLDetailsElement>('details');
     if(dropdown)dropdown.open=false;
-    setMaterialContext(context);setCreate(c);
+    setMaterialContext(context);setCreationError('');
+    if(c.type==='ai'||c.type==='announcement'){setCreate(c);return}
+    try{
+      if(c.type==='item'){
+        const item=await post<Item>(`/teach/offerings/${offering.id}/items`,{
+          kind:c.kind,title:`New ${KIND[c.kind].toLowerCase()}`,section_ids:[],anchor_node_id:context.anchorNodeId,
+        });
+        await queryClient.invalidateQueries({queryKey:['items',offering.id]});
+        setCreate({type:'item-editor',itemId:item.id});
+      }else{
+        const assessment=await post<Assessment>(`/teach/offerings/${offering.id}/assessments`,{
+          kind:c.kind,title:`New ${KIND_LABEL[c.kind].toLowerCase()}`,section_ids:[],anchor_node_id:context.anchorNodeId,
+        });
+        assessmentCreated(assessment);
+      }
+    }catch(error){setCreationError(errorText(error))}
   };
 
   const rows:Row[]=[
-    ...(items.data??[]).map(i=>({canUnpublish:false,pending:!!i.draft,key:'i'+i.id,type:'item' as const,kind:i.kind,sectionIds:i.section_ids,id:i.id,title:itemTitle(i),label:KIND[i.kind],anchor:(i.published??i.draft)?.anchor_node_id??null,archived:i.archived,
-      status:stateLabel(i),published:!!i.published,to:`${base}/content/${i.id}/edit`,meta:`${KIND[i.kind]}${i.section_ids.length>0?` · ${i.section_ids.length} section${i.section_ids.length===1?'':'s'}`:''}`})),
+    ...(items.data??[]).map(i=>{const rev=i.published??i.draft;
+      return {canUnpublish:false,pending:!!i.draft,key:'i'+i.id,type:'item' as const,kind:i.kind,sectionIds:i.section_ids,id:i.id,title:itemTitle(i),label:KIND[i.kind],anchor:rev?.anchor_node_id??null,archived:i.archived,
+        status:stateLabel(i),published:!!i.published,to:`${base}/content/${i.id}/edit`,sortAt:i.draft?.updated_at??i.published?.published_at??'',
+        meta:`${KIND[i.kind]}${i.section_ids.length>0?` · ${i.section_ids.length} section${i.section_ids.length===1?'':'s'}`:''}`}}),
     ...(assessments.data??[]).map(a=>{const rev=a.draft??a.published;
       return {canUnpublish:a.can_unpublish,pending:!!a.draft,key:'a'+a.id,type:'assessment' as const,kind:a.kind,sectionIds:a.section_ids,id:a.id,title:assessmentTitle(a),label:KIND_LABEL[a.kind],anchor:rev?.anchor_node_id??null,archived:a.archived,status:assessmentStatus(a),published:!!a.published,
-        to:a.published?`${base}/assessments/${a.id}/scores`:`${base}/assessments/${a.id}/edit`,
+        to:a.published?`${base}/assessments/${a.id}/scores`:`${base}/assessments/${a.id}/edit`,sortAt:a.draft?.updated_at??a.published?.published_at??'',
         meta:`${KIND_LABEL[a.kind]}${rev?.ai_generated?` · AI draft${rev.reviewed?' reviewed':' needs review'}`:''}${rev?.include_in_grade?` · ${fmt(rev.max_points??0)} pts`:' · not graded'}${a.published?.deadline?` · due ${new Date(a.published.deadline).toLocaleDateString()}`:''}`}})];
   const selectedSection=offering.sections.find(section=>section.id===sectionId);
   const isVisibleToSection=(r:Row)=>!selectedSection||!r.sectionIds.length||r.sectionIds.includes(selectedSection.id);
@@ -129,22 +147,25 @@ export function FacultyClasswork(){
   const activeRows=rows.filter(row=>!row.archived);
   const publishedCount=activeRows.filter(row=>row.published&&!row.pending).length;
   const draftCount=activeRows.filter(row=>!row.published||row.pending).length;
-  const branch=(n:TNode<Row>,depth:number,bare=false,extraRows?:React.ReactNode):React.ReactElement=>{
+  const branch=(n:TNode<Row>,depth:number,bare=false,mixAnnouncements=false):React.ReactElement=>{
     const Heading=(['h3','h4','h5'] as const)[Math.min(depth,2)];
     const items=n.rows.filter(r=>r.type==='item');
+    const materialRows=n.rows.map(r=><li className={`manager-material-row${setupRequired?'':' manager-material-row-clickable'}`} key={r.key} data-sort-date={Date.parse(r.sortAt)||0}>
+      {!setupRequired&&<Link className="manager-material-row-link" to={r.to} aria-label={`Open ${r.title}`}/>}
+      <span className={`material-kind-icon kind-${r.kind}`} aria-hidden="true">{materialIcon(r.kind)}</span>
+      <span className="grow"><strong>{r.title}</strong><span className="muted">{r.label}{r.meta?` · ${r.meta}`:''}{r.sortAt&&<> · <time dateTime={r.sortAt}>{new Date(r.sortAt).toLocaleDateString()}</time></>}</span>
+        <span className={r.published&&!r.pending&&!r.archived?'badge done':'badge'}>{r.status}</span></span>
+      <span className="manager-material-actions">
+        {r.canUnpublish&&!closed&&!setupRequired&&<button type="button" className="linklike" onClick={()=>unpublish(r)}>Unpublish</button>}
+        {reorder===n.id&&r.type==='item'&&<span className="actions"><button type="button" aria-label={`Move ${r.title} up`} disabled={closed||setupRequired||items.indexOf(r)===0} onClick={()=>move(n,items,r,-1)}>↑</button>
+          <button type="button" aria-label={`Move ${r.title} down`} disabled={closed||setupRequired||items.indexOf(r)===items.length-1} onClick={()=>move(n,items,r,1)}>↓</button></span>}
+      </span></li>);
     return <section key={n.id} className={`tree d${Math.min(depth,2)}`} aria-labelledby={`c-${n.id}`}>
       {bare?<Heading id={`c-${n.id}`} className="sr-only">{n.title}</Heading>:<header><Heading id={`c-${n.id}`}>{n.title}</Heading><span className="count">{total(n)}</span>
         {items.length>1&&!closed&&!setupRequired&&!stranded&&<button type="button" className="linklike" aria-pressed={reorder===n.id} onClick={()=>setReorder(reorder===n.id?null:n.id)}>{reorder===n.id?'Done reordering':'Reorder'}</button>}</header>}
-      {(n.rows.length>0||extraRows)&&<ul className="seq compact manager-material-list">{n.rows.map(r=><li className={`manager-material-row${setupRequired?'':' manager-material-row-clickable'}`} key={r.key}>
-        {!setupRequired&&<Link className="manager-material-row-link" to={r.to} aria-label={`Open ${r.title}`}/>}
-        <span className={`material-kind-icon kind-${r.kind}`} aria-hidden="true">{materialIcon(r.kind)}</span>
-        <span className="grow"><strong>{r.title}</strong><span className="muted">{r.label}{r.meta?` · ${r.meta}`:''}</span>
-          <span className={r.published&&!r.pending&&!r.archived?'badge done':'badge'}>{r.status}</span></span>
-        <span className="manager-material-actions">
-          {r.canUnpublish&&!closed&&!setupRequired&&<button type="button" className="linklike" onClick={()=>unpublish(r)}>Unpublish</button>}
-          {reorder===n.id&&r.type==='item'&&<span className="actions"><button type="button" aria-label={`Move ${r.title} up`} disabled={closed||setupRequired||items.indexOf(r)===0} onClick={()=>move(n,items,r,-1)}>↑</button>
-            <button type="button" aria-label={`Move ${r.title} down`} disabled={closed||setupRequired||items.indexOf(r)===items.length-1} onClick={()=>move(n,items,r,1)}>↓</button></span>}
-        </span></li>)}{extraRows}</ul>}
+      {(n.rows.length>0||mixAnnouncements)&&<ul className="seq compact manager-material-list">
+        {mixAnnouncements?<FacultyAnnouncements embedded itemsOnly manageActions={!closed&&!setupRequired} sortWithChildren>{materialRows}</FacultyAnnouncements>:materialRows}
+      </ul>}
       {n.kids.map(k=>branch(k,depth+1))}</section>};
   return <>
     <section className="content-manager-header">
@@ -157,9 +178,9 @@ export function FacultyClasswork(){
       <article><span aria-hidden="true">✎</span><div><strong>{draftCount}</strong><small>Drafts</small></div></article>
     </section>
     <div className="content-manager-context">
-      <label>Section<select aria-label="Section" value={selectedSection?.id??'all'} onChange={event=>setSectionId(event.target.value)}>
+      <label className="sr-only" htmlFor="classwork-section-filter">Section</label><select id="classwork-section-filter" title="Filter materials by section. All sections shows materials visible to every section." aria-label="Filter materials by section" value={selectedSection?.id??'all'} onChange={event=>setSectionId(event.target.value)}>
         <option value="all">All sections</option>{offering.sections.map(section=><option key={section.id} value={section.id}>{section.name}</option>)}
-      </select></label>
+      </select>
     </div>
     {moved&&<p role="status" className="muted">{moved}</p>}
     {(items.isPending||assessments.isPending)?<p>Loading…</p>:items.error||assessments.error?<p role="alert">{(items.error??assessments.error)!.message}</p>:
@@ -184,16 +205,15 @@ export function FacultyClasswork(){
               </div>
               <label className="inline chapter-archived"><input type="checkbox" checked={archived} onChange={event=>setArchived(event.target.checked)}/> Show archived</label>
             </div>
-            {selectedTree?branch(selectedTree,0,true,<FacultyAnnouncements embedded itemsOnly manageActions={!closed&&!setupRequired}/>)
+            {creationError&&<p role="alert">{creationError}</p>}
+            {selectedTree?branch(selectedTree,0,true,true)
               :<><p className="muted">{materialFilter!=='all'||archived?'Nothing matches the current filters.':'No learning materials in this chapter yet.'}</p>
                 {selectedChapter?<ul className="seq compact manager-material-list"><FacultyAnnouncements embedded itemsOnly manageActions={!closed&&!setupRequired}/></ul>
                   :<FacultyAnnouncements embedded manageActions={!closed&&!setupRequired}/>}</>}
           </div>
         </section>
       </div>}
-    {create?.type==='item'&&<NewItemDialog offering={offering} kind={create.kind} anchorNodeId={materialContext.anchorNodeId} contextLabel={materialContext.label} onClose={()=>setCreate(null)} onCreated={i=>{setCreate({type:'item-editor',itemId:i.id});queryClient.invalidateQueries({queryKey:['items',offering.id]})}}/>}
     {create?.type==='item-editor'&&<ItemEditorDialog itemId={create.itemId} contextLabel={materialContext.label} onClose={()=>{setCreate(null);queryClient.invalidateQueries({queryKey:['items',offering.id]})}}/>}
-    {create?.type==='assessment'&&<NewDialog offering={offering} kind={create.kind} anchorNodeId={materialContext.anchorNodeId} contextLabel={materialContext.label} onClose={()=>setCreate(null)} onCreated={assessmentCreated}/>}
     {create?.type==='assessment-editor'&&<AssessmentEditorDialog offering={offering} assessmentId={create.assessmentId} contextLabel={materialContext.label} onClose={()=>{setCreate(null);queryClient.invalidateQueries({queryKey:['assessments',offering.id]})}}/>}
     {create?.type==='ai'&&<GenerateDialog offering={offering} anchorNodeId={materialContext.anchorNodeId} contextLabel={materialContext.label} onClose={()=>setCreate(null)} onCreated={assessmentCreated}/>}
     {create?.type==='announcement'&&<AnnouncementCreateDialog offering={offering} onClose={()=>setCreate(null)} onDone={()=>setCreate(null)}/>}

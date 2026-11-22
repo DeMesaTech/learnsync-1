@@ -120,7 +120,7 @@ def locked_draft(db, assessment, expected_counter):
         fail(404, "no_draft", "There is no draft to change. Start editing first.")
     if draft.draft_counter != expected_counter:
         fail(409, "draft_revision_conflict",
-             "This draft changed elsewhere. Review the newer version before saving.")
+             "This assessment draft changed after you opened it. Your latest changes were not saved, and nothing was published. Load the latest draft to review it, then reapply your changes and retry.")
     return draft
 
 

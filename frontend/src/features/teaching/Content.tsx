@@ -1,5 +1,5 @@
 import {useToast} from '../../components/undo';
-import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import {Link,useNavigate,useOutletContext,useParams} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
 import {api,post,send,upload,errorText,ApiError} from '../../app/api';
@@ -30,24 +30,6 @@ function SectionChoice({offering,chosen,onChange}:{offering:OfferingSummary;chos
   return <fieldset><legend>Visible to</legend>
     <p className="muted">Leave all unchecked to show it to every section.</p>
     {offering.sections.map(s=><label className="inline" key={s.id}><input type="checkbox" checked={chosen.includes(s.id)} onChange={e=>onChange(e.target.checked?[...chosen,s.id]:chosen.filter(x=>x!==s.id))}/> {s.name}</label>)}</fieldset>;
-}
-
-export function NewItemDialog({offering,kind,anchorNodeId,contextLabel,onClose,onCreated}:{offering:OfferingSummary;kind?:Item['kind'];anchorNodeId?:string|null;contextLabel:string;onClose:()=>void;onCreated:(i:Item)=>void}){
-  const [chosen,setChosen]=useState<string[]>([]);const [error,setError]=useState('');
-  async function submit(e:FormEvent<HTMLFormElement>){
-    e.preventDefault();const f=new FormData(e.currentTarget);
-    try{onCreated(await post<Item>(`/teach/offerings/${offering.id}/items`,{kind:kind??f.get('kind'),title:f.get('title'),section_ids:chosen,anchor_node_id:anchorNodeId??null}))}
-    catch(err){setError(errorText(err))}
-  }
-  const names={lesson:'New lesson',file:'New file',reference:'New link'} as const;
-  return <Dialog title={kind?names[kind]:'New item'} onClose={onClose}><form onSubmit={submit}>
-    <p className="eyebrow material-context-label">{contextLabel}</p>
-    {!kind&&<label>Type<select name="kind" defaultValue="lesson"><option value="lesson">Lesson (write it here)</option><option value="file">File (PDF, Word, PowerPoint, Excel, image)</option><option value="reference">Reference link</option></select></label>}
-    <label>Title<input name="title" required maxLength={200}/></label>
-    <SectionChoice offering={offering} chosen={chosen} onChange={setChosen}/>
-    {error&&<p role="alert">{error}</p>}
-    <div className="actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary">Create and edit</button></div>
-  </form></Dialog>;
 }
 
 export function ItemEditorPage(){
@@ -88,9 +70,9 @@ export function ItemEditorDialog({itemId,contextLabel,onClose}:{itemId:string;co
     return true;
   }
 
-  return <Dialog title={item?`Edit ${KIND[item.kind].toLowerCase()}`:'Edit content'} className="item-editor-dialog" confirmOnClose={false} onClose={closeEditor}>
+  return <Dialog title={item?`Edit ${KIND[item.kind].toLowerCase()}`:'Edit content'} headerContent={<p className="eyebrow material-context-label">{contextLabel}</p>} className="item-editor-dialog" confirmOnClose={false} onClose={closeEditor}>
     {query.isPending?<p>Loading content…</p>:query.error||!item?<p role="alert">{query.error?.message??'Content is unavailable.'}</p>
-      :item.draft?<><p className="eyebrow material-context-label">{contextLabel}</p><ItemEditor key={item.draft.version} offering={offering} item={item} refetch={()=>query.refetch()} onDone={onClose} onFlushReady={registerFlush} hideAnchorSelector/></>
+      :item.draft?<ItemEditor key={item.draft.version} offering={offering} item={item} refetch={()=>query.refetch()} onDone={onClose} onFlushReady={registerFlush} hideAnchorSelector/>
         :closed?<ReadOnlyItem offering={offering} item={item}/>:<p>Preparing a draft…</p>}
     {closeError&&<p role="alert">{closeError}</p>}
   </Dialog>;

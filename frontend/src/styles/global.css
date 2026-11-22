@@ -704,8 +704,36 @@ dialog::backdrop {
   gap: 16px
 }
 
+.dialog-sticky-header {
+  position: sticky;
+  top: -24px;
+  z-index: 4;
+  margin: -24px -24px 16px;
+  padding: 12px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border)
+}
+
+.dialog-sticky-header>.material-context-label {
+  margin: 8px 0 0;
+  padding: 8px 0 0;
+  border-bottom: 0
+}
+
 .dialog-heading h2 {
   margin: 0
+}
+
+dialog>form>.actions:last-child,
+dialog>.actions:last-child,
+dialog.item-editor-dialog>.actions {
+  position: sticky;
+  bottom: -24px;
+  z-index: 3;
+  margin: 16px -24px -24px;
+  padding: 12px 24px;
+  background: var(--surface);
+  border-top: 1px solid var(--border)
 }
 
 .file-card {

@@ -1,3 +1,4 @@
+import {Children,isValidElement} from 'react';
 import {createPortal} from 'react-dom';
 import {useToast} from '../../components/undo';
 import {useState,type FormEvent,type ReactNode} from 'react';
@@ -13,7 +14,7 @@ import type {Announcement} from './types';
 const PAGE=25;   // newest first; "Load more" asks the server for the next page
 const uploadedAt=(iso:string)=>new Date(iso).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
 interface Page{items:Announcement[];has_more:boolean}
-export function FacultyAnnouncements({embedded=false,manageActions=false,itemsOnly=false,children}:{embedded?:boolean;manageActions?:boolean;itemsOnly?:boolean;children?:ReactNode}={}){
+export function FacultyAnnouncements({embedded=false,manageActions=false,itemsOnly=false,sortWithChildren=false,children}:{embedded?:boolean;manageActions?:boolean;itemsOnly?:boolean;sortWithChildren?:boolean;children?:ReactNode}={}){
   const ask=useConfirm();
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const closed=offering.term_status!=='active';
@@ -33,21 +34,26 @@ export function FacultyAnnouncements({embedded=false,manageActions=false,itemsOn
     <div className="actions">
       {a.state==='draft'&&<><button disabled={closed} onClick={()=>setEditing(a)}>Edit</button><button className="primary" disabled={closed} onClick={()=>act(a,'publish')}>Publish</button></>}
       {a.state==='published'&&<button disabled={closed} onClick={()=>act(a,'archive')}>Archive</button>}</div></article>);
+  const announcementRows=rows.map(a=><li className="manager-material-row stream-announcement-row" key={a.id} data-sort-date={Date.parse(a.published_at??a.created_at)||0}>
+    <span className="material-kind-icon kind-announcement" aria-hidden="true">▤</span>
+    <span className="grow"><strong>{a.title}</strong><span className="muted">{a.state} · {names(a.section_ids)} · <time dateTime={a.published_at??a.created_at}>{uploadedAt(a.published_at??a.created_at)}</time></span>
+      <span className="pre stream-announcement-body">{a.body}</span></span>
+    {manageActions&&a.state==='draft'&&<span className="manager-material-actions">
+      <button type="button" className="icon-button" aria-label={`Edit ${a.title}`} title="Edit announcement" disabled={closed} onClick={()=>setEditing(a)}>✎</button>
+      <button type="button" className="icon-button primary" aria-label={`Publish ${a.title}`} title="Publish announcement" disabled={closed} onClick={()=>act(a,'publish')}>↥</button>
+    </span>}
+  </li>);
+  const materialRows=Children.toArray(children);
+  const orderedRows=sortWithChildren
+    ?[...materialRows,...announcementRows].sort((a,b)=>dateOf(b)-dateOf(a))
+    :announcementRows;
   const announcementItems=<>
-      {children}
+      {!sortWithChildren&&children}
+      {orderedRows}
       {message&&<li className="manager-material-row stream-announcement-message" role="alert">{message}</li>}
       {query.isPending?<li className="manager-material-row stream-announcement-message">Loading announcements…</li>
         :query.error?<li className="manager-material-row stream-announcement-message" role="alert">{query.error.message}</li>
-          :rows.length===0?<li className="manager-material-row stream-announcement-message muted">No announcements yet.</li>
-            :rows.map(a=><li className="manager-material-row stream-announcement-row" key={a.id}>
-              <span className="material-kind-icon kind-announcement" aria-hidden="true">▤</span>
-              <span className="grow"><strong>{a.title}</strong><span className="muted">{a.state} · {names(a.section_ids)} · <time dateTime={a.published_at??a.created_at}>{uploadedAt(a.published_at??a.created_at)}</time></span>
-                <span className="pre stream-announcement-body">{a.body}</span></span>
-              {manageActions&&a.state==='draft'&&<span className="manager-material-actions">
-                <button type="button" className="icon-button" aria-label={`Edit ${a.title}`} title="Edit announcement" disabled={closed} onClick={()=>setEditing(a)}>✎</button>
-                <button type="button" className="icon-button primary" aria-label={`Publish ${a.title}`} title="Publish announcement" disabled={closed} onClick={()=>act(a,'publish')}>↥</button>
-              </span>}
-            </li>)}
+          :rows.length===0&&(!sortWithChildren||materialRows.length===0)?<li className="manager-material-row stream-announcement-message muted">No announcements yet.</li>:null}
       {query.hasNextPage&&<li className="manager-material-row stream-announcement-more"><button disabled={query.isFetchingNextPage} onClick={()=>query.fetchNextPage()}>{query.isFetchingNextPage?'Loading…':'Load more announcements'}</button></li>}
   </>;
   if(embedded)return <>
@@ -64,6 +70,11 @@ export function FacultyAnnouncements({embedded=false,manageActions=false,itemsOn
     {query.hasNextPage&&<button disabled={query.isFetchingNextPage} onClick={()=>query.fetchNextPage()}>{query.isFetchingNextPage?'Loading…':'Load more announcements'}</button>}
     {editing&&<Editor offering={offering} existing={editing==='new'?null:editing} onClose={()=>setEditing(null)} onDone={()=>{setEditing(null);refresh()}}/>}
   </>;
+}
+
+function dateOf(row:ReactNode){
+  if(!isValidElement<{ 'data-sort-date'?:number|string }>(row))return 0;
+  return Number(row.props['data-sort-date'])||0;
 }
 
 export function AnnouncementCreateDialog({offering,onClose,onDone}:{offering:OfferingSummary;onClose:()=>void;onDone:()=>void}){

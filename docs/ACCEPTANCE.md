@@ -1,5 +1,22 @@
 # Acceptance status
 
+### 2026-11-22 (Chronological Classwork announcements)
+- Interleaved announcements with materials in the selected faculty chapter, newest first. Published materials use their publication date; drafts use their latest update date. Added dates to material rows and retained announcement actions and pagination.
+- Passed: `npm run build`, `npm run lint`, and `git diff --check`.
+- Browser verification was attempted, but the available app session opened at `/login`; authenticated faculty Classwork was unavailable.
+
+### 2026-11-22 (Sticky dialog headers and actions)
+- Made the shared dialog title/close header sticky and aligned it with the dialog top, kept terminal dialog action groups fixed at the bottom while scrolling, moved item/assessment editor context labels into the sticky header, and removed the divider above the context text.
+- Passed: frontend production build/type-check, frontend ESLint, and `git diff --check`.
+- Browser verified: scrolling the item and assessment editors kept their title, chapter context, and action footers at the same viewport positions; a long AI quiz dialog kept its shared header and form action group at the same positions. Temporary test drafts were deleted and their APIs returned 404.
+
+### 2026-11-22 (Classwork creation and assessment conflict clarity)
+- Removed Paper quiz, Teacher-scored item, and Examination from the Classwork add-material menu. Choosing a lesson, module, link, online quiz, or activity now creates its hidden draft and opens the relevant editor directly, without the intermediate title dialog; the editor can change title and audience.
+- Removed the visible Section label while retaining an accessible name and added a selector tooltip. Maximum points is required and blocks saving or publishing when empty/invalid.
+- Assessment publish conflicts now explain that another tab/device changed the draft, confirm that nothing was published or overwritten, and offer a safe action to load the latest version.
+- Passed: frontend production build/type-check, frontend ESLint, `git diff --check`, and the focused stale-assessment-draft API regression (1 passed).
+- The first full `test_assessments.py` attempt could not create pytest's default temp directory due to Windows `PermissionError`; rerunning the focused test with a repository-local `--basetemp` passed. Browser verification was not run.
+
 ### 2026-11-21 (Stream, pagination, and gradebook refinements)
 - Removed the inline New announcement row from the faculty Stream and moved Classwork announcements into the selected chapter's material list without a separate Announcements heading. Student Stream and Classwork materials now use consistent full-row links and row styling. Chapter choices have a clearer hover/focus state.
 - Attendance's unmark actions now sit at the left of the top pagination navigator. Gradebook's Ready to publish panel now opens from a button in a modal.

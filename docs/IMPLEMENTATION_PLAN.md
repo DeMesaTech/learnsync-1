@@ -420,7 +420,7 @@ Suggested error contract:
 {
   "error": {
     "code": "draft_revision_conflict",
-    "message": "This draft changed elsewhere. Review the newer version before saving.",
+    "message": "This assessment draft changed after you opened it. Your latest changes were not saved, and nothing was published. Load the latest draft to review it, then reapply your changes and retry.",
     "field_errors": {},
     "request_id": "..."
   }

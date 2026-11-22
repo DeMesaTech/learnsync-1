@@ -358,6 +358,8 @@ def test_drafts_are_invisible_and_tabs_cannot_overwrite_each_other(graded):
     assert graded["fac"].put(a(graded, f"/{aid}/draft"), body).status_code == 200
     stale = tab_b.put(a(graded, f"/{aid}/draft"), {**body, "title": "From tab B"})
     assert stale.status_code == 409 and stale.json()["error"]["code"] == "draft_revision_conflict"
+    assert "not saved" in stale.json()["error"]["message"]
+    assert "Load the latest draft" in stale.json()["error"]["message"]
 
 
 # ---------------- attempts ----------------

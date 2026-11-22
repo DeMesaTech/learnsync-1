@@ -1,7 +1,7 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Link,useNavigate,useOutletContext,useParams} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
-import {api,post,send,errorText} from '../../app/api';
+import {api,post,send,errorText,ApiError} from '../../app/api';
 import {Dialog} from '../../components/Dialog';
 import {queryClient,useAuth} from '../../app/providers';
 import {catOfKind} from '../../components/ClassworkTypes';
@@ -16,6 +16,8 @@ import {KIND_LABEL,toIso,toLocal,type Assessment,type AssessmentRev,type DraftCo
 
 const toContent=(r:AssessmentRev):DraftContent=>({title:r.title,instructions:r.instructions,category_key:r.category_key??'',period:r.period??'',max_points:String(r.max_points??0),available_from:toLocal(r.available_from),deadline:toLocal(r.deadline),allow_late:r.allow_late,max_attempts:r.max_attempts,score_rule:r.score_rule,include_in_grade:r.include_in_grade,anchor_node_id:r.anchor_node_id,questions:r.questions.map(q=>({...q,duration_seconds:q.duration_seconds??300}))});
 const toPayload=(v:DraftContent,counter:number)=>({expected_counter:counter,title:v.title,instructions:v.instructions,category_key:v.category_key||null,period:v.period||null,max_points:v.max_points||'0',available_from:toIso(v.available_from),deadline:toIso(v.deadline),allow_late:v.allow_late,max_attempts:v.max_attempts,score_rule:v.score_rule,include_in_grade:v.include_in_grade,anchor_node_id:v.anchor_node_id,questions:v.questions.map(q=>({...q,points:String(q.points||0)}))});
+const validMaxPoints=(value:string)=>value.trim()!==''&&Number.isFinite(Number(value))&&Number(value)>=0;
+const MAX_POINTS_ERROR='Maximum points is required. Enter a value of 0 or greater.';
 
 function useQuizEditWarning(item:Assessment|undefined,assessmentId:string|undefined,closed:boolean){
   const ask=useConfirm();
@@ -100,11 +102,11 @@ export function AssessmentEditorDialog({offering,assessmentId,contextLabel,onClo
     return true;
   }
 
-  return <Dialog title={item?.draft?.title||item?.published?.title||'Edit assessment'} className="assessment-editor-dialog" confirmOnClose={false} onClose={closeEditor}>
+  return <Dialog title={item?.draft?.title||item?.published?.title||'Edit assessment'} headerContent={contextLabel?<p className="eyebrow material-context-label">{contextLabel}</p>:undefined} className="assessment-editor-dialog" confirmOnClose={false} onClose={closeEditor}>
     {closeError&&<p role="alert">{closeError}</p>}
     {query.isPending?<p>Loading assessment…</p>:query.error||!item?<p role="alert">{query.error?.message??'Assessment is unavailable.'}</p>
       :requiresQuizWarning&&!quizEditConfirmed?<p>{warningError?<span role="alert">{warningError}</span>:'Confirm both warnings to edit this auto-scored quiz.'}</p>
-      :item.draft?<Editor key={item.draft.version} offering={offering} assessment={item} refetch={()=>query.refetch()} modal contextLabel={contextLabel} onDone={onClose} onFlushReady={registerFlush}/>
+      :item.draft?<Editor key={item.draft.version} offering={offering} assessment={item} refetch={()=>query.refetch()} modal onDone={onClose} onFlushReady={registerFlush}/>
         :closed?<p className="muted">This term is closed, so the assessment cannot be edited.</p>
           :startError?<p role="alert">{startError}</p>:<p>Preparing a draft…</p>}
   </Dialog>;
@@ -145,7 +147,7 @@ function PasteQuestions({offeringId,locked,onAdd}:{offeringId:string;locked:bool
   </details>;
 }
 
-function Editor({offering,assessment,refetch,modal=false,contextLabel,onDone,onFlushReady}:{offering:OfferingSummary;assessment:Assessment;refetch:()=>void;modal?:boolean;contextLabel?:string;onDone?:()=>void;onFlushReady?:(flush:()=>Promise<boolean>)=>void}){
+function Editor({offering,assessment,refetch,modal=false,onDone,onFlushReady}:{offering:OfferingSummary;assessment:Assessment;refetch:()=>void;modal?:boolean;onDone?:()=>void;onFlushReady?:(flush:()=>Promise<boolean>)=>void}){
   const ask=useConfirm();const offer=useUndo();
   const draft=assessment.draft!;
   const {session}=useAuth();
@@ -159,11 +161,16 @@ function Editor({offering,assessment,refetch,modal=false,contextLabel,onDone,onF
   const quiz=assessment.kind==='online_quiz';
   const locked=quiz&&assessment.has_attempts&&!!assessment.published;
   const [message,setMessage]=useState('');
+  const [publishConflict,setPublishConflict]=useState(false);
+  const [loadingLatest,setLoadingLatest]=useState(false);
   const [step,setStep]=useState<QuizStep>('basics');
   const [sections,setSections]=useState(assessment.section_ids);
   const [reviewedAt,setReviewedAt]=useState<number|null>(draft.reviewed?draft.counter:null);
   const auto=useAutosave<DraftContent>({storageKey:draftKey(session?.user?.id,offering.id,`assessment-${assessment.id}`),counter:draft.counter,initial:toContent(draft),
-    save:(v,counter)=>send<{counter:number}>('PUT',`${base}/draft`,toPayload(v,counter))});
+    save:(v,counter)=>{
+      if(!quiz&&!validMaxPoints(v.max_points))throw new Error(MAX_POINTS_ERROR);
+      return send<{counter:number}>('PUT',`${base}/draft`,toPayload(v,counter));
+    }});
   useEffect(()=>{onFlushReady?.(auto.flush)},[auto.flush,onFlushReady]);
   useFlushOnLeave(auto.status,auto.flush);
   const v=auto.value;const set=(patch:Partial<DraftContent>)=>auto.setValue({...v,...patch});
@@ -176,11 +183,29 @@ function Editor({offering,assessment,refetch,modal=false,contextLabel,onDone,onF
   const finish=()=>onDone?onDone():navigate(back);
 
   async function serverDraft(){const fresh=await api<Assessment>(base);if(!fresh.draft)throw new Error('The draft no longer exists.');return {value:toContent(fresh.draft),counter:fresh.draft.counter}}
+  async function loadLatestDraft(){
+    setLoadingLatest(true);
+    try{
+      const fresh=await api<Assessment>(base);
+      if(!fresh.draft)throw new Error('The draft no longer exists.');
+      auto.useServer(toContent(fresh.draft),fresh.draft.counter);
+      setReviewedAt(fresh.draft.reviewed?fresh.draft.counter:null);
+      await refetch();
+      setPublishConflict(false);
+      setMessage('');
+    }catch(error){setMessage(errorText(error))}
+    finally{setLoadingLatest(false)}
+  }
   async function publish(){
     setMessage('');
+    setPublishConflict(false);
+    if(!quiz&&!validMaxPoints(v.max_points)){setMessage(MAX_POINTS_ERROR);return}
     if(!await auto.flush()){setMessage('Resolve the save problem above before publishing.');return}
     try{await post(`${base}/draft/publish`,{expected_counter:auto.counter()});auto.discardRecovered();queryClient.invalidateQueries({queryKey:['assessments',offering.id]});offer('Published.');finish()}
-    catch(e){setMessage(errorText(e))}
+    catch(e){
+      if(e instanceof ApiError&&e.code==='draft_revision_conflict'){setPublishConflict(true);return}
+      setMessage(errorText(e))
+    }
   }
   async function markReviewed(){
     setMessage('');
@@ -215,7 +240,10 @@ function Editor({offering,assessment,refetch,modal=false,contextLabel,onDone,onF
     try{const made=await post<{id:string}>(`${base}/duplicate`,{});queryClient.invalidateQueries({queryKey:['assessments',offering.id]});navigate(`/faculty/offerings/${offering.id}/assessments/${made.id}/edit`)}
     catch(e){setMessage(errorText(e))}
   }
-  async function leave(){if(await auto.flush())finish();else setMessage('Resolve the save problem above first.')}
+  async function leave(){
+    if(!quiz&&!validMaxPoints(v.max_points)){setMessage(MAX_POINTS_ERROR);return}
+    if(await auto.flush())finish();else setMessage('Resolve the save problem above first.')
+  }
   async function go(next:QuizStep){setMessage('');if(await auto.flush())setStep(next);else setMessage('Resolve the save problem above first.')}
   const categories=policy?.categories.filter(c=>c.key!=='attendance')??[];
 
@@ -227,7 +255,7 @@ function Editor({offering,assessment,refetch,modal=false,contextLabel,onDone,onF
       <label>Grading category<select value={v.category_key} onChange={e=>set({category_key:e.target.value})}><option value="">Choose…</option>{categories.map(c=><option key={c.key} value={c.key}>{c.label} ({c.weight}%)</option>)}</select></label>
       <label>Grading period<select value={v.period} onChange={e=>set({period:e.target.value})}><option value="">Choose…</option>{(policy?.periods??[]).map(p=><option key={p.key} value={p.key}>{p.label}</option>)}</select></label></div>}
     {v.include_in_grade&&!policy&&<p className="warn" role="status">No confirmed grading policy yet. Publish a syllabus with one first, or turn off “Counts toward the grade”.</p>}
-    {!quiz&&<label>Maximum points<input type="number" min="0" step="0.5" value={v.max_points} onChange={e=>set({max_points:e.target.value})}/></label>}
+    {!quiz&&<label>Maximum points<input type="number" min="0" step="0.5" required value={v.max_points} onChange={e=>set({max_points:e.target.value})}/></label>}
     {interactive&&<label>Due<input type="datetime-local" value={v.deadline} onChange={e=>set({deadline:e.target.value})}/></label>}
     <details className="more"><summary>More options</summary>
       {interactive&&<label>Opens<input type="datetime-local" value={v.available_from} onChange={e=>set({available_from:e.target.value})}/></label>}
@@ -254,7 +282,6 @@ function Editor({offering,assessment,refetch,modal=false,contextLabel,onDone,onF
   return <>
     {!modal&&<p className="back"><Link to={back}>← Classwork</Link></p>}
     <div className={modal?'assessment-editor-scroll':undefined}>
-    {modal&&contextLabel&&<p className="eyebrow material-context-label">{contextLabel}</p>}
     <div className="page-heading"><div><p className="eyebrow">{KIND_LABEL[assessment.kind]}{quiz?` · step ${index+1} of ${QUIZ_STEPS.length}`:''}</p><h2>{v.title||'Untitled'}</h2>
       <p className="muted">{assessment.published?`Students see version ${assessment.published.version} until you ${assignLabel.toLowerCase()}.`:'Not visible to students or the gradebook until you assign it.'}</p></div>
       <SaveIndicator status={auto.status} message={auto.message} storageFailed={auto.storageFailed} onRetry={auto.retry}/></div>
@@ -277,6 +304,8 @@ function Editor({offering,assessment,refetch,modal=false,contextLabel,onDone,onF
 
     {!quiz&&<>{reviewBlock}{manage}</>}
     {message&&<p role="alert">{message}</p>}
+    {publishConflict&&<div className="warn" role="alert"><p><strong>This assessment draft changed after it was loaded.</strong> Another tab or device saved a newer version. Nothing was published, and this editor has not overwritten that version. Load the latest draft to review it before publishing again.</p>
+      <button type="button" disabled={loadingLatest} onClick={loadLatestDraft}>{loadingLatest?'Loading…':'Load latest draft'}</button></div>}
     </div>
     <div className={modal?'assessment-editor-actions':'actions'}>
       {quiz&&index>0&&<button onClick={()=>void go(QUIZ_STEPS[index-1][0])}>Back</button>}
