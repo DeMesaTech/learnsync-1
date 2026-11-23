@@ -5,7 +5,8 @@
 **/.ruff_cache/
 **/node_modules/
 **/dist/
-var/
+/var/*
+!/var/uploads/
 test-results/
 playwright-report/
 docs/comms/CHANNEL.md
