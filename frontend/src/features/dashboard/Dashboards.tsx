@@ -60,19 +60,19 @@ export function StudentHome(){
             :<Hero eyebrow="Your next step" title="You’re up to date" detail={d.subjects.length?'Nothing is waiting for you right now. New lessons and work appear here when your teacher publishes them. You can review your subjects or ask study help about what you have learned.':'You are not enrolled in a current subject yet.'} action={d.subjects.length?(only?'Ask Study buddy':'See My Classes'):undefined} to={only?`/student/study-buddy?subject=${only.offering_id}`:'/student/subjects'} icon="✓"/>}
           <section aria-labelledby="subjects-h"><div className="section-head"><h2 id="subjects-h">My Classes</h2><Link state={here} to="/student/subjects">All subjects, including past terms</Link></div>
             {d.subjects.length===0?<p className="panel muted">No current subjects.</p>:<div className="cards">{d.subjects.map(s=><SubjectCard key={s.offering_id} code={s.code} title={s.title} meta={s.to_do?plural(s.to_do,'item')+' to do':'Nothing to do'}
-              progress={s.percent} detail={s.total?`${s.done} of ${s.total} steps done`:'No lessons or work yet'} to={`/student/offerings/${s.offering_id}/classwork`} action="Open" links={[['Progress',`/student/offerings/${s.offering_id}/progress`],['Study buddy',`/student/study-buddy?subject=${s.offering_id}`]]}/>)}</div>}</section>
+              progress={s.percent} detail={s.total?`${s.done} of ${s.total} steps done`:'No lessons or work yet'} to={`/student/offerings/${s.offering_id}/stream`} action="Open" cardLink cardLinkLabel={`Open ${s.title} Stream`} links={[['Progress',`/student/offerings/${s.offering_id}/progress`],['Study buddy',`/student/study-buddy?subject=${s.offering_id}`]]}/>)}</div>}</section>
         </div>
         <div className="dash-side">
           <section className="panel"><h2>To do</h2>
-            {d.todo.length===0?<p className="muted">Nothing needs your action.</p>:<ul className="rows">{d.todo.map(w=><li key={w.assessment_id}><Link state={here} to={workLink(w)}>{w.title}</Link>
-              <span className="muted">{w.subject} · {w.kind==='online_quiz'?'Quiz':'Activity'} · {w.state==='not_open'?(w.available_from?`opens ${dateTime(w.available_from)}`:'not open yet'):w.deadline?(w.late_allowed?`late submission allowed, was due ${dateTime(w.deadline)}`:`due ${dateTime(w.deadline)}`):'no deadline'}</span></li>)}</ul>}
+            {d.todo.length===0?<p className="muted">Nothing needs your action.</p>:<ul className="rows">{d.todo.map(w=><li className="todo-row" key={w.assessment_id}><Link state={here} to={workLink(w)}><strong>{w.title}</strong>
+              <span className="muted">{w.subject} · {w.kind==='online_quiz'?'Quiz':'Activity'} · {w.state==='not_open'?(w.available_from?`opens ${dateTime(w.available_from)}`:'not open yet'):w.deadline?(w.late_allowed?`late submission allowed, was due ${dateTime(w.deadline)}`:`due ${dateTime(w.deadline)}`):'no deadline'}</span></Link></li>)}</ul>}
             {d.todo_total>d.todo.length&&<p className="muted">and {d.todo_total-d.todo.length} more. </p>}
             <Link state={here} className="touch" to="/student/todo">See everything to do</Link>
-            {d.awaiting_feedback.length>0&&<><h3>Awaiting feedback</h3><ul className="rows">{d.awaiting_feedback.map(w=><li key={w.assessment_id}><Link state={here} to={workLink(w)}>{w.title}</Link><span className="muted">{w.subject} · submitted</span></li>)}</ul></>}
-            {d.another_attempt.length>0&&<><h3>Another attempt available</h3><ul className="rows">{d.another_attempt.map(w=><li key={w.assessment_id}><Link state={here} to={workLink(w)}>{w.title}</Link><span className="muted">{w.subject} · {plural(w.attempts_left??0,'attempt')} left</span></li>)}</ul></>}
+            {d.awaiting_feedback.length>0&&<><h3>Awaiting feedback</h3><ul className="rows">{d.awaiting_feedback.map(w=><li className="todo-row" key={w.assessment_id}><Link state={here} to={workLink(w)}><strong>{w.title}</strong><span className="muted">{w.subject} · submitted</span></Link></li>)}</ul></>}
+            {d.another_attempt.length>0&&<><h3>Another attempt available</h3><ul className="rows">{d.another_attempt.map(w=><li className="todo-row" key={w.assessment_id}><Link state={here} to={workLink(w)}><strong>{w.title}</strong><span className="muted">{w.subject} · {plural(w.attempts_left??0,'attempt')} left</span></Link></li>)}</ul></>}
           </section>
           <section className="panel"><h2>Course updates</h2>
-            {d.updates.length===0?<p className="muted">No updates in the last 30 days.</p>:<ul className="rows updates">{d.updates.map((u,i)=><li key={i}><span className="eyebrow">{UPDATE_LABEL[u.type]??u.type} · {when(u.at)}{Date.parse(u.at)>seenBefore.current&&<> · <span className="badge">New</span></>}</span><Link state={here} to={u.link}>{u.title}</Link><span className="muted">{u.subject}</span></li>)}</ul>}
+            {d.updates.length===0?<p className="muted">No updates in the last 30 days.</p>:<ul className="rows updates">{d.updates.map((u,i)=><li className="todo-row" key={i}><Link state={here} to={u.link}><span className="eyebrow">{UPDATE_LABEL[u.type]??u.type} · {when(u.at)}{Date.parse(u.at)>seenBefore.current&&<> · <span className="badge">New</span></>}</span><strong>{u.title}</strong><span className="muted">{u.subject}</span></Link></li>)}</ul>}
           </section>
           <section className="panel"><h2>Need a little help?</h2><p className="muted">Ask a question about your learning materials. Answers cite the lessons they came from.</p>
             <Link state={here} className="button" to={only?`/student/study-buddy?subject=${only.offering_id}`:'/student/subjects'}>{only?'Ask Study buddy':'Choose a subject'}</Link></section>
@@ -81,10 +81,10 @@ export function StudentHome(){
   }}</Page>;
 }
 
-export function SubjectCard({code,title,meta,progress,detail,to,action,links,cardLink=false}:{code:string;title:string;meta:string;progress?:number|null;detail?:string;to:string;action:string;links:[string,string][];cardLink?:boolean}){
+export function SubjectCard({code,title,meta,progress,detail,to,action,links,cardLink=false,cardLinkLabel}:{code:string;title:string;meta:string;progress?:number|null;detail?:string;to:string;action:string;links:[string,string][];cardLink?:boolean;cardLinkLabel?:string}){
   const here=useHere();
   return <article className={`subject-card${cardLink?' has-card-link':''}`}><div className="subject-top"><span className="eyebrow">{code}</span><span className="badge">{meta}</span></div>
-    {cardLink&&<Link state={here} className="subject-card-main-link" to={to} aria-label={`Open ${title} Stream`}/>}
+    {cardLink&&<Link state={here} className="subject-card-main-link" to={to} aria-label={cardLinkLabel??`Open ${title} Stream`}/>}
     <h3>{title}</h3>
     {progress!==undefined&&progress!==null&&<><div className="bar-track" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label={`${title} progress`}><span style={{width:`${progress}%`}}/></div></>}
     {detail&&<p className="muted">{detail}</p>}

@@ -49,6 +49,8 @@ export function GradebookPage(){
   },[showPublishing]);
   const [message,setMessage]=useState('');
   const [find,setFind]=useState('');const [section,setSection]=useState('');const [only,setOnly]=useState('');   // view filters: they never change what Publish acts on
+  const [showSection,setShowSection]=useState(true);
+  const [showStudentNumber,setShowStudentNumber]=useState(true);
   const [page,setPage]=useState(1);const [pageSize,setPageSize]=useState(25);
   const [editing,setEditing]=useState(false);
   const [edits,setEdits]=useState<Record<string,string>>({});          // cellKey -> typed score, only for cells that differ
@@ -70,12 +72,24 @@ export function GradebookPage(){
   const currentPage=Math.min(page,pageCount);
   const pageRows=rows.slice((currentPage-1)*pageSize,currentPage*pageSize);
   const byPeriod=(period:string)=>book.columns.filter(c=>c.period===period);
-  const label=(key:string|null)=>book.policy.categories.find(c=>c.key===key)?.label??key??'';
   const stats=Object.fromEntries(periods.map(p=>[p,periodStats(book,p)])) as Record<string,Stats>;
   const next=periods.find(p=>stats[p].changes>0);
   const courseUnlocked=book.policy.periods.every(p=>book.rows.some(r=>r.published[p.key]));
   const flaggedRows=book.rows.filter(r=>Object.values(r.published).some(p=>p.needs_review));
   const changed=Object.keys(edits).length;
+
+  const categoryColumns=(period:string)=>{
+    const columns=byPeriod(period);
+    const groups=new Map<string,{label:string;columns:Gradebook['columns']}>();
+    for(const column of columns){
+      const key=column.category_key??'uncategorized';
+      const label=book.policy.categories.find(c=>c.key===key)?.label??(key==='uncategorized'?'Uncategorized':key);
+      const group=groups.get(key)??{label,columns:[]};
+      group.columns.push(column);
+      groups.set(key,group);
+    }
+    return [...groups.entries()].map(([key,group])=>({key,...group}));
+  };
 
   const editable=(kind:string,cell?:Cell)=>!!cell&&kind!=='online_quiz';
   function typeScore(column:string,student:string,original:Cell,value:string){
@@ -126,18 +140,27 @@ export function GradebookPage(){
         <label>Section<select aria-label="Filter scores and grades by section" value={section} onChange={e=>{setSection(e.target.value);setPage(1)}}><option value="">All sections ({book.rows.length})</option>{offering.sections.map(s=><option key={s.id} value={s.name}>{s.name} ({s.enrolled})</option>)}</select></label>
         <label>Period<select value={only} onChange={e=>setOnly(e.target.value)}><option value="">All periods</option>{book.policy.periods.map(p=><option key={p.key} value={p.key}>{PERIOD_LABEL[p.key]??p.key}</option>)}</select></label>
       </div>
+      <div className="gradebook-column-toggles" role="group" aria-label="Table columns">
+        <span className="muted">Student details</span>
+        <label className="inline"><input type="checkbox" checked={showSection} onChange={e=>setShowSection(e.target.checked)}/> Section</label>
+        <label className="inline"><input type="checkbox" checked={showStudentNumber} onChange={e=>setShowStudentNumber(e.target.checked)}/> Student number</label>
+      </div>
       <p className="muted" role="status">Showing {rows.length} of {book.rows.length} students.{editing?' Editing: type a score in any cell, then save once.':''}</p>
       {!editing&&<div className="actions"><button className="icon-button" type="button" aria-label="Edit scores" title="Edit scores" disabled={closed} onClick={()=>{setEditing(true);setMessage('')}}>✎</button><span className="muted">{closed?'This term is closed, so scores are read-only.':'Type scores straight into the table below.'}</span></div>}
       {editing&&<div className="actions sticky-bar"><button className="primary" disabled={changed===0||saving} onClick={saveAll}>{saving?'Saving…':changed===0?'Save scores':`Save ${changed} changed score${changed===1?'':'s'}`}</button><button disabled={saving} onClick={leaveEditing}>Cancel</button><span className="muted">{changed===0?'No changes yet.':'Nothing is saved until you press Save.'}</span></div>}
-      <div className="table-wrap gradebook" role="region" aria-label="Gradebook; section and student details stay fixed while scores scroll horizontally" tabIndex={0}><table>
+      <div className={`table-wrap gradebook${showSection?'':' hide-section'}${showStudentNumber?'':' hide-student-number'}`} role="region" aria-label="Gradebook; section and student details stay fixed while scores scroll horizontally" tabIndex={0}><table>
         <thead>
-          <tr><th scope="col" className="sticky sticky-section" rowSpan={2}>Section</th><th scope="col" className="sticky-number" rowSpan={2}>Student number</th><th scope="col" className="sticky-student" rowSpan={2}>Student</th>{shown.filter(p=>p!=='course').map(p=><th key={p} colSpan={byPeriod(p).length+1}>{PERIOD_LABEL[p]??p}</th>)}<th>Course</th></tr>
+          <tr>{showSection&&<th scope="col" className="sticky sticky-section" rowSpan={3}>Section</th>}<th scope="col" className={`sticky-number${showStudentNumber?'':' hidden-column'}`} rowSpan={3}>Student number</th><th scope="col" className="sticky-student" rowSpan={3}>Student</th>{shown.filter(p=>p!=='course').map(p=>{
+            const groups=categoryColumns(p);
+            return <th key={p} colSpan={groups.reduce((sum,group)=>sum+Math.max(1,group.columns.length),0)+1}>{PERIOD_LABEL[p]??p}</th>;
+          })}{shown.includes('course')&&<th rowSpan={3}>Course</th>}</tr>
+          <tr>{shown.filter(p=>p!=='course').flatMap(p=>[...categoryColumns(p).map(group=><th key={`${p}-${group.key}`} className="gradebook-category-header" colSpan={Math.max(1,group.columns.length)}>{group.label}{group.columns.length>0&&<small>{fmt(book.policy.categories.find(c=>c.key===group.key)?.weight)}%</small>}</th>),<th key={`${p}-grade`} className="gradebook-period-grade-header">{PERIOD_LABEL[p]??p} grade</th>])}</tr>
           <tr>
-            {shown.filter(p=>p!=='course').flatMap(p=>[...byPeriod(p).map(c=><th key={c.id}><span className="gradebook-assessment-title"><span>{c.title}</span><Link className="icon-button" state={here} to={`/faculty/offerings/${offering.id}/assessments/${c.id}/scores`} aria-label={`Open ${c.title} scores and attempts`} title={`Open ${c.title} scores and attempts`}>↗</Link></span><br/><span className="muted">{label(c.category_key)} · /{fmt(c.max_points)}</span></th>),<th key={p+'g'}>Grade</th>])}
-            <th>Grade</th></tr></thead>
+            {shown.filter(p=>p!=='course').flatMap(p=>[...categoryColumns(p).flatMap(group=>group.columns.length?group.columns.map(c=><th key={c.id} className="gradebook-assessment-header"><span className="gradebook-assessment-title"><span>{c.title}</span><Link className="icon-button" state={here} to={`/faculty/offerings/${offering.id}/assessments/${c.id}/scores`} aria-label={`Open ${c.title} scores and attempts`} title={`Open ${c.title} scores and attempts`}>↗</Link></span><br/><span className="muted">/{fmt(c.max_points)}</span></th>):[<th key={`${p}-${group.key}-empty`} className="gradebook-assessment-header">No items</th>]),<th key={`${p}-grade-value`} className="gradebook-period-grade-header">Grade</th>])}
+            {shown.includes('course')&&<th>Grade</th>}</tr></thead>
         <tbody>{pageRows.map(r=><tr key={r.student_id}>
-          <td className="sticky sticky-section">{r.section??'—'}</td><td className="student-number sticky-number">{r.student_number}</td><th className="student-name sticky-student" scope="row"><button className="linklike" onClick={()=>setDetail(r)}>{r.display_name}</button></th>
-          {shown.filter(p=>p!=='course').flatMap(p=>[...byPeriod(p).map(c=><td key={c.id}><CellView cell={r.cells[c.id]} kind={c.kind} column={c.title} student={r.display_name} editing={editing&&editable(c.kind,r.cells[c.id])} value={edits[cellKey(c.id,r.student_id)]} problem={rejected[cellKey(c.id,r.student_id)]}
+          {showSection&&<td className="sticky sticky-section">{r.section??'—'}</td>}<td className={`student-number sticky-number${showStudentNumber?'':' hidden-column'}`}>{r.student_number}</td><th className="student-name sticky-student" scope="row"><button className="linklike" onClick={()=>setDetail(r)}>{r.display_name}</button></th>
+          {shown.filter(p=>p!=='course').flatMap(p=>[...byPeriod(p).map(c=><td key={c.id} className="gradebook-category-cell"><CellView cell={r.cells[c.id]} kind={c.kind} column={c.title} student={r.display_name} editing={editing&&editable(c.kind,r.cells[c.id])} value={edits[cellKey(c.id,r.student_id)]} problem={rejected[cellKey(c.id,r.student_id)]}
             onType={v=>typeScore(c.id,r.student_id,r.cells[c.id],v)}/></td>),
             <td key={p+'g'}><GradeCell row={r} period={p} onReview={setDetail}/></td>])}
           <td><GradeCell row={r} period="course" onReview={setDetail}/></td></tr>)}</tbody></table></div>

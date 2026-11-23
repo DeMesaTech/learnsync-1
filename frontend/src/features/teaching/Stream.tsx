@@ -12,7 +12,7 @@ import type {Item,LearnItem} from './types';
 
 const uploadedAt=(iso:string)=>new Date(iso).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
 const KIND:Record<string,string>={lesson:'Lesson',file:'File',reference:'Link',online_quiz:'Quiz',offline_quiz:'Paper quiz',activity:'Activity',exam:'Examination',manual:'Teacher-scored item'};
-const ICON:Record<string,string>={lesson:'▱',file:'▣',reference:'↗',online_quiz:'☷',offline_quiz:'▤',activity:'▧',exam:'▤',manual:'✎'};
+const ICON:Record<string,string>={lesson:'▱',file:'▣',reference:'↗',online_quiz:'☷',offline_quiz:'▤',activity:'▧',exam:'▤',manual:'✎',announcement:'▤'};
 type MaterialCategory='all'|'lesson'|'quiz'|'activity'|'exam';
 const categoryOf=(kind:string):Exclude<MaterialCategory,'all'>=>kind==='online_quiz'||kind==='offline_quiz'?'quiz':kind==='activity'||kind==='manual'?'activity':kind==='exam'?'exam':'lesson';
 
@@ -48,7 +48,7 @@ export function FacultyStream(){
 
 interface Post{id:string;title:string;body:string;published_at:string|null}
 interface Results{results:{assessment_id:string;title:string;released_at:string}[];grades:{period:string;published_at:string}[]}
-interface Entry{key:string;type:string;title:string;at:string;icon:string;to:string}
+interface Entry{key:string;type:string;title:string;at:string;icon:string;to?:string;body?:string}
 type Week={days:{label:string;date:string;count:number;today:boolean;future:boolean}[];lessons_today:number;work_today:number};
 
 function activityWeek(progress:Progress):Week{
@@ -80,29 +80,25 @@ export function StudentStream(){
   const error=posts.error??items.error??results.error??progress.error;
   if(error)return <p role="alert">{error.message}</p>;
   if(!posts.data||!items.data||!results.data||!progress.data)return <p>Loading…</p>;
-  const feed:Entry[]=[
+  const updates:Entry[]=[
     ...items.data.map(i=>({key:'i'+i.id,type:i.kind==='lesson'?'New lesson':i.kind==='file'?'New file':'New link',title:i.title,at:i.published_at,icon:i.kind,to:`${base}/lessons/${i.id}`})),
     ...results.data.results.map(r=>({key:'r'+r.assessment_id,type:'Result released',title:r.title,at:r.released_at,icon:'result',to:`${base}/results`})),
     ...results.data.grades.map(g=>({key:'g'+g.period,type:'Grade published',title:`${g.period.charAt(0).toUpperCase()+g.period.slice(1)} grade`,at:g.published_at,icon:'manual',to:`${base}/results`})),
   ].sort((a,b)=>a.at<b.at?1:-1).slice(0,30);
+  const feed:Entry[]=[
+    ...posts.data.items.filter(p=>p.published_at).map(p=>({key:'p'+p.id,type:'Announcement',title:p.title,at:p.published_at!,icon:'announcement',body:p.body})),
+    ...updates,
+  ].sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)||a.key.localeCompare(b.key));
   const week=activityWeek(progress.data);
   return <>
-    <section className="panel student-stream-announcements" aria-labelledby="stream-announcements-heading">
-      <h2 id="stream-announcements-heading">Announcements</h2>
-      {posts.data.items.length===0?<p className="muted">No announcements for this subject yet.</p>:
-        <ul className="seq compact manager-material-list">{posts.data.items.filter(p=>p.published_at).map(p=><li className="manager-material-row" key={p.id}>
-          <span className="material-kind-icon kind-announcement" aria-hidden="true">▤</span>
-          <span className="grow"><strong>{p.title}</strong><span className="muted"><time dateTime={p.published_at!}>{uploadedAt(p.published_at!)}</time></span>
-            <span className="pre stream-announcement-body">{p.body}</span></span>
-        </li>)}</ul>}
-    </section>
     <section className="panel student-stream-updates" aria-labelledby="stream-updates-heading">
-      <h2 id="stream-updates-heading">Published materials and results</h2>
-      {feed.length===0?<p className="muted">Published lessons, files, links, released results and grades appear here.</p>:
-        <ul className="seq compact manager-material-list">{feed.map(e=><li className="manager-material-row manager-material-row-clickable" key={e.key}>
-          <Link className="manager-material-row-link" to={e.to} aria-label={`Open ${e.title}`}/>
+      <h2 id="stream-updates-heading">Course updates</h2>
+      {feed.length===0?<p className="muted">Announcements, published lessons, results and grades appear here.</p>:
+        <ul className="seq compact manager-material-list">{feed.map(e=><li className={`manager-material-row${e.to?' manager-material-row-clickable':''}`} key={e.key}>
+          {e.to&&<Link className="manager-material-row-link" to={e.to} aria-label={`Open ${e.title}`}/>}
           <span className={`material-kind-icon kind-${e.icon}`} aria-hidden="true">{ICON[e.icon]??'▣'}</span>
-          <span className="grow"><strong>{e.title}</strong><span className="muted">{e.type} · <time dateTime={e.at}>{uploadedAt(e.at)}</time></span></span>
+          <span className="grow"><strong>{e.title}</strong><span className="muted">{e.type} · <time dateTime={e.at}>{uploadedAt(e.at)}</time></span>
+            {e.body&&<span className="pre stream-announcement-body">{e.body}</span>}</span>
         </li>)}</ul>}
     </section>
     <section className="panel" aria-labelledby="learning-activity-heading">

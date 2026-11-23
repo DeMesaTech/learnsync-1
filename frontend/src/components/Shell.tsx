@@ -53,11 +53,11 @@ export function Shell(){
     queryFn:async():Promise<ClassLink[]>=>{
       if(session?.user?.role==='faculty'){
         const offerings=await api<OfferingSummary[]>('/me/offerings');
-        return offerings.map(o=>({to:`/faculty/offerings/${o.id}/classwork`,label:o.subject.code,icon:'↳'}));
+        return offerings.map(o=>({to:`/faculty/offerings/${o.id}/stream`,label:o.subject.code,icon:'↳'}));
       }
       if(session?.user?.role==='student'){
         const subjects=await api<MySubject[]>('/me/subjects');
-        return subjects.map(s=>({to:`/student/offerings/${s.offering_id}/classwork`,label:s.subject.code,icon:'↳'}));
+        return subjects.map(s=>({to:`/student/offerings/${s.offering_id}/stream`,label:s.subject.code,icon:'↳'}));
       }
       return [];
     }});

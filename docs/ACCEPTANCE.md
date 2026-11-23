@@ -1,5 +1,42 @@
 # Acceptance status
 
+### 2026-11-23 (Subject links open Stream by default)
+- Updated faculty and student subject-list cards, student dashboard cards, and both roles' sidebar subject shortcuts to open the subject Stream by default; faculty dashboard cards already used Stream. Explicit links to Classwork, grades/results, progress, and Study buddy remain unchanged.
+- Passed frontend production build/type-check, frontend ESLint, and `git diff --check`.
+- Browser verified student dashboard and My Classes subject cards link to Stream, and sidebar subject shortcuts open Stream. Withdrawn-subject cards retain their Results destination.
+
+### 2026-11-23 (Student Classwork selector and mixed Stream)
+- Replaced the student Classwork type pills with the same Material category label and options as Faculty Classwork, without counts. All materials is the default when no `type` is selected; category routes, completion filter, chapter search, results, and next-step actions remain available.
+- Combined student announcements, published materials, released results, and grades into one newest-first Course updates feed. Announcement bodies and timestamps remain visible, linked materials/results remain actionable, and Learning activity this week stays separate.
+- Updated the design system to reflect the shared selector pattern and mixed student Stream.
+- Passed frontend production build/type-check, frontend ESLint, and `git diff --check`.
+- Browser verified the All materials category and All completion defaults, the exact category options, and that selecting Activities retains the `?type=activity` route. The Stream rendered one combined panel, three announcement rows with bodies, 16 chronological entries, no separate Announcements panel, and the weekly activity section.
+
+### 2026-11-23 (Student dashboard tiles and chapter view)
+- Made student subject cards full-area links to Classwork or Results and removed the redundant Open link; Progress, Grades & results, and Study buddy links remain independently usable.
+- Styled student dashboard to-do, feedback, retry, and course-update rows as full-tile links.
+- Removed the student Classwork all-chapters display toggle and kept one selected chapter visible, using the same chapter-detail panel styling as Faculty Classwork.
+- Passed frontend production build/type-check, frontend ESLint, and `git diff --check`.
+- Browser verified subject cards open Classwork from the tile surface, dashboard to-do tiles open their work, footer Progress links remain usable, and selecting Chapter 2 shows only its two materials with no all-chapters toggle.
+
+### 2026-11-23 (Assessment score student-number cleanup)
+- Removed the duplicated student-number line from no-attempt and activity/score table rows on the assessment scores page.
+- Student names remain unchanged; Section, submission, score and feedback columns retain their existing behavior.
+
+### 2026-11-23 (Wider answer-review dialog)
+- Increased the quiz answer-review dialog width from the 560px default to 760px, with the existing responsive viewport inset.
+- Browser verified the live Review answers dialog is 684px wide in the current viewport and 619.8px for the dialog heading content area.
+
+### 2026-11-23 (Gradebook spreadsheet layout and column toggles)
+- Added Section and Student number checkboxes above the Gradebook table for independent show/hide control.
+- Student name remains fixed as the final identity column, with sticky offsets recalculated when Section or Student number is hidden.
+- Restructured period headers into a spreadsheet-style three-tier layout: period, grading-category group, and assessment/grade columns.
+- Category headers retain the policy weight and visually group all assessments under the same category.
+- Passed frontend production build/type-check, frontend ESLint, and `git diff --check`.
+- Browser verified the Gradebook has three header tiers and category weight labels.
+- Browser verified hiding Section and Student number removes their table columns while preserving the Student name column.
+- Added explicit category-group borders, with 2px category outlines and 1px assessment/grade column borders.
+
 ### 2026-11-23 (Shared hovers and gradebook period modal)
 - Added shared hover states for enabled buttons, button-style links, summaries and selects, including border, shadow and surface feedback.
 - Excluded link-style gradebook student names and other `.linklike` table buttons from the shared hover treatment.

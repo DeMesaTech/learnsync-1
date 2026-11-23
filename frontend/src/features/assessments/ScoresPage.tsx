@@ -68,7 +68,7 @@ function NoAttemptStudents({rows,sections}:{rows:ScoreRow[];sections:OfferingSum
     <p className="muted">Online quizzes are auto-scored from submitted attempts. A student with no attempt cannot be assigned a manual score.</p>
     {rows.length===0?<p className="muted">All students in this section have attempted the quiz.</p>:
       <div className="table-wrap" role="region" aria-label="Students with no quiz attempt" tabIndex={0}><table><thead><tr><th>Student</th><th>Section</th><th>Status</th></tr></thead>
-        <tbody>{rows.map(row=><tr key={row.student_id}><th scope="row">{row.student}<br/><span className="muted">{row.student_number}</span></th>
+        <tbody>{rows.map(row=><tr key={row.student_id}><th scope="row">{row.student}</th>
           <td>{sections.find(section=>section.id===row.section_id)?.name??'—'}</td>
           <td><span className="muted" title="No submission exists, so there is no automatically calculated quiz score.">Not attempted</span></td></tr>)}</tbody></table></div>}
   </section>;
@@ -110,7 +110,7 @@ function ScoreRowEditor({row,section,kind,base,max,closed,onSaved,setMessage,onP
   }
   const sub=row.latest;
   return <tr role="row">
-    <td role="cell" data-label="Student">{row.student}<br/><span className="muted">{row.student_number}</span></td>
+    <td role="cell" data-label="Student">{row.student}</td>
     <td role="cell" data-label="Section">{section}</td>
     {kind==='activity'&&<td role="cell" data-label="Submission">{sub?<>
       <a className="touch" href={`/api/files/${sub.file.id}/download`}>{sub.file.name}</a><br/>
@@ -172,7 +172,7 @@ function ReviewDialog({base,attemptId,closed,onClose,onChanged}:{base:string;att
     try{await send('PUT',`${base}/attempts/${attemptId}/answers/${key}`,{awarded,reason});setMessage('Correction saved. The student keeps seeing the released score until you release again.');onChanged()}
     catch(e){setMessage(errorText(e))}
   }
-  return <Dialog title="Review answers" onClose={onClose}>
+  return <Dialog title="Review answers" onClose={onClose} className="review-answers-dialog">
     {detail.isPending?<p>Loading…</p>:detail.error?<p role="alert">{detail.error.message}</p>:<>
       <p>Attempt {detail.data.attempt_number}: {fmt(detail.data.score)} / {fmt(detail.data.max_score)}</p>
       {message&&<p role="status">{message}</p>}

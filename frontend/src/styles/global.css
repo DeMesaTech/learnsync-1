@@ -671,6 +671,10 @@ dialog.assessment-editor-dialog {
   overflow: hidden
 }
 
+.rows.updates li.todo-row {
+  padding: 0
+}
+
 .rows li.todo-row>a {
   display: grid;
   align-content: center;
@@ -709,6 +713,10 @@ dialog.assessment-editor-dialog {
 dialog.gradebook-detail-dialog {
   width: min(920px, calc(100vw - 24px));
   max-height: 92dvh
+}
+
+dialog.review-answers-dialog {
+  width: min(760px, calc(100vw - 24px))
 }
 
 .gradebook-detail-actions {
@@ -2318,6 +2326,85 @@ details>summary {
   width: 180px;
   min-width: 180px;
   background: var(--surface)
+}
+
+.gradebook.hide-section .sticky-number {
+  left: 0
+}
+
+.gradebook.hide-section .sticky-student {
+  left: 120px
+}
+
+.gradebook.hide-student-number .sticky-number,
+.gradebook.hide-student-number .sticky-student {
+  left: 0
+}
+
+.gradebook.hide-student-number.hide-section .sticky-student {
+  left: 0
+}
+
+.gradebook.hide-student-number .sticky-number,
+.gradebook.hide-student-number tbody .sticky-number,
+.gradebook.hide-student-number thead .sticky-number {
+  display: none
+}
+
+.gradebook.hide-section.hide-student-number .sticky-student {
+  left: 0
+}
+
+.gradebook.hide-section:not(.hide-student-number) .sticky-student {
+  left: 120px
+}
+
+.gradebook.hide-student-number:not(.hide-section) .sticky-student {
+  left: 100px
+}
+
+.gradebook-column-toggles {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 4px 0 10px
+}
+
+.gradebook-column-toggles>span {
+  margin-right: 2px
+}
+
+.gradebook-column-toggles label {
+  margin: 0
+}
+
+.gradebook-category-header {
+  background: color-mix(in srgb, var(--action) 8%, var(--surface));
+  border-left: 3px solid var(--action);
+  border-right: 3px solid var(--action);
+  border-top: 3px solid var(--action);
+  border-bottom: 1px solid var(--action);
+  text-align: center
+}
+
+.gradebook-category-header small {
+  display: block;
+  color: var(--muted);
+  font-size: .68rem
+}
+
+.gradebook-assessment-header,
+.gradebook-period-grade-header {
+  text-align: center;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border)
+}
+
+.gradebook tbody .gradebook-category-cell {
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border)
 }
 
 .gradebook thead .sticky-number,
@@ -5104,16 +5191,6 @@ details.topic[open]>summary::before {
   margin-top: 10px
 }
 
-/* Student classwork: the type pills are a second level under the Classwork tab, so they look different from it */
-.type-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px 16px;
-  margin: 4px 0 12px
-}
-
 .type-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -5365,90 +5442,6 @@ details.topic[open]>summary::before {
   overflow-wrap: anywhere
 }
 
-.chapter-display-options {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 16px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-alt)
-}
-
-.chapter-display-options .segmented {
-  margin: 0
-}
-
-.chapter-display-options .segmented button {
-  width: 44px;
-  padding: 0;
-  font-size: 1.15rem
-}
-
-.chapter-all-list {
-  display: grid;
-  gap: 16px
-}
-
-.chapter-all-entry {
-  min-width: 0;
-  scroll-margin-top: calc(var(--header-h, 77px) + 12px)
-}
-
-.chapter-all-entry>summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-  list-style: none
-}
-
-.chapter-all-entry>summary::-webkit-details-marker {
-  display: none
-}
-
-.chapter-all-entry>summary::before {
-  content: '▸';
-  flex: none;
-  color: var(--muted)
-}
-
-.chapter-all-entry[open]>summary::before {
-  content: '▾'
-}
-
-.chapter-all-entry>summary h3 {
-  flex: 1;
-  margin: 0;
-  font-size: 1.2rem;
-  overflow-wrap: anywhere
-}
-
-.chapter-all-entry>summary:focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px
-}
-
-.chapter-all-entry[open]>:not(summary) {
-  margin-top: 8px
-}
-
-.chapter-all-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 12px;
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border)
-}
-
 .chapter-detail-heading .muted {
   margin: 0
 }
@@ -5474,11 +5467,6 @@ details.topic[open]>summary::before {
   display: grid;
   gap: 10px;
   margin: 12px 0 4px
-}
-
-.chapter-material-tools .type-row,
-.chapter-material-tools .type-tabs {
-  margin: 0
 }
 
 .chapter-material-search {
