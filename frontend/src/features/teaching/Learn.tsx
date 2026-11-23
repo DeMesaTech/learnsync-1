@@ -98,7 +98,7 @@ export function StudentLesson(){
   if(query.error)return <section className="panel"><h2>Not available</h2><p role="alert">{query.error.message}</p><Link to={back}>Back to classwork</Link></section>;
   const i=query.data;
   const nextLabel=(k?:string)=>k==='file'?'Next file':k==='reference'?'Next link':'Next lesson';
-  return <><ClassworkTypes base={`/student/offerings/${offeringId}`} current="lesson"/><article className="panel"><p className="back"><Link to={back}>← Back to {origin.label}</Link></p><h2>{i.title}</h2>
+  return <><article className="panel"><p className="back"><Link to={back}>← Back to {origin.label}</Link></p><h2>{i.title}</h2>
     {i.kind==='lesson'&&<div className="rich-content" dangerouslySetInnerHTML={{__html:i.body_html??''}}/>}
     {i.kind==='file'&&i.file&&<FileCard file={i.file}/>}
     {i.kind==='reference'&&<LinkCard url={i.reference_url} note={i.reference_note}/>}

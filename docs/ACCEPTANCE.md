@@ -1,5 +1,28 @@
 # Acceptance status
 
+### 2026-11-23 (Gradebook category borders)
+- Carried the thick accent borders from each weighted category header through assessment headers and every student row; empty-category placeholders receive both edges.
+- Added an E2E assertion that the category border remains weighted through all student rows. Passed frontend build/type-check, ESLint, `node --check frontend/e2e/grades-edit.mjs`, and `git diff --check`.
+- Browser verified the accent border through the bottom of the visible gradebook table. The full E2E scenario was not run because it requires explicit confirmation of a disposable database.
+
+### 2026-11-23 (Gradebook merged edit-action header)
+- In edit mode, the Save/Cancel action bar and its status are placed in one merged sticky header cell above Section, Student number, and Student; the cell span follows the visible detail columns. Read-mode Edit scores placement and tooltip are unchanged.
+- Passed frontend production build/type-check, ESLint, `node --check frontend/e2e/grades-edit.mjs`, and `git diff --check`.
+- Added E2E assertions for merged-cell placement, header order, dynamic span, and hiding the edit header when edit mode ends. The full scenario was not run because it requires explicit confirmation of a disposable database.
+- Not browser-verified: the integrated app opened at the login page, and no authenticated session was available.
+
+### 2026-11-23 (Faculty gradebook compact columns)
+- Moved Edit scores into the sticky Section header, with a Student-header fallback when Section is hidden; moved the typing instruction into its tooltip. Assessment names are now tooltip/accessibility labels, maximum points remain visible, and the per-assessment score links were removed.
+- Gradebook headers now include every configured policy category in each period; categories without assessments retain blank header/body columns.
+- Passed frontend build/type-check, ESLint, `node --check frontend/e2e/grades-edit.mjs`, and `git diff --check`.
+- Browser verified the edit-button placement and fallback, its tooltip, hidden assessment titles with accessible names, removed score links, and empty category columns (10 blank headers and 250 blank cells on the current page).
+- Added focused assertions to `frontend/e2e/grades-edit.mjs`; the full scenario was not run because it requires explicit confirmation of a disposable database.
+
+### 2026-11-23 (Student lesson detail navigation)
+- Removed the duplicate Classwork type navigation from student lesson/file/link detail pages; the subject tabs and Back to Classwork link remain available.
+- Passed frontend production build/type-check, frontend ESLint, and `git diff --check`.
+- Browser verified the shared lesson-detail URL no longer renders the Classwork type navigation while retaining subject tabs, the back link, and lesson content.
+
 ### 2026-11-23 (Subject links open Stream by default)
 - Updated faculty and student subject-list cards, student dashboard cards, and both roles' sidebar subject shortcuts to open the subject Stream by default; faculty dashboard cards already used Stream. Explicit links to Classwork, grades/results, progress, and Study buddy remain unchanged.
 - Passed frontend production build/type-check, frontend ESLint, and `git diff --check`.

@@ -25,7 +25,7 @@ try{
   const teach=await newPage(browser,{state:F});await teach.goto('/faculty');
   const uid=()=>crypto.randomUUID();
   const outline={course:{name:'Intro',code:'ENT 101',units:'3'},outcomes:[{id:uid(),text:'x'}],chapters:[{id:uid(),title:'Chapter 1',weeks:'W1',topics:[{id:uid(),title:'T'}]}]};
-  const policy={categories:[{key:'quiz',label:'Quizzes',weight:40},{key:'exam',label:'Examinations',weight:60}],periods:[{key:'midterm',label:'Midterm',share:50},{key:'finals',label:'Finals',share:50}],transmutation:'raw',passing:75,late_attendance_fraction:0.5};
+  const policy={categories:[{key:'quiz',label:'Quizzes',weight:20},{key:'activity',label:'Activities',weight:20},{key:'attendance',label:'Attendance',weight:10},{key:'exam',label:'Examinations',weight:50}],periods:[{key:'midterm',label:'Midterm',share:50},{key:'finals',label:'Finals',share:50}],transmutation:'raw',passing:75,late_attendance_fraction:0.5};
   const d=(await call(teach,'POST',`/teach/offerings/${O}/syllabus/draft`)).data;
   const sv=(await call(teach,'PUT',`/teach/offerings/${O}/syllabus/draft`,{expected_counter:d.counter,outline,grading_policy:policy})).data;
   await call(teach,'POST',`/teach/offerings/${O}/syllabus/draft/publish`,{expected_counter:sv.counter});
@@ -43,6 +43,17 @@ try{
 
   // ---- A: read-first
   check('the gradebook opens read-first: no score inputs',await page.locator('input.score-input').count()===0);
+  const categoryLabels=(await page.locator('.gradebook-category-header').allTextContents()).join(' ');
+  check('all policy categories appear in the period headers',['Quizzes','Activities','Attendance','Examinations'].every(label=>categoryLabels.includes(label)),categoryLabels);
+  check('empty categories retain blank columns for each period',await page.locator('th.gradebook-assessment-header[aria-label="Activities: no items"]').count()===2&&await page.locator('td.gradebook-category-cell[aria-label="Activities: no items"]').count()===6);
+  const activityEdges=await page.locator('td.gradebook-category-cell[aria-label="Activities: no items"]').evaluateAll(cells=>cells.length===6&&cells.every(cell=>{
+    const style=getComputedStyle(cell);
+    return cell.classList.contains('gradebook-category-edge-start')&&cell.classList.contains('gradebook-category-edge-end')&&parseFloat(style.borderLeftWidth)>=2&&parseFloat(style.borderRightWidth)>=2;
+  }));
+  check('weighted category borders continue through every student row',activityEdges);
+  const editScores=page.getByRole('button',{name:'Edit scores'});
+  check('Edit scores is in the sticky Section header with its instruction tooltip',await page.locator('th.sticky-section').getByRole('button',{name:'Edit scores'}).count()===1&&await editScores.getAttribute('title')==='Type scores straight into the table below.');
+  check('assessment titles are tooltips without extra score links',await page.locator('th.gradebook-assessment-header[title="Midterm exam"]').count()===1&&await page.locator('.gradebook a.icon-button').count()===0);
   const bodyControls=await page.evaluate(()=>[...document.querySelectorAll('main a[href],main button,main input,main select,main textarea,main summary')].filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&!e.closest('nav.tabs')}).length);
   check(`the page body has ${bodyControls} controls in read mode (target 25 or fewer)`,bodyControls<=25,String(bodyControls));
   check('axe finds no violations in read mode',(await axe(page)).length===0);
@@ -50,6 +61,16 @@ try{
   // ---- B: edit six cells, one Save
   await page.getByRole('button',{name:'Edit scores'}).click();
   await page.locator('input.score-input').first().waitFor();
+  const editHeader=page.locator('th.gradebook-edit-header');
+  check('edit actions move into one merged header cell above student details',await editHeader.getAttribute('colspan')==='3'&&await editHeader.locator('.actions.sticky-bar').count()===1);
+  check('fixed student detail headers sit in the row below edit actions',await page.locator('thead tr').first().locator('th.gradebook-edit-header').count()===1&&await page.locator('thead tr').nth(1).locator('th.sticky-section, th.sticky-number, th.sticky-student').count()===3);
+  const tableColumns=page.getByRole('group',{name:'Table columns'});
+  const sectionToggle=tableColumns.getByLabel('Section'),numberToggle=tableColumns.getByLabel('Student number');
+  await sectionToggle.uncheck();
+  check('the merged action cell follows the Section visibility toggle',await editHeader.getAttribute('colspan')==='2');
+  await numberToggle.uncheck();
+  check('the merged action cell follows the Student number visibility toggle',await editHeader.getAttribute('colspan')==='1');
+  await sectionToggle.check();await numberToggle.check();
   const inputs=page.locator('input.score-input');const n=await inputs.count();
   check('Edit scores turns every scoreable cell into an input',n===6,String(n));
   check('axe finds no violations in edit mode',(await axe(page)).length===0);
@@ -60,7 +81,7 @@ try{
   const book=await grades();
   const saved=book.rows.flatMap(r=>Object.values(r.cells)).map(c=>Number(c.score)).sort((a,b)=>a-b);
   check('all six scores were saved by one Save',JSON.stringify(saved)===JSON.stringify([15,18,20,38.5,44,50]),JSON.stringify(saved));
-  check('edit mode closed and the cells show text again',await page.locator('input.score-input').count()===0);
+  check('edit mode closed and the cells show text again',await page.locator('input.score-input').count()===0&&await page.locator('th.gradebook-edit-header').count()===0);
 
   // ---- C: a conflict saves nothing and names the cell
   await page.getByRole('button',{name:'Edit scores'}).click();await page.locator('input.score-input').first().waitFor();

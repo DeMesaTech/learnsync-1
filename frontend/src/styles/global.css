@@ -2283,15 +2283,26 @@ details>summary {
   padding-inline: 6px
 }
 
-.gradebook-assessment-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 44px
+.gradebook-sticky-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px
 }
 
-.gradebook-assessment-title .icon-button {
+.gradebook-sticky-heading .icon-button {
   flex: none
+}
+
+.gradebook .gradebook-edit-header {
+  vertical-align: middle
+}
+
+.gradebook .gradebook-edit-header .sticky-bar {
+  position: static;
+  margin: 0;
+  padding: 0;
+  border-top: 0
 }
 
 .gradebook .sticky {
@@ -2405,6 +2416,16 @@ details>summary {
 .gradebook tbody .gradebook-category-cell {
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border)
+}
+
+.gradebook thead .gradebook-category-edge-start,
+.gradebook tbody .gradebook-category-cell.gradebook-category-edge-start {
+  border-left: 3px solid var(--action)
+}
+
+.gradebook thead .gradebook-category-edge-end,
+.gradebook tbody .gradebook-category-cell.gradebook-category-edge-end {
+  border-right: 3px solid var(--action)
 }
 
 .gradebook thead .sticky-number,

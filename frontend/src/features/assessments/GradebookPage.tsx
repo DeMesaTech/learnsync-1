@@ -77,10 +77,24 @@ export function GradebookPage(){
   const courseUnlocked=book.policy.periods.every(p=>book.rows.some(r=>r.published[p.key]));
   const flaggedRows=book.rows.filter(r=>Object.values(r.published).some(p=>p.needs_review));
   const changed=Object.keys(edits).length;
+  const studentDetailColumnCount=1+(showSection?1:0)+(showStudentNumber?1:0);
 
+  const editScoresButton=!editing&&<button className="icon-button" type="button" aria-label="Edit scores"
+    title={closed?'This term is closed, so scores are read-only.':'Type scores straight into the table below.'}
+    disabled={closed} onClick={()=>{setEditing(true);setMessage('')}}>✎</button>;
+  const studentDetailHeaders=<>
+    {showSection&&<th scope="col" className="sticky sticky-section" rowSpan={editing?2:3}>
+      <div className="gradebook-sticky-heading">{!editing&&editScoresButton}<span>Section</span></div>
+    </th>}
+    <th scope="col" className={`sticky-number${showStudentNumber?'':' hidden-column'}`} rowSpan={editing?2:3}>Student number</th>
+    <th scope="col" className="sticky-student" rowSpan={editing?2:3}>
+      <div className="gradebook-sticky-heading"><span>Student</span>{!showSection&&!editing&&editScoresButton}</div>
+    </th>
+  </>;
   const categoryColumns=(period:string)=>{
     const columns=byPeriod(period);
     const groups=new Map<string,{label:string;columns:Gradebook['columns']}>();
+    for(const category of book.policy.categories)groups.set(category.key,{label:category.label,columns:[]});
     for(const column of columns){
       const key=column.category_key??'uncategorized';
       const label=book.policy.categories.find(c=>c.key===key)?.label??(key==='uncategorized'?'Uncategorized':key);
@@ -110,6 +124,11 @@ export function GradebookPage(){
     }finally{setSaving(false)}
   }
   const leaveEditing=()=>{setEditing(false);setEdits({});setRejected({});setMessage('')};
+  const editActions=editing&&<div className="actions sticky-bar">
+    <button className="primary" disabled={changed===0||saving} onClick={saveAll}>{saving?'Saving…':changed===0?'Save scores':`Save ${changed} changed score${changed===1?'':'s'}`}</button>
+    <button disabled={saving} onClick={leaveEditing}>Cancel</button>
+    <span className="muted">{changed===0?'No changes yet.':'Nothing is saved until you press Save.'}</span>
+  </div>;
 
   const periodRow=(p:string)=><li key={p}><span className="grow"><strong>{PERIOD_LABEL[p]??p}</strong>
     <span className="muted">{stats[p].changes>0?`${stats[p].changes} ready to publish`:stats[p].ready>0?'Nothing new to publish':'No grades are ready yet'}{stats[p].review>0?` · ${stats[p].review} need review`:''}{stats[p].notReady.length>0&&stats[p].ready>0?` · ${stats[p].notReady.length} not ready`:''}</span></span>
@@ -146,22 +165,30 @@ export function GradebookPage(){
         <label className="inline"><input type="checkbox" checked={showStudentNumber} onChange={e=>setShowStudentNumber(e.target.checked)}/> Student number</label>
       </div>
       <p className="muted" role="status">Showing {rows.length} of {book.rows.length} students.{editing?' Editing: type a score in any cell, then save once.':''}</p>
-      {!editing&&<div className="actions"><button className="icon-button" type="button" aria-label="Edit scores" title="Edit scores" disabled={closed} onClick={()=>{setEditing(true);setMessage('')}}>✎</button><span className="muted">{closed?'This term is closed, so scores are read-only.':'Type scores straight into the table below.'}</span></div>}
-      {editing&&<div className="actions sticky-bar"><button className="primary" disabled={changed===0||saving} onClick={saveAll}>{saving?'Saving…':changed===0?'Save scores':`Save ${changed} changed score${changed===1?'':'s'}`}</button><button disabled={saving} onClick={leaveEditing}>Cancel</button><span className="muted">{changed===0?'No changes yet.':'Nothing is saved until you press Save.'}</span></div>}
       <div className={`table-wrap gradebook${showSection?'':' hide-section'}${showStudentNumber?'':' hide-student-number'}`} role="region" aria-label="Gradebook; section and student details stay fixed while scores scroll horizontally" tabIndex={0}><table>
         <thead>
-          <tr>{showSection&&<th scope="col" className="sticky sticky-section" rowSpan={3}>Section</th>}<th scope="col" className={`sticky-number${showStudentNumber?'':' hidden-column'}`} rowSpan={3}>Student number</th><th scope="col" className="sticky-student" rowSpan={3}>Student</th>{shown.filter(p=>p!=='course').map(p=>{
+          <tr>
+            {editing?<th className="sticky gradebook-edit-header" colSpan={studentDetailColumnCount} aria-label="Score editing actions">{editActions}</th>:studentDetailHeaders}
+            {shown.filter(p=>p!=='course').map(p=>{
             const groups=categoryColumns(p);
             return <th key={p} colSpan={groups.reduce((sum,group)=>sum+Math.max(1,group.columns.length),0)+1}>{PERIOD_LABEL[p]??p}</th>;
           })}{shown.includes('course')&&<th rowSpan={3}>Course</th>}</tr>
-          <tr>{shown.filter(p=>p!=='course').flatMap(p=>[...categoryColumns(p).map(group=><th key={`${p}-${group.key}`} className="gradebook-category-header" colSpan={Math.max(1,group.columns.length)}>{group.label}{group.columns.length>0&&<small>{fmt(book.policy.categories.find(c=>c.key===group.key)?.weight)}%</small>}</th>),<th key={`${p}-grade`} className="gradebook-period-grade-header">{PERIOD_LABEL[p]??p} grade</th>])}</tr>
+          <tr>{editing&&studentDetailHeaders}{shown.filter(p=>p!=='course').flatMap(p=>[
+            ...categoryColumns(p).map(group=>{
+              const category=book.policy.categories.find(c=>c.key===group.key);
+              return <th key={`${p}-${group.key}`} className="gradebook-category-header" colSpan={Math.max(1,group.columns.length)}>
+                {group.label}{category&&<small>{fmt(category.weight)}%</small>}
+              </th>;
+            }),
+            <th key={`${p}-grade`} className="gradebook-period-grade-header">{PERIOD_LABEL[p]??p} grade</th>
+          ])}</tr>
           <tr>
-            {shown.filter(p=>p!=='course').flatMap(p=>[...categoryColumns(p).flatMap(group=>group.columns.length?group.columns.map(c=><th key={c.id} className="gradebook-assessment-header"><span className="gradebook-assessment-title"><span>{c.title}</span><Link className="icon-button" state={here} to={`/faculty/offerings/${offering.id}/assessments/${c.id}/scores`} aria-label={`Open ${c.title} scores and attempts`} title={`Open ${c.title} scores and attempts`}>↗</Link></span><br/><span className="muted">/{fmt(c.max_points)}</span></th>):[<th key={`${p}-${group.key}-empty`} className="gradebook-assessment-header">No items</th>]),<th key={`${p}-grade-value`} className="gradebook-period-grade-header">Grade</th>])}
+            {shown.filter(p=>p!=='course').flatMap(p=>[...categoryColumns(p).flatMap(group=>group.columns.length?group.columns.map((c,index)=><th key={c.id} scope="col" className={`gradebook-assessment-header${index===0?' gradebook-category-edge-start':''}${index===group.columns.length-1?' gradebook-category-edge-end':''}`} title={c.title} aria-label={`${c.title}, maximum ${fmt(c.max_points)} points`}><span className="muted">/{fmt(c.max_points)}</span></th>):[<th key={`${p}-${group.key}-empty`} scope="col" className="gradebook-assessment-header gradebook-category-edge-start gradebook-category-edge-end" aria-label={`${group.label}: no items`}/>]),<th key={`${p}-grade-value`} className="gradebook-period-grade-header">Grade</th>])}
             {shown.includes('course')&&<th>Grade</th>}</tr></thead>
         <tbody>{pageRows.map(r=><tr key={r.student_id}>
           {showSection&&<td className="sticky sticky-section">{r.section??'—'}</td>}<td className={`student-number sticky-number${showStudentNumber?'':' hidden-column'}`}>{r.student_number}</td><th className="student-name sticky-student" scope="row"><button className="linklike" onClick={()=>setDetail(r)}>{r.display_name}</button></th>
-          {shown.filter(p=>p!=='course').flatMap(p=>[...byPeriod(p).map(c=><td key={c.id} className="gradebook-category-cell"><CellView cell={r.cells[c.id]} kind={c.kind} column={c.title} student={r.display_name} editing={editing&&editable(c.kind,r.cells[c.id])} value={edits[cellKey(c.id,r.student_id)]} problem={rejected[cellKey(c.id,r.student_id)]}
-            onType={v=>typeScore(c.id,r.student_id,r.cells[c.id],v)}/></td>),
+          {shown.filter(p=>p!=='course').flatMap(p=>[...categoryColumns(p).flatMap(group=>group.columns.length?group.columns.map((c,index)=><td key={c.id} className={`gradebook-category-cell${index===0?' gradebook-category-edge-start':''}${index===group.columns.length-1?' gradebook-category-edge-end':''}`}><CellView cell={r.cells[c.id]} kind={c.kind} column={c.title} student={r.display_name} editing={editing&&editable(c.kind,r.cells[c.id])} value={edits[cellKey(c.id,r.student_id)]} problem={rejected[cellKey(c.id,r.student_id)]}
+            onType={v=>typeScore(c.id,r.student_id,r.cells[c.id],v)}/></td>):[<td key={`${p}-${group.key}-empty-cell`} className="gradebook-category-cell gradebook-category-edge-start gradebook-category-edge-end" aria-label={`${group.label}: no items`}/>]),
             <td key={p+'g'}><GradeCell row={r} period={p} onReview={setDetail}/></td>])}
           <td><GradeCell row={r} period="course" onReview={setDetail}/></td></tr>)}</tbody></table></div>
       <Pager page={currentPage} pageSize={pageSize} total={rows.length} onPage={setPage} onSize={size=>{setPageSize(size);setPage(1)}}/>
