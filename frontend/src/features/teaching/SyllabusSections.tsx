@@ -1,4 +1,5 @@
-import {useRef} from 'react';
+import {useRef,useState} from 'react';
+import {Pager} from '../../components/Pager';
 import {useUndo} from '../../components/undo';
 import {emptyChapter,newId,type Chapter,type Course,type GradingPolicy,type Outline} from './types';
 
@@ -37,14 +38,20 @@ export function OutcomesStep({outline,onChange}:{outline:Outline;onChange:Change
 
 export function ChaptersStep({outline,onChange}:{outline:Outline;onChange:Change<Outline>}){
   const undo=useUndo();const latestSet=useRef<(c:Chapter[])=>void>(()=>{});
+  const [page,setPage]=useState(1);
+  const pageSize=5;
   const set=(chapters:Chapter[])=>onChange({...outline,chapters});
   latestSet.current=set;
   const patch=(i:number,change:Partial<Chapter>)=>set(replace(outline.chapters,i,{...outline.chapters[i],...change}));
   const hasIntro=outline.chapters.some(chapter=>chapter.is_intro);
+  const pageCount=Math.max(1,Math.ceil(outline.chapters.length/pageSize));
+  const currentPage=Math.min(page,pageCount);
+  const pageStart=(currentPage-1)*pageSize;
+  const visibleChapters=outline.chapters.map((chapter,index)=>({chapter,index})).slice(pageStart,pageStart+pageSize);
   return <section><h2>Course coverage</h2>
     <p className="muted">Chapters and topics keep a stable identity when you rename or reorder them, so lessons attached to a topic stay attached.</p>
     {outline.chapters.length===0&&<p className="panel">No chapters yet. Add the first one below.</p>}
-    {outline.chapters.map((c,i)=><article className="panel" key={c.id}>
+    {visibleChapters.map(({chapter:c,index:i})=><article className="panel" key={c.id}>
       <div className="page-heading"><h3>{c.is_intro?'Subject introduction':`Chapter ${outline.chapters.slice(0,i).filter(chapter=>!chapter.is_intro).length+1}`}</h3>
         <div className="actions"><button type="button" aria-label={`Move chapter ${i+1} up`} disabled={i===0||outline.chapters[i-1]?.is_intro===true} onClick={()=>set(move(outline.chapters,i,-1))}>↑</button>
           <button type="button" aria-label={`Move chapter ${i+1} down`} disabled={i===outline.chapters.length-1||c.is_intro===true} onClick={()=>set(move(outline.chapters,i,1))}>↓</button>
@@ -59,7 +66,8 @@ export function ChaptersStep({outline,onChange}:{outline:Outline;onChange:Change
           <button type="button" aria-label="Remove topic" onClick={()=>patch(i,{topics:remove(c.topics,j)})}>✕</button></div>)}
         <button type="button" onClick={()=>patch(i,{topics:[...c.topics,{id:newId(),title:''}]})}>Add topic</button></fieldset>
     </article>)}
-    <div className="actions"><button type="button" onClick={()=>set([...outline.chapters,emptyChapter()])}>Add chapter</button>
+    {outline.chapters.length>0&&<Pager page={currentPage} pageSize={pageSize} total={outline.chapters.length} onPage={setPage}/>}
+    <div className="actions"><button type="button" onClick={()=>{set([...outline.chapters,emptyChapter()]);setPage(Math.ceil((outline.chapters.length+1)/pageSize))}}>Add chapter</button>
       <button type="button" disabled={hasIntro} onClick={()=>set([{...emptyChapter(),title:'Subject Introduction',is_intro:true},...outline.chapters])}>Add subject introduction</button></div>
   </section>;
 }

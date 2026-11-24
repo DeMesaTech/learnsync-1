@@ -182,6 +182,7 @@ function NewYear({onClose,onDone}:{onClose:()=>void;onDone:()=>void}){
           <label>Ends<input type="date" required value={term.end_date} onChange={e=>patch(index,{end_date:e.target.value})}/></label>
         </div>
       </fieldset>)}
+      <p className="muted">The semesters may have a gap between them. The gap may be used for enrollment and term preparation.</p>
       {error&&<p role="alert">{error}</p>}
       <div className="actions"><button type="button" onClick={onClose}>Cancel</button><button className="primary">Create school year</button></div>
     </form>

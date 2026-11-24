@@ -39,6 +39,10 @@ STUDENT_HEADERS = {
 FACULTY_HEADERS = {
     "email": {"email", "email_address", "e_mail"},
     "display_name": {"display_name", "name", "full_name", "teacher_name", "faculty_name"},
+    "first_name": {"first_name", "firstname", "given_name"},
+    "middle_name": {"middle_name", "middlename", "middle", "middle_initial", "middleinitial"},
+    "last_name": {"last_name", "lastname", "surname"},
+    "suffix": {"suffix", "generational_suffix", "name_suffix"},
 }
 
 
@@ -147,7 +151,7 @@ def read_student_rows(path, ext):
 
 
 def read_faculty_rows(path, ext):
-    """Return [{row, email, display_name}] with source row numbers."""
+    """Return teacher names as account name fields, accepting legacy full-name columns."""
     if ext == ".csv":
         text = path.read_text(encoding="utf-8-sig")
         dialect = csv.excel_tab if text.count("\t") > text.count(",") else csv.excel
@@ -165,17 +169,21 @@ def read_faculty_rows(path, ext):
         for field, names in FACULTY_HEADERS.items():
             if _norm(header) in names and field not in columns:
                 columns[field] = index
-    missing = [field for field in ("email", "display_name") if field not in columns]
+    missing = ["email"] if "email" not in columns else []
+    if "display_name" not in columns and not {"first_name", "last_name"} <= columns.keys():
+        missing.append("display_name or first_name and last_name")
     if missing:
         fail(422, "columns_missing", "Missing required columns: " + ", ".join(missing)
-             + ". Expected headers: email, display_name.")
+             + ". Expected email and either display_name or first_name and last_name "
+                "(optional: middle_name and suffix).")
     if len(table) - 1 > MAX_ROWS:
         fail(422, "too_many_rows", f"Import at most {MAX_ROWS} teachers at a time.")
     rows = []
     for number, raw in enumerate(table[1:], start=2):
-        rows.append({"row": number, **{
+        values = {
             field: _cell(raw[index]) if index < len(raw) else ""
-            for field, index in columns.items()}})
+            for field, index in columns.items()}
+        rows.append({"row": number, **values})
     if not rows:
         fail(422, "file_empty", "No teacher rows were found in this file.")
     return rows

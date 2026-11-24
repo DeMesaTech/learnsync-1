@@ -121,9 +121,19 @@ class BulkSendLinks(BaseModel):
 
 class FacultyImportRowUpdate(BaseModel):
     row: int = Field(ge=2)
-    display_name: str = Field(max_length=150)
+    display_name: str | None = Field(default=None, max_length=150)
+    first_name: str | None = Field(default=None, max_length=100)
+    middle_name: str | None = Field(default=None, max_length=100)
+    last_name: str | None = Field(default=None, max_length=100)
+    suffix: str | None = Field(default=None, max_length=20)
     email: str = Field(max_length=254)
     college_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def name_required(self):
+        if self.display_name is None and (not self.first_name or not self.last_name):
+            raise ValueError("Provide either display_name or first_name and last_name")
+        return self
 
 class FacultyImportUpdate(BaseModel):
     rows: list[FacultyImportRowUpdate] = Field(min_length=1, max_length=1000)

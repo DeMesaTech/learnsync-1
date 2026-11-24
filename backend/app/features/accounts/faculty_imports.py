@@ -10,11 +10,35 @@ from app.errors import fail
 from app.features.academics.documents import MAX_ROWS, read_faculty_rows
 from app.features.accounts.commands import audit, issue_token, send_link
 from app.features.accounts.models import Account, FacultyImport, now
-from app.features.accounts.names import format_student_name, split_faculty_name
+from app.features.accounts.names import (
+    StudentName,
+    canonical_suffix,
+    format_student_name,
+    normalize_faculty_name_parts,
+    split_faculty_name,
+    suffix_from_last_name,
+)
 from app.features.files.storage import path_of, save_upload
 
 EMAIL = TypeAdapter(EmailStr)
 FACULTY_TYPES = {".csv", ".xlsx"}
+
+
+def faculty_name(row):
+    if "first_name" in row or "last_name" in row:
+        last_name, detected_suffix = suffix_from_last_name(str(row.get("last_name") or "").strip())
+        supplied_suffix = str(row.get("suffix") or "").strip()
+        suffix = canonical_suffix(supplied_suffix)
+        name = normalize_faculty_name_parts(StudentName(
+            str(row.get("first_name") or "").strip(),
+            str(row.get("middle_name") or "").strip(),
+            last_name,
+            suffix or detected_suffix,
+        ))
+        if supplied_suffix and not suffix:
+            return None, "Use a valid generational suffix such as Jr., Sr., II, or III."
+        return name, None
+    return split_faculty_name(str(row.get("display_name") or "")), None
 
 
 def validate_faculty(db, rows):
@@ -30,22 +54,23 @@ def validate_faculty(db, rows):
     seen, results = {}, []
     for raw in rows:
         email = raw["email"].strip().lower()
-        name = raw["display_name"].strip()
         errors = []
         try:
             email = str(EMAIL.validate_python(email)).lower()
         except ValidationError:
             errors.append("Email address is not valid.")
-        if not name or len(name) > 150:
-            errors.append("Name is required (max 150 characters).")
-            normalized_name = name
-        else:
-            parts = split_faculty_name(name)
-            if not parts.first_name or not parts.last_name:
-                errors.append("Enter a teacher's name without a title and include a first and last name.")
-                normalized_name = name
-            else:
-                normalized_name = format_student_name(parts)
+        parts, name_error = faculty_name(raw)
+        if name_error:
+            errors.append(name_error)
+        if not parts or not parts.first_name or not parts.last_name:
+            errors.append("Enter a teacher's first and last name without a title.")
+            parts = StudentName("", "", "", "")
+        elif (len(parts.first_name) > 100 or len(parts.middle_name) > 100
+              or len(parts.last_name) > 100 or len(parts.suffix) > 20):
+            errors.append("Name fields exceed their maximum lengths.")
+        normalized_name = format_student_name(parts)
+        if len(normalized_name) > 150:
+            errors.append("Formatted teacher name must be at most 150 characters.")
         college_id = UUID(raw["college_id"]) if raw.get("college_id") else None
         if college_id is not None and college_id not in colleges:
             errors.append("College/program is unavailable.")
@@ -55,7 +80,9 @@ def validate_faculty(db, rows):
         account = existing.get(email)
         if account and account.role != "faculty":
             errors.append("Email already belongs to a different account.")
-        results.append({"row": raw["row"], "display_name": normalized_name, "email": email,
+        results.append({"row": raw["row"], "display_name": normalized_name,
+                        "first_name": parts.first_name, "middle_name": parts.middle_name,
+                        "last_name": parts.last_name, "suffix": parts.suffix, "email": email,
                         "college_id": str(college_id) if college_id else None,
                         "status": "error" if errors else "existing" if account else "new",
                         "errors": errors})
@@ -107,12 +134,20 @@ def update_faculty_import(db, actor, import_id, rows):
             college = db.get(College, row.college_id)
             if not college or college.status != "active":
                 fail(422, "college_unavailable", "Choose an active college/program for each new teacher.")
-    imp.rows = [
-        {**row, "display_name": updates[row["row"]].display_name,
-         "email": updates[row["row"]].email,
-         "college_id": str(updates[row["row"]].college_id) if updates[row["row"]].college_id else None}
-        for row in imp.rows
-    ]
+    edited = []
+    for row in imp.rows:
+        update = updates[row["row"]]
+        changed = {**row, "email": update.email,
+                   "college_id": str(update.college_id) if update.college_id else None}
+        if update.first_name is None and update.last_name is None:
+            changed["display_name"] = update.display_name
+            for field in ("first_name", "middle_name", "last_name", "suffix"):
+                changed.pop(field, None)
+        else:
+            changed.update(first_name=update.first_name, middle_name=update.middle_name,
+                           last_name=update.last_name, suffix=update.suffix)
+        edited.append(changed)
+    imp.rows = edited
     audit(db, actor, "faculty_import.edited", "faculty_import", imp.id,
           {"rows": len(imp.rows)})
     db.commit()
@@ -134,10 +169,9 @@ def commit_faculty_import(db, actor, import_id):
     for row in rows:
         if row["status"] != "new":
             continue
-        name = split_faculty_name(row["display_name"])
-        account = Account(email=row["email"], display_name=format_student_name(name),
-                          first_name=name.first_name, middle_name=name.middle_name or None,
-                          last_name=name.last_name, suffix=name.suffix or None,
+        account = Account(email=row["email"], display_name=row["display_name"],
+                          first_name=row["first_name"], middle_name=row["middle_name"] or None,
+                          last_name=row["last_name"], suffix=row["suffix"] or None,
                           role="faculty",
                           college_id=UUID(row["college_id"]) if row.get("college_id") else None,
                           status="invited")

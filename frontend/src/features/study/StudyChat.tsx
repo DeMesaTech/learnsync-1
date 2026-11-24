@@ -73,7 +73,6 @@ export function StudyChat({offeringId,canAsk,closedNote='',active,onActive,onSta
     {status.data&&!status.data.configured&&<p className="warn" role="status">Study help is not set up on this server yet. Ask your teacher or administrator.</p>}
     {!canAsk&&closedNote&&<p className="warn" role="status">{closedNote}</p>}
     {paused&&<p className="warn" role="status">Study buddy is paused while you have a quiz open in this subject. Submit or finish the quiz and it comes back by itself.</p>}
-    <details className="privacy"><summary><span aria-hidden="true">🔒</span> Private to you: teachers cannot read your chats <span className="muted">· how chats are handled</span></summary><p>Chats are private within LearnSync: teachers and administrators cannot open them. To answer, the text of your question and the lesson passages it needs are sent to the AI provider. Answers can be wrong, so check them against the lesson. Chats never change your progress or grades. Deleting a conversation removes it from LearnSync; copies may stay in backups until those expire.</p></details>
     <div className={compact?'study-compact':''}>
       <section className="panel convo" aria-label="Conversation">
         <header className="convo-head"><h3>{active?title:'New conversation'}</h3>

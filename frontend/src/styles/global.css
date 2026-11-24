@@ -548,6 +548,10 @@ dialog.import-dialog {
   width: min(1000px, calc(100vw - 24px))
 }
 
+dialog.ai-quiz-dialog {
+  width: min(640px, calc(100vw - 24px))
+}
+
 .import-dialog .panel {
   margin: 14px 0
 }

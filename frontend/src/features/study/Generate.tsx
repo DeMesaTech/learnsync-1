@@ -61,7 +61,7 @@ export function GenerateDialog({offering,anchorNodeId,contextLabel,onClose,onCre
     finally{setBusy(false)}
   }
   const unavailable=status.data&&!status.data.configured;
-  return <Dialog title="Draft a quiz with AI" onClose={busy?()=>{}:onClose}><form onSubmit={submit}>
+  return <Dialog title="Draft a quiz with AI" onClose={busy?()=>{}:onClose} className="ai-quiz-dialog"><form onSubmit={submit}>
     {contextLabel&&<p className="eyebrow material-context-label">{contextLabel}</p>}
     <SimulatorNotice status={status.data}/>
     {unavailable&&<p className="warn" role="status">AI drafting is not set up on this server yet (no provider key). You can still write quizzes yourself.</p>}

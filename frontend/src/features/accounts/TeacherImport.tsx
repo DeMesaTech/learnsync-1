@@ -8,6 +8,10 @@ import type {College} from '../academics/types';
 interface ImportRow{
   row:number;
   display_name:string;
+  first_name:string;
+  middle_name:string;
+  last_name:string;
+  suffix:string;
   email:string;
   college_id:string|null;
   status:'new'|'existing'|'error';
@@ -44,7 +48,7 @@ export function TeacherImport({colleges,onClose,onDone}:{colleges:College[];onCl
     finally{setBusy(false)}
   }
 
-  function editRow(rowNumber:number,field:'display_name'|'email',value:string){
+  function editRow(rowNumber:number,field:'first_name'|'middle_name'|'last_name'|'suffix'|'email',value:string){
     setPreview(current=>current?{...current,rows:current.rows.map(row=>
       row.row===rowNumber?{...row,[field]:value}:row)}:current);
     setDirty(true);
@@ -55,7 +59,8 @@ export function TeacherImport({colleges,onClose,onDone}:{colleges:College[];onCl
     setBusy(true);setError('');
     try{
       const next=await send<FacultyPreview>('PUT',`/faculty-imports/${preview.id}`,{
-        rows:preview.rows.map(({row,display_name,email})=>({row,display_name,email,college_id:collegeId||null})),
+        rows:preview.rows.map(({row,first_name,middle_name,last_name,suffix,email})=>
+          ({row,first_name,middle_name,last_name,suffix,email,college_id:collegeId||null})),
       });
       setPreview(next);
       setDirty(false);
@@ -77,11 +82,11 @@ export function TeacherImport({colleges,onClose,onDone}:{colleges:College[];onCl
   }
 
   return <Dialog title="Import teachers" onClose={()=>busy?false:requestClose()} className="import-dialog" confirmOnClose={false}>
-    <p className="muted">Upload a CSV or Excel file with <code>email</code> and <code>display_name</code> columns. Edit the preview and save your changes to recheck validation before inviting anyone. New teachers receive an invitation link to set their password.</p>
-    <section className="panel"><form onSubmit={submit}>
-      <label>Teacher list<input name="file" type="file" required accept=".csv,.xlsx" disabled={busy||!!preview}/></label>
-      <button className="primary" disabled={busy||!!preview}>{busy?'Checking…':'Preview import'}</button>
-    </form></section>
+    <p className="muted">Required columns: <code>email</code>, <code>first_name</code>, and <code>last_name</code>. <code>middle_name</code> and <code>suffix</code> are optional. LearnSync generates <code>display_name</code> from these fields; you do not need to include it. Legacy files with <code>email</code> and <code>display_name</code> are also supported. Edit the preview and save your changes to recheck validation before inviting anyone. New teachers receive an invitation link to set their password.</p>
+    {!preview&&<section className="panel"><form onSubmit={submit}>
+      <label>Teacher list<input name="file" type="file" required accept=".csv,.xlsx" disabled={busy}/></label>
+      <button className="primary" disabled={busy}>{busy?'Checking…':'Preview import'}</button>
+    </form></section>}
     {error&&<p role="alert">{error}</p>}
     {result&&<section className="panel" role="status">
       <h3>Import complete</h3>
@@ -101,12 +106,13 @@ export function TeacherImport({colleges,onClose,onDone}:{colleges:College[];onCl
       </label>}
       {preview.summary.errors>0&&<ul className="rows" aria-label="Rows to fix">{preview.rows.filter(row=>row.status==='error').flatMap(row=>row.errors.map(message=><li key={`${row.row}-${message}`} className="error">Row {row.row}: {message}</li>))}</ul>}
       <div className="table-wrap" tabIndex={0} role="region" aria-label="Editable teacher import preview">
-        <table><thead><tr><th>Row</th><th>Name</th><th>Email</th><th>Result</th></tr></thead>
+        <table><thead><tr><th>Row</th><th>First name</th><th>Middle name</th><th>Last name</th><th>Suffix</th><th>Email</th><th>Result</th></tr></thead>
           <tbody>{preview.rows.map(row=><tr key={row.row} className={row.status==='error'?'row-error':''}>
             <td>{row.row}</td>
-            <td><label className="sr-only" htmlFor={`teacher-name-${row.row}`}>Name for row {row.row}</label>
-              <input id={`teacher-name-${row.row}`} value={row.display_name} maxLength={150} disabled={busy}
-                onChange={event=>editRow(row.row,'display_name',event.target.value)}/></td>
+            {(['first_name','middle_name','last_name','suffix'] as const).map(field=><td key={field}>
+              <label className="sr-only" htmlFor={`teacher-${field}-${row.row}`}>{field.replace('_',' ')} for row {row.row}</label>
+              <input id={`teacher-${field}-${row.row}`} value={row[field]} maxLength={field==='suffix'?20:100} disabled={busy}
+                onChange={event=>editRow(row.row,field,event.target.value)}/></td>)}
             <td><label className="sr-only" htmlFor={`teacher-email-${row.row}`}>Email for row {row.row}</label>
               <input id={`teacher-email-${row.row}`} type="email" value={row.email} maxLength={254} disabled={busy}
                 onChange={event=>editRow(row.row,'email',event.target.value)}/></td>

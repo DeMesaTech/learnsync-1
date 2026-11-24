@@ -232,9 +232,6 @@ function Start({
       <div className="page-heading">
         <div>
           <p className="eyebrow">Set up this subject</p>
-          <h2>
-            {offering.subject.code} · {offering.subject.title}
-          </h2>
           <p className="muted">
             A few minutes now gives you the whole structure: outline, grading, planned
             quizzes, activities and exams, and class days. Nothing is visible to students
@@ -376,7 +373,7 @@ function Flow({offering,draft,published,initialStep,warnings,onChanged,onFinishe
   const nextBlocked=step==='grading'&&!!grading_policy&&grading_policy.categories.length>0&&(!confirmed||!policyOk);
 
   return <>
-    <div className="page-heading"><div><p className="eyebrow">Set up this subject</p><h2>{offering.subject.code} · {offering.subject.title}</h2>
+    <div className="page-heading"><div><p className="eyebrow">Set up this subject</p>
       <p className="muted">Step {index+1} of {STEPS.length}. Everything is saved as you go, and nothing reaches students until you publish.</p></div>
       <SaveIndicator status={auto.status} message={auto.message} storageFailed={auto.storageFailed} onRetry={auto.retry}/></div>
     {warnings.map(w=><p className="warn" role="status" key={w}>{w}</p>)}

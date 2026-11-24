@@ -312,9 +312,36 @@ def test_faculty_import_skips_existing_faculty_and_supports_xlsx(db, stage):
     assert stage["sent"] == ["new-teacher@example.com"]
 
 
+def test_faculty_import_accepts_split_account_name_columns(db, stage):
+    preview_response = faculty_upload(
+        stage,
+        b"email,first_name,middle_name,last_name,suffix\n"
+        b"new-teacher@example.com,Dr. Ana,Marie,Dela Cruz,Jr.\n",
+    )
+    assert preview_response.status_code == 201, preview_response.text
+    preview = preview_response.json()
+    row = preview["rows"][0]
+    assert (row["first_name"], row["middle_name"], row["last_name"], row["suffix"]) == (
+        "Ana", "Marie", "Dela Cruz", "Jr")
+    assert row["display_name"] == "DELA CRUZ, ANA M., Jr"
+    edited = stage["admin"].put(f"/api/faculty-imports/{preview['id']}", {"rows": [
+        {"row": row["row"], "first_name": "Alicia", "middle_name": "Marie",
+         "last_name": "Dela Cruz", "suffix": "Jr", "email": row["email"],
+         "college_id": stage["college"]["id"]},
+    ]})
+    assert edited.status_code == 200, edited.text
+    preview = edited.json()
+
+    done = stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit")
+    assert done.status_code == 200, done.text
+    account = db.scalar(select(Account).where(Account.email == "new-teacher@example.com"))
+    assert (account.first_name, account.middle_name, account.last_name, account.suffix) == (
+        "Alicia", "Marie", "Dela Cruz", "Jr")
+
+
 def test_faculty_import_validation_and_role_access(stage):
     assert faculty_upload(stage, FACULTY_CSV, "teachers.exe").status_code == 422
-    assert faculty_upload(stage, b"email,name\nx@example.com,X\n").status_code == 422
+    assert faculty_upload(stage, b"email,unknown_column\nx@example.com,X\n").status_code == 422
     faculty = Api("faculty@example.com")
     assert faculty.upload("/api/faculty-imports", "teachers.csv", FACULTY_CSV).status_code == 403
 

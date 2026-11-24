@@ -813,6 +813,12 @@ function SectionDialog({termId,yearLevels,initialYear,initialCollegeId,sections,
     setDraftName(selectedCollege?nextSectionName(selectedCollege.code,yearLevel,sections,next):'');
     setError('');
   }
+  function removeLastSection(){
+    const next=names.slice(0,-1);
+    setNames(next);
+    setDraftName(selectedCollege?nextSectionName(selectedCollege.code,yearLevel,sections,next):'');
+    setError('');
+  }
   async function submit(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setBusy(true);setError('');
     try{
@@ -839,7 +845,7 @@ function SectionDialog({termId,yearLevels,initialYear,initialCollegeId,sections,
     </div>
     {names.length>0&&<ol className="section-name-list">{names.map((name,index)=><li key={`${index}:${name}`}>
       <span>{name}</span>
-      <button type="button" aria-label={`Remove section ${name}`} onClick={()=>setNames(current=>current.filter((_,i)=>i!==index))}>Remove</button>
+      {index===names.length-1&&<button type="button" aria-label={`Remove section ${name}`} title={`Remove section ${name}`} onClick={removeLastSection}>−</button>}
     </li>)}</ol>}
     {selectedCollege&&<p className="muted">New section names use {selectedCollege.code} and will belong to {selectedCollege.name}. Assign subjects later from Offerings.</p>}
     {error&&<p role="alert">{error}</p>}

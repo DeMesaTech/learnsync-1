@@ -124,8 +124,15 @@ try{
   await addSection.getByLabel('Course').selectOption(college.id);
   await addSection.getByLabel('Year level').selectOption('1');
   await addSection.getByRole('button',{name:'Add section to list'}).click();
+  await addSection.getByRole('button',{name:'Add section to list'}).click();
   check('college-code section names appear in a downward list',
-    (await addSection.locator('.section-name-list').innerText()).includes('BSE 1B'));
+    (await addSection.locator('.section-name-list').innerText()).includes('BSE 1B')&&
+    (await addSection.locator('.section-name-list').innerText()).includes('BSE 1C'));
+  await addSection.getByRole('button',{name:'Remove section BSE 1C'}).click();
+  check('removing the last listed section immediately restores its name in the input',
+    await addSection.locator('#new-section-name').inputValue()==='BSE 1C');
+  check('only the last listed section has a remove control',
+    await addSection.getByRole('button',{name:/Remove section/}).count()===1);
   await addSection.getByRole('button',{name:'Create 1 section'}).click();await p.waitForTimeout(500);
   const createdOffering=(await call(p,'GET',`/terms/${term.id}/offerings`)).data.find(o=>o.subject.code==='LST 101');
   check('new sections are not assigned to subject offerings',!createdOffering.sections.some(s=>s.name==='BSE 1B'));

@@ -1,5 +1,34 @@
 # Acceptance status
 
+### 2026-11-24 (Section list remove control)
+- Added a minus control to the last pending section only. Removing it immediately restores that section name as the next generated name.
+- Extended the admin-list browser test to cover the last-item control and immediate input update.
+- Frontend build/type-check, ESLint, `node --check frontend/e2e/admin-lists.mjs`, and `git diff --check` passed. The browser test was not run because it creates academic records in a disposable database.
+
+### 2026-11-24 (Teacher import and split account names)
+- Updated teacher CSV/XLSX imports to accept `first_name`, `middle_name`, `last_name`, and `suffix`; legacy `display_name` inputs remain supported.
+- Teacher import previews now edit the account name components and persist them directly on invited accounts.
+- Once a preview loads, the upload form is hidden so the preview replaces it.
+- The preview replacement change passed frontend build/type-check, ESLint, and `git diff --check`.
+- Added API coverage for split-name parsing, normalization, preview, and account persistence.
+- Passed 4 focused faculty-import tests, backend Ruff, frontend build/type-check and ESLint, and `git diff --check`. The full `tests/test_imports.py` module had 25 passed and 3 unrelated failures: two student-import assertions expect the old display-name format, and one faculty-import test calls the shared `make_account` helper with an unsupported keyword.
+- The integrated browser initially showed the old `display_name` column error because its API process had not reloaded the changes. Restarted the API and frontend services; verified the frontend proxy reaches the API (protected route returns 401) and the refreshed import dialog no longer shows the obsolete error.
+
+### 2026-11-24 (Semester date gaps)
+- Removed the school-year creation rule that treated semester boundaries as required to be adjacent.
+- Semester ranges may now have enrollment-preparation gaps, while remaining contained within the school year and disallowing overlapping ranges.
+- Added a focused backend test for a December end date followed by a January start date.
+- Passed 3 focused academic tests, frontend build/type-check, ESLint, and `git diff --check`.
+
+### 2026-11-24 (Setup heading and chapter pagination)
+- Removed the redundant subject title heading from the setup wizard because the offering layout already displays it.
+- Added standard Previous/Next pagination to the Course coverage chapter editor, showing five chapters per page.
+- Passed frontend build/type-check, ESLint, and `git diff --check`.
+
+### 2026-11-24 (AI quiz dialog width)
+- Added a dedicated 640px desktop width to the “Draft a quiz with AI” dialog, retaining the existing 24px viewport gutter on narrow screens.
+- Passed frontend build/type-check, ESLint, and `git diff --check`.
+
 ### 2026-11-24 (Gradebook controls row)
 - Combined student search, Section and Period filters, column visibility toggles, and the student count into one compact desktop row, with responsive wrapping for narrower viewports. Section and Student number are unchecked by default.
 - Browser verified at the active Gradebook viewport: all controls fit on one row without horizontal overflow; after a fresh load, both visibility toggles are unchecked and both columns are hidden. Frontend build/type-check, ESLint, and `git diff --check` passed.

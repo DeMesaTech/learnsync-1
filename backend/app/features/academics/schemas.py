@@ -47,8 +47,6 @@ class SchoolYearInput(BaseModel):
         for term in by_sequence:
             if term.start_date < self.start_date or term.end_date > self.end_date:
                 raise ValueError("Semester dates must fall within the school-year dates.")
-        if by_sequence[0].end_date >= by_sequence[1].start_date:
-            raise ValueError("The second semester must start after the first semester ends.")
         return self
 
 

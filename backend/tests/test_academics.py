@@ -60,6 +60,20 @@ def test_school_year_creation_creates_two_draft_semesters(actors):
     assert [term["status"] for term in year["terms"]] == ["draft", "draft"]
 
 
+def test_school_year_creation_allows_days_between_semesters(actors):
+    admin = Api("admin@example.com")
+    body = school_year_body()
+    body["terms"][0]["end_date"] = "2032-12-20"
+    body["terms"][1]["start_date"] = "2033-01-10"
+
+    response = admin.post("/api/school-years", body)
+
+    assert response.status_code == 201, response.text
+    terms = response.json()["terms"]
+    assert terms[0]["end_date"] == "2032-12-20"
+    assert terms[1]["start_date"] == "2033-01-10"
+
+
 def test_school_year_creation_rejects_duplicate_label(actors):
     admin = Api("admin@example.com")
     assert admin.post("/api/school-years", school_year_body()).status_code == 201
@@ -97,7 +111,8 @@ def test_school_year_creation_rejects_invalid_term_dates_and_label(actors):
     overlapping_terms = school_year_body()
     overlapping_terms["terms"][1]["start_date"] = "2032-12-15"
     response = admin.post("/api/school-years", overlapping_terms)
-    assert response.status_code == 422
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "academic_term_dates_overlap"
 
     zero_length_term = school_year_body()
     zero_length_term["terms"][0]["end_date"] = zero_length_term["terms"][0]["start_date"]

@@ -31,7 +31,7 @@ export function StudyBuddyPage(){
   const petState=pet==='thinking'||pet==='happy'||pet==='paused'?pet:'idle';
   return <>
     <div className="page-heading buddy-page-head"><Owl state={petState} size={64}/><div><p className="eyebrow">Study buddy</p><h1>Your conversations</h1>
-      <p className="muted">Everything you have asked your Study buddy, across all your subjects. Private to you: teachers cannot read these chats. Answers use only the lessons your teacher published.</p></div></div>
+</div></div>
     <div className={`study2 buddy-page${open?' has-open':''}`}>
       <aside className="chats" aria-label="Your conversations">
         <label>Subject<select value={filter} onChange={e=>{const v=e.target.value;setParams(v?{subject:v}:{});setOpen(null)}}><option value="">All subjects</option>{options.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}</select></label>
@@ -48,7 +48,7 @@ export function StudyBuddyPage(){
           <button type="button" className="buddy-back" onClick={()=>setOpen(null)}>← All conversations</button>
           <StudyChat key={open.offeringId} offeringId={open.offeringId} canAsk={open.canAsk} closedNote={open.note} active={open.id}
             onActive={id=>setOpen(o=>o?{...o,id}:o)} onState={setPet}/></>
-          :<section className="panel buddy-empty"><Owl size={72}/><h2>Pick a conversation, or start a new one</h2><p className="muted">Your chats are listed on the left. You can also ask quick questions from the Study buddy button in the corner of any page.</p></section>}
+          :<section className="panel buddy-empty"><Owl size={72}/><h2>Pick a conversation, or start a new one</h2></section>}
       </div>
     </div>
   </>;
