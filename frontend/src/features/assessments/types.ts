@@ -17,7 +17,7 @@ export interface CategoryInfo{key:string;label:string;weight:number;status:'ok'|
 export interface PeriodGrade{grade:number|null;pending:string[];categories:CategoryInfo[]}
 export interface PublishedGrade{grade:number;release_number:number;needs_review:boolean;review_reason:string|null}
 export interface GradeRow{student_id:string;display_name:string;student_number:string;section:string|null;cells:Record<string,GradebookCell>;grades:Record<string,PeriodGrade>;published:Record<string,PublishedGrade>}
-export interface AssessmentGradebookColumn{id:string;kind:Kind;title:string;category_key:string|null;period:string|null;max_points:number;include_in_grade:boolean;section_ids:string[]}
+export interface AssessmentGradebookColumn{id:string;kind:Kind;title:string;category_key:string|null;period:string|null;max_points:number;deadline:string|null;include_in_grade:boolean;section_ids:string[]}
 export interface AttendanceGradebookColumn{id:string;kind:'attendance';title:string;category_key:'attendance';period:'midterm'|'finals';max_points:number;include_in_grade:false;section_ids:string[];attendance_date:string}
 export type GradebookColumn=AssessmentGradebookColumn|AttendanceGradebookColumn;
 export interface Gradebook{policy:{categories:{key:string;label:string;weight:number}[];periods:{key:string;label:string;share:number}[];transmutation:string;passing:number};policy_version:number;columns:GradebookColumn[];rows:GradeRow[]}

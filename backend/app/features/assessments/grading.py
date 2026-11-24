@@ -259,7 +259,7 @@ def gradebook(db, offering):
     sections = {s.id: s.name for s in db.scalars(select(Section).where(
         Section.term_id == offering.term_id))}
     columns = [{"id": a.id, "kind": a.kind, "title": rev.title, "category_key": rev.category_key,
-                "period": rev.period, "max_points": rev.max_points,
+                "period": rev.period, "max_points": rev.max_points, "deadline": rev.deadline,
                 "include_in_grade": rev.include_in_grade, "section_ids": sorted(secs, key=str)}
                for a, rev, secs in ctx.assessments]
     attendance_groups = {}

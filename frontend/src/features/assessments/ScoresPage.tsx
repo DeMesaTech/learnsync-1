@@ -1,5 +1,5 @@
 import {useToast} from '../../components/undo';
-import {useEffect,useRef,useState,type FormEvent} from 'react';
+import {useEffect,useState,type FormEvent} from 'react';
 import {Link,useNavigate,useOutletContext,useParams} from 'react-router-dom';
 import {useQuery,type UseQueryResult} from '@tanstack/react-query';
 import {api,post,send,errorText} from '../../app/api';
@@ -26,9 +26,9 @@ export function ScoresPage(){
   const attempts=useQuery({queryKey:['attempts',assessmentId],queryFn:()=>api<AttemptRow[]>(`${base}/attempts`),enabled:a.data?.kind==='online_quiz'});
   const [sectionId,setSectionId]=useState('');
   const [message,setMessage]=useState('');
+  const [scoreEditing,setScoreEditing]=useState(false);
+  useEffect(()=>{setScoreEditing(false)},[assessmentId]);
   const refresh=()=>Promise.all([queryClient.invalidateQueries({queryKey:['scores',assessmentId]}),queryClient.invalidateQueries({queryKey:['attempts',assessmentId]}),queryClient.invalidateQueries({queryKey:['gradebook',offering.id]})]).then(()=>undefined);
-  // the table's rows as of right now (after a save has refreshed them), so a feedback-only save with a blank score still counts as ungraded
-  const current=():ScoreRow[]=>{const d=queryClient.getQueryData<ScoreRow[]>(['scores',assessmentId])??[];const at=queryClient.getQueryData<AttemptRow[]>(['attempts',assessmentId]);return a.data?.kind==='online_quiz'?d.filter(r=>!at?.some(x=>x.student_id===r.student_id)):d};
   if(a.isPending)return <p>Loading…</p>;
   if(a.error||!a.data?.published)return <section className="panel"><h2>Not available</h2><p role="alert">{a.error?.message??'Publish this assessment first.'}</p><Link to={`/faculty/offerings/${offering.id}/classwork`}>Back to classwork</Link></section>;
   const rev=a.data.published;const kind=a.data.kind;
@@ -48,18 +48,20 @@ export function ScoresPage(){
     <p className="back"><Link to={origin.to}>← Back to {origin.label}</Link></p>
     <div className="page-heading"><div><p className="eyebrow">{KIND_LABEL[kind]} · out of {fmt(rev.max_points)}</p><h2>{rev.title}</h2>
       </div>
-      <div className="actions">{closed?<Link className="button" to={`/faculty/offerings/${offering.id}/assessments/${assessmentId}/edit`}>View settings</Link>
-        :kind==='online_quiz'?<button type="button" onClick={editSettings}>Edit settings</button>
-          :<Link className="button" state={here} to={`/faculty/offerings/${offering.id}/assessments/${assessmentId}/edit`}>Edit settings</Link>}
-      <button className={toReturn>0?'primary':''} disabled={closed||toReturn===0} onClick={release}>{toReturn>0?`Return ${toReturn} graded result${toReturn===1?'':'s'}`:'All graded results returned'}</button></div></div>
+      <div className="scores-toolbar">
+        {offering.sections.length>0&&<label>Section<select aria-label="Filter scores by section" value={sectionId} disabled={scoreEditing} onChange={e=>setSectionId(e.target.value)}>
+          <option value="">All sections ({offering.enrolled})</option>{offering.sections.map(s=><option key={s.id} value={s.id}>{s.name} ({s.enrolled})</option>)}
+        </select></label>}
+        <div className="actions">{closed?<Link className="button" to={`/faculty/offerings/${offering.id}/assessments/${assessmentId}/edit`}>View settings</Link>
+          :kind==='online_quiz'?<button type="button" onClick={editSettings}>Edit settings</button>
+            :<Link className="button" state={here} to={`/faculty/offerings/${offering.id}/assessments/${assessmentId}/edit`}>Edit settings</Link>}
+        <button className={toReturn>0?'primary':''} disabled={closed||toReturn===0} onClick={release}>{toReturn>0?`Return ${toReturn} graded result${toReturn===1?'':'s'}`:'All graded results returned'}</button></div>
+      </div></div>
     {message&&<p role="status">{message}</p>}
-    {offering.sections.length>0&&<><label>Section<select aria-label="Filter scores by section" value={sectionId} onChange={e=>setSectionId(e.target.value)}>
-      <option value="">All sections ({offering.enrolled})</option>{offering.sections.map(s=><option key={s.id} value={s.id}>{s.name} ({s.enrolled})</option>)}
-    </select></label></>}
     {kind==='online_quiz'&&<Attempts base={base} attempts={attempts} sections={offering.sections} sectionId={sectionId} closed={closed} onChanged={refresh} setMessage={setMessage}/>}
     {rows.isPending||(kind==='online_quiz'&&attempts.isPending)?<p>Loading students…</p>:rows.error?<p role="alert">{rows.error.message}</p>:kind==='online_quiz'&&attempts.error?<p role="alert">{attempts.error.message}</p>:
       kind==='online_quiz'?<NoAttemptStudents rows={visibleRows.filter(r=>!visibleAttempts.some(x=>x.student_id===r.student_id))} sections={offering.sections}/>
-        :<ScoreTable key={assessmentId} rows={visibleRows} sections={offering.sections} kind={kind} base={base} max={rev.max_points} closed={closed} onSaved={refresh} setMessage={setMessage} current={current} heading="Scores"/>}
+        :<ScoreTable key={assessmentId} rows={visibleRows} sections={offering.sections} kind={kind} base={base} max={rev.max_points} closed={closed} onSaved={refresh} setMessage={setMessage} editing={scoreEditing} setEditing={setScoreEditing} heading="Scores"/>}
   </>;
 }
 
@@ -74,40 +76,89 @@ function NoAttemptStudents({rows,sections}:{rows:ScoreRow[];sections:OfferingSum
   </section>;
 }
 
-function ScoreTable({rows,sections,kind,base,max,closed,onSaved,setMessage,current,heading}:{rows:ScoreRow[];sections:OfferingSummary['sections'];kind:Assessment['kind'];base:string;max:number;closed:boolean;onSaved:()=>Promise<void>;setMessage:(m:string)=>void;current:()=>ScoreRow[];heading:string}){
+type ScoreDraft={score:string;feedback:string};
+
+function draftFrom(row:ScoreRow):ScoreDraft{return {score:row.score===null?'':String(row.score),feedback:row.feedback}}
+
+function ScoreTable({rows,sections,kind,base,max,closed,onSaved,setMessage,editing,setEditing,heading}:{rows:ScoreRow[];sections:OfferingSummary['sections'];kind:Assessment['kind'];base:string;max:number;closed:boolean;onSaved:()=>Promise<void>;setMessage:(m:string)=>void;editing:boolean;setEditing:(editing:boolean)=>void;heading:string}){
   const [permission,setPermission]=useState<ScoreRow|null>(null);
   const [ungradedOnly,setUngradedOnly]=useState(false);
-  const [saved,setSaved]=useState<Set<string>>(new Set());   // rows remount after a save, so the mark lives here
-  const focusNext=useRef<string|null>(null);
-  useEffect(()=>{if(focusNext.current){document.getElementById(focusNext.current)?.focus();focusNext.current=null}});
+  const [saved,setSaved]=useState<Set<string>>(new Set());
+  const [drafts,setDrafts]=useState<Record<string,ScoreDraft>>({});
+  const [errors,setErrors]=useState<Record<string,string>>({});
+  const [saving,setSaving]=useState(false);
   const ungraded=(r:ScoreRow)=>r.score===null||r.new_version_since_grading;
   const shown=ungradedOnly?rows.filter(ungraded):rows;
   const mark=(id:string,on:boolean)=>setSaved(prev=>{const n=new Set(prev);if(on)n.add(id);else n.delete(id);return n});
+  const draftFor=(row:ScoreRow)=>drafts[row.student_id]??draftFrom(row);
+
+  async function saveAll(){
+    if(saving||closed)return;
+    const changed=rows.filter(row=>{
+      const draft=drafts[row.student_id];
+      if(!draft)return false;
+      const original=draftFrom(row);
+      return draft.score!==original.score||draft.feedback!==original.feedback;
+    });
+    if(changed.length===0){setEditing(false);setDrafts({});setErrors({});setMessage('No score changes to save.');return}
+
+    setSaving(true);
+    const savedIds:string[]=[];
+    const failed:Record<string,string>={};
+    for(const row of changed){
+      const draft=drafts[row.student_id]??draftFrom(row);
+      try{
+        await send('PUT',`${base}/scores/${row.student_id}`,{score:draft.score.trim()===''?null:draft.score.trim(),feedback:draft.feedback,expected_revision:row.score_revision});
+        savedIds.push(row.student_id);
+      }catch(error){failed[row.student_id]=errorText(error)}
+    }
+
+    let refreshError='';
+    if(savedIds.length>0){
+      try{await onSaved()}catch(error){refreshError=errorText(error)}
+    }
+    setDrafts(previous=>{const next={...previous};savedIds.forEach(id=>delete next[id]);return next});
+    setErrors(failed);
+    savedIds.forEach(id=>mark(id,true));
+    if(Object.keys(failed).length===0){
+      setEditing(false);
+      setMessage(refreshError?`Saved ${savedIds.length} score${savedIds.length===1?'':'s'}, but could not refresh the table: ${refreshError}`:`Saved ${savedIds.length} score${savedIds.length===1?'':'s'}.`);
+    }else{
+      setMessage(`Saved ${savedIds.length} score${savedIds.length===1?'':'s'}; ${Object.keys(failed).length} could not be saved. Review the errors and save again.${refreshError?` Refresh error: ${refreshError}`:''}`);
+    }
+    setSaving(false);
+  }
+
+  function activateEditSave(){
+    if(editing){void saveAll();return}
+    setErrors({});
+    setMessage('');
+    setEditing(true);
+  }
+
+  const editSaveButton=(className='')=><button type="button" className={`${editing?'primary':''} ${className}`.trim()} disabled={closed||saving} onClick={activateEditSave}>{saving?'Saving…':editing?'Save':'Edit'}</button>;
+  function updateDraft(row:ScoreRow,draft:ScoreDraft){
+    setDrafts(previous=>({...previous,[row.student_id]:draft}));
+    setErrors(previous=>{const next={...previous};delete next[row.student_id];return next});
+    mark(row.student_id,false);
+  }
+
   if(rows.length===0)return <section className="panel"><h3>{heading}</h3><p className="muted">No students to show.</p></section>;
   return <section className="panel"><h3>{heading}</h3>
-    <label className="inline"><input id="ungraded-only" type="checkbox" checked={ungradedOnly} onChange={e=>setUngradedOnly(e.target.checked)}/> Show ungraded only</label>
-    <p className="muted">{rows.filter(ungraded).length} of {rows.length} still ungraded. Press Enter in a score box to save and move to the next student.</p>
+    <div className="scores-table-tools">
+      <label className="inline"><input id="ungraded-only" type="checkbox" checked={ungradedOnly} onChange={e=>setUngradedOnly(e.target.checked)}/> Show ungraded only</label>
+      <p className="muted">{rows.filter(ungraded).length} of {rows.length} still ungraded. Select Edit to change scores, then Save to apply the updates.</p>
+    </div>
+    <div className="score-mobile-edit">{editSaveButton()}</div>
     {shown.length===0&&<p className="muted">Everyone listed has a score.</p>}
     <div className="table-wrap" role="region" aria-label={heading} tabIndex={0}><table className="stack" role="table">
-      <thead role="rowgroup"><tr role="row"><th role="columnheader">Student</th><th role="columnheader">Section</th>{kind==='activity'&&<th role="columnheader">Submission</th>}<th role="columnheader">Score (of {fmt(max)})</th><th role="columnheader">Feedback</th><th role="columnheader"><span className="sr-only">Actions</span></th></tr></thead>
-      <tbody role="rowgroup">{shown.map((r,i)=><ScoreRowEditor key={r.student_id+r.score_revision} row={r} section={sections.find(s=>s.id===r.section_id)?.name??'—'} kind={kind} base={base} max={max} closed={closed} onSaved={onSaved} setMessage={setMessage} onPermission={()=>setPermission(r)}
-        saved={saved.has(r.student_id)&&!r.new_version_since_grading} onEdit={()=>mark(r.student_id,false)} onDone={advance=>{mark(r.student_id,true);const now=current();setMessage(`Saved ${r.student}. ${now.filter(ungraded).length} of ${now.length} still need grading.`);focusNext.current=advance?(shown[i+1]?`s-${shown[i+1].student_id}`:'ungraded-only'):null}}/>)}</tbody></table></div>
+      <thead role="rowgroup"><tr role="row"><th role="columnheader">Student</th><th role="columnheader">Section</th>{kind==='activity'&&<th role="columnheader">Submission</th>}<th role="columnheader">Score (of {fmt(max)})</th><th role="columnheader">Feedback</th><th role="columnheader" className="score-edit-heading">{editSaveButton()}</th></tr></thead>
+      <tbody role="rowgroup">{shown.map(row=><ScoreRowEditor key={row.student_id+row.score_revision} row={row} section={sections.find(section=>section.id===row.section_id)?.name??'—'} kind={kind} max={max} closed={closed} editing={editing} saving={saving} draft={draftFor(row)} error={errors[row.student_id]} saved={saved.has(row.student_id)&&!row.new_version_since_grading} onDraftChange={draft=>updateDraft(row,draft)} onPermission={()=>setPermission(row)}/>)}</tbody></table></div>
     {permission&&<PermissionDialog base={base} row={permission} onClose={()=>setPermission(null)} onDone={()=>{setPermission(null);setMessage('Permission granted. The student can submit once more.');onSaved()}}/>}
   </section>;
 }
 
-function ScoreRowEditor({row,section,kind,base,max,closed,onSaved,setMessage,onPermission,saved,onEdit,onDone}:{row:ScoreRow;section:string;kind:Assessment['kind'];base:string;max:number;closed:boolean;onSaved:()=>Promise<void>;setMessage:(m:string)=>void;onPermission:()=>void;saved:boolean;onEdit:()=>void;onDone:(advance:boolean)=>void}){
-  const [score,setScore]=useState(row.score===null?'':String(row.score));
-  const [feedback,setFeedback]=useState(row.feedback);
-  const [error,setError]=useState('');
-  const [saving,setSaving]=useState(false);
-  const busy=useRef(false);   // synchronous: a second Enter must not send a second request
-  async function save(advance=false){
-    if(busy.current)return;busy.current=true;setSaving(true);setError('');
-    try{await send('PUT',`${base}/scores/${row.student_id}`,{score:score.trim()===''?null:score.trim(),feedback,expected_revision:row.score_revision});setMessage(`Saved ${row.student}.`);await onSaved();onDone(advance)}
-    catch(e){setError(errorText(e))}
-    finally{busy.current=false;setSaving(false)}
-  }
+function ScoreRowEditor({row,section,kind,max,closed,editing,saving,draft,error,saved,onDraftChange,onPermission}:{row:ScoreRow;section:string;kind:Assessment['kind'];max:number;closed:boolean;editing:boolean;saving:boolean;draft:ScoreDraft;error?:string;saved:boolean;onDraftChange:(draft:ScoreDraft)=>void;onPermission:()=>void}){
   const sub=row.latest;
   return <tr role="row">
     <td role="cell" data-label="Student">{row.student}</td>
@@ -119,11 +170,11 @@ function ScoreRowEditor({row,section,kind,base,max,closed,onSaved,setMessage,onP
       {row.new_version_since_grading&&<p className="warn" role="status">New version since you graded. Review it and save the score again.</p>}</>:<span className="muted">Nothing submitted</span>}
       {row.permission_open&&<p className="muted">A resubmission permission is open.</p>}</td>}
     <td role="cell" data-label={`Score (of ${fmt(max)})`}><label className="sr-only" htmlFor={`s-${row.student_id}`}>Score for {row.student}</label>
-      <input id={`s-${row.student_id}`} inputMode="decimal" value={score} placeholder="Not scored" disabled={closed} readOnly={saving} aria-invalid={!!error} onChange={e=>{setScore(e.target.value);onEdit()}} onKeyDown={e=>{if(e.key==='Enter'&&!e.nativeEvent.isComposing){e.preventDefault();void save(true)}}} aria-describedby={error?`max-${row.student_id} err-${row.student_id}`:`max-${row.student_id}`}/>
-      <span id={`max-${row.student_id}`} className="muted">{score===''?'Pending':Number(score)===0?'Recorded zero':`of ${fmt(max)}`}</span></td>
-    <td role="cell" data-label="Feedback"><label className="sr-only" htmlFor={`f-${row.student_id}`}>Feedback for {row.student}</label><textarea id={`f-${row.student_id}`} value={feedback} maxLength={5000} disabled={closed} readOnly={saving} onChange={e=>{setFeedback(e.target.value);onEdit()}}/></td>
-    <td role="cell"><div className="actions"><button className="primary" disabled={closed||saving} onClick={()=>void save()}>{saving?'Saving…':'Save'}</button>{saved&&<span className="badge done">Saved</span>}
-      {kind==='activity'&&!closed&&<button onClick={onPermission}>Allow resubmission</button>}</div>{error&&<p id={`err-${row.student_id}`} role="alert" className="error">{error}</p>}</td>
+      <input id={`s-${row.student_id}`} inputMode="decimal" value={draft.score} placeholder="Not scored" disabled={closed} readOnly={!editing||saving} aria-invalid={!!error} onChange={e=>onDraftChange({...draft,score:e.target.value})} aria-describedby={error?`max-${row.student_id} err-${row.student_id}`:`max-${row.student_id}`}/>
+      <span id={`max-${row.student_id}`} className="muted">{draft.score===''?'Pending':Number(draft.score)===0?'Recorded zero':`of ${fmt(max)}`}</span></td>
+    <td role="cell" data-label="Feedback"><label className="sr-only" htmlFor={`f-${row.student_id}`}>Feedback for {row.student}</label><textarea id={`f-${row.student_id}`} value={draft.feedback} maxLength={5000} disabled={closed} readOnly={!editing||saving} aria-invalid={!!error} aria-describedby={error?`err-${row.student_id}`:undefined} onChange={e=>onDraftChange({...draft,feedback:e.target.value})}/></td>
+    <td role="cell" data-label="Edit"><div className="score-row-actions">{saved&&<span className="badge done">Saved</span>}
+      {kind==='activity'&&!closed&&<button disabled={saving} onClick={onPermission}>Allow resubmission</button>}</div>{error&&<p id={`err-${row.student_id}`} role="alert" className="error">{error}</p>}</td>
   </tr>;
 }
 

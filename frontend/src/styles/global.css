@@ -266,6 +266,28 @@ p {
   margin-bottom: 24px
 }
 
+.scores-toolbar {
+  display: flex;
+  flex: 1 1 540px;
+  min-width: 0;
+  justify-content: flex-end;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px
+}
+
+.scores-toolbar>label {
+  flex: 1 1 180px;
+  min-width: 160px;
+  max-width: 280px;
+  margin: 0
+}
+
+.scores-toolbar>.actions {
+  flex: 0 1 auto;
+  margin: 0
+}
+
 .gradebook-heading {
   margin-bottom: 8px
 }
@@ -317,6 +339,54 @@ select {
   align-items: center;
   flex-wrap: wrap;
   margin: 16px 0
+}
+
+.scores-table-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-bottom: 12px
+}
+
+.scores-table-tools>.inline,
+.scores-table-tools>p {
+  margin: 0
+}
+
+.scores-table-tools>p {
+  flex: 1 1 300px;
+  text-align: right
+}
+
+.score-edit-heading {
+  color: var(--text);
+  font-size: inherit;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none
+}
+
+.score-edit-heading button {
+  min-height: 44px;
+  padding: 6px 10px;
+  font-size: inherit;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap
+}
+
+.score-mobile-edit {
+  display: none
+}
+
+.score-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap
 }
 
 dialog .actions {
@@ -4103,6 +4173,16 @@ tbody th.sticky {
     display: none
   }
 
+  .scores-table-tools>p {
+    text-align: left
+  }
+
+  .score-mobile-edit {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 8px
+  }
+
   .header .identity {
     flex: 0 0 auto;
     margin-left: auto
@@ -5137,12 +5217,27 @@ dialog.attendance-export-dialog {
   width: fit-content
 }
 
+.gradebook-section-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px
+}
+
+.gradebook-section-heading h3 {
+  flex: 0 0 auto;
+  margin: 0
+}
+
 .gradebook-toolbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: flex-end;
   gap: 8px;
-  margin-bottom: 16px
+  margin: 0 0 0 auto
 }
 
 .gradebook-toolbar .gradebook-publish-trigger {

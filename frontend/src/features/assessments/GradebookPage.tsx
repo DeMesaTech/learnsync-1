@@ -27,6 +27,12 @@ function attendanceDateLabel(value:string){
 function attendanceDateTooltip(value:string){
   return `${value} · ${localDate(value).toLocaleDateString(undefined,{weekday:'long',year:'numeric',month:'long',day:'numeric'})}`;
 }
+function assessmentColumnTooltip(column:AssessmentGradebookColumn){
+  const dueDate=column.deadline
+    ?localDate(column.deadline.slice(0,10)).toLocaleDateString(undefined,{weekday:'long',year:'numeric',month:'long',day:'numeric'})
+    :'Not set';
+  return `${column.title} · Due date: ${dueDate} · Total score: ${fmt(column.max_points)} points`;
+}
 
 /** What publishing a period would do, from the working values the page already has. */
 export function periodStats(book:Gradebook,period:string):Stats{
@@ -182,6 +188,8 @@ export function GradebookPage(){
       </div></div>
     {message&&<p role="status">{message}</p>}
 
+    <section className="panel">
+    <div className="gradebook-section-heading"><h3>Scores and grades</h3>
     <div className="gradebook-toolbar" role="group" aria-label="Gradebook actions">
       <div className="gradebook-publish-anchor" ref={publishPopover}>
         <button type="button" className="gradebook-publish-trigger" aria-haspopup="dialog" aria-expanded={showPublishing} aria-controls="gradebook-publish-popover" onClick={()=>{setShowPublishing(value=>!value);setShowExport(false)}}>
@@ -217,8 +225,8 @@ export function GradebookPage(){
         <span>Edit grading categories</span>
       </button>
     </div>
+    </div>
 
-    <section className="panel"><h3>Scores and grades</h3>
       <div className="gradebook-controls-row">
         <div className="gradebook-filters" aria-label="Filter students">
           <label>Find a student<input type="search" value={find} onChange={e=>{setFind(e.target.value);setPage(1)}} placeholder="Name or student number"/></label>
@@ -261,10 +269,11 @@ export function GradebookPage(){
                 const cell=row.cells[c.id];
                 return count+(cell&&'unreleased_change' in cell&&cell.unreleased_change?1:0);
               },0);
+              const tip=assessmentColumnTooltip(c);
               const releaseLabel=`Return ${releaseCount} graded result${releaseCount===1?'':'s'} for ${c.title}`;
               return <th key={c.id} scope="col" className={`gradebook-assessment-header${edgeStart}${edgeEnd}`}
-                title={c.title} aria-label={`${c.title}, maximum ${fmt(c.max_points)} points`}>
-                <div className="gradebook-assessment-header-content"><span className="muted">/{fmt(c.max_points)}</span>
+                title={tip} aria-label={tip}>
+                <div className="gradebook-assessment-header-content"><span className="muted" title={tip}>/{fmt(c.max_points)}</span>
                   {releaseCount>0&&<button type="button" className="icon-button gradebook-release-button"
                     aria-label={releaseLabel} title={closed?'This term is closed, so results cannot be returned.':releaseLabel}
                     disabled={closed||releasing!==null} onClick={()=>void returnResults(c,releaseCount)}>

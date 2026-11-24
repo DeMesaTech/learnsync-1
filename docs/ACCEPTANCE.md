@@ -1,5 +1,21 @@
 # Acceptance status
 
+### 2026-11-25 (Gradebook assessment header tooltip)
+- Added published assessment deadlines to faculty Gradebook columns. The maximum-points tooltip and accessible column name include the assessment title, due date (or “Not set”), and total points.
+- Passed `pytest tests/test_gradebook_edit.py -q` (15 passed), Ruff for changed backend files, frontend build/type-check, ESLint, and `git diff --check`. The build retains the existing Vite large-chunk warning.
+- Pytest initially could not access the shared Windows temp directory; the focused suite passed with an isolated repository-local `--basetemp`. Browser tooltip verification was not completed because the shared page navigated away from Gradebook.
+
+### 2026-11-25 (Gradebook heading and actions row)
+- Moved the “Scores and grades” heading into the same row as the Gradebook actions, with buttons aligned to the far right and wrapping at narrow widths.
+- Browser verified the heading and toolbar share one row; the toolbar's right edge aligns with the panel's content edge.
+- Passed frontend build/type-check, ESLint, and `git diff --check`. The build retains the existing Vite large-chunk warning.
+
+### 2026-11-25 (Faculty score-entry controls and layout)
+- Added a table-level Edit/Save button: score and feedback fields are read-only until Edit is selected, and Save commits changed rows with per-row errors on failure. The section filter is locked while editing; a mobile control remains available when the table header is hidden.
+- Aligned the section filter with assessment actions and placed the ungraded filter beside its count/instruction in responsive rows.
+- Passed frontend build/type-check, ESLint, and `git diff --check`. The build retains the existing Vite large-chunk warning.
+- Browser verification was not completed: a separate tab redirected to login, and the shared page had moved to Gradebook before the edit-mode check. No score data was changed.
+
 ### 2026-11-25 (Single-student section enrollment)
 - Added an Add student dialog to the selected section controls. It creates an invitation-pending account and active section membership atomically, is available only in an active term, rejects duplicate email/student numbers, and queues invitation delivery after commit.
 - Added backend coverage for successful enrollment with optional fields blank, admin-only access, active-term enforcement, and duplicate student numbers. Updated the disposable admin-lists E2E to submit one student and verify enrollment.

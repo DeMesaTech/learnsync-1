@@ -1,4 +1,6 @@
 """Edit-scores mode: many gradebook cells in one request, all or nothing."""
+from datetime import datetime
+
 from helpers import Api, make_account
 from test_assessments import make_manual, make_quiz
 
@@ -42,7 +44,7 @@ def test_create_manual_column_is_included_in_grade_calculation(db, graded):
     column = next(col for col in current["columns"] if col["id"] == column_id)
     assert column == {"id": column_id, "kind": "manual", "title": "Participation",
                       "category_key": "exam", "period": "midterm", "max_points": 50.0,
-                      "include_in_grade": True, "section_ids": []}
+                      "deadline": None, "include_in_grade": True, "section_ids": []}
     saved = c["fac"].put(url(c, "/gradebook/scores"), {"cells": [
         cell(c, column_id, student, "40", 0)]})
     assert saved.status_code == 200, saved.text
@@ -56,6 +58,15 @@ def test_create_manual_column_is_included_in_grade_calculation(db, graded):
     assert float(exam["raw_percent"]) == 80
     assert row["published"]["midterm"]["grade"] == 80
     assert row["published"]["midterm"]["needs_review"] is True
+
+
+def test_gradebook_assessment_column_includes_due_date(graded):
+    c = graded
+    aid = make_manual(c, "exam", "Dated examination", deadline="2026-11-25T16:00:00+00:00")
+
+    column = next(col for col in book(c)["columns"] if col["id"] == aid)
+
+    assert datetime.fromisoformat(column["deadline"]) == datetime.fromisoformat("2026-11-25T16:00:00+00:00")
 
 
 def test_manual_column_rejects_invalid_policy_scope(graded):
