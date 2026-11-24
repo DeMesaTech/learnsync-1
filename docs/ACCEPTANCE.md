@@ -1501,3 +1501,9 @@ Note: another process (started from Codex's Python runtime) was already serving 
 - Removed the separate Stream announcements toolbar. The announcement creation action and announcement rows now use the existing published-content list styling; edit, publish, archive, and pagination behavior remain available.
 - Passed: `cd frontend; npm run build` (TypeScript and Vite production build; existing large-chunk advisory), `npm run lint`, `node --check e2e\\attendance-grid.mjs`, and `git diff --check`.
 - Not browser-verified: the shared browser displayed attendance data but returned 403s for requests; an attempted section-scroll check lost its attendance route, and the gradebook route did not load its table. No data-changing browser action was performed.
+
+### Database schema ERD text lists (2026-11-24)
+- Reformatted the role-based ERDs as fenced plain-text lists, retaining the existing crow-foot cardinality notation.
+- Corrected listed relationships that did not match the schema's foreign keys, including term-to-section, enrollment, assessment submission, and quiz-answer connections.
+- Passed: verified 50 table sections, 414 column rows, and all 108 listed ERD connections against the documented foreign keys; checked balanced text fences and no trailing whitespace.
+- No application tests run (documentation-only change).
