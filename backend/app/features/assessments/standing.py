@@ -21,24 +21,27 @@ from .models import (
 )
 from .results import student_results
 
-ATTENDANCE = ("present", "late", "absent", "excused")
+ATTENDANCE = ("present", "late", "absent", "excused", "numeric")
 
 
 def attendance_view(db, offering, enrollment):
     """The student's section days with their own mark (None = not marked yet). A withdrawn student keeps only
     the days that were actually marked, so later days are not read as absences."""
-    marks = {m.session_id: m.status for m in db.scalars(select(AttendanceMark).where(
+    marks = {m.session_id: m for m in db.scalars(select(AttendanceMark).where(
         AttendanceMark.student_id == enrollment.student_id))}
     days = []
     for s in db.scalars(select(AttendanceSession).where(
             AttendanceSession.offering_id == offering.id,
             AttendanceSession.section_id == enrollment.section_id).order_by(AttendanceSession.session_date)):
-        status = marks.get(s.id)
-        if enrollment.status == "enrolled" or status:
-            days.append({"date": s.session_date, "period": s.period, "status": status})
+        mark = marks.get(s.id)
+        if enrollment.status == "enrolled" or mark:
+            days.append({"date": s.session_date, "period": s.period,
+                         "status": mark.status if mark else None,
+                         "points": mark.points if mark else None})
     counts = {p: {**{k: 0 for k in ATTENDANCE}, "not_marked": 0} for p in ("midterm", "finals")}
     for d in days:
-        counts[d["period"]][d["status"] or "not_marked"] += 1
+        key = d["status"] or ("numeric" if d["points"] is not None else "not_marked")
+        counts[d["period"]][key] += 1
     return {"days": days, "counts": counts}
 
 
@@ -67,6 +70,8 @@ def assessment_rows(db, book, row):
     out = []
     labels = {c["key"]: c["label"] for c in book["policy"]["categories"]}
     for col in book["columns"]:
+        if col["kind"] == "attendance":
+            continue
         cell = row["cells"].get(str(col["id"]))
         if cell is None:                       # does not apply to this student's section
             continue

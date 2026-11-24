@@ -448,6 +448,33 @@ def add_member(db, actor, section_id, student_id):
     db.commit()
 
 
+def create_section_student(db, actor, section_id, data):
+    section = get_or_404(db, Section, section_id, "Section")
+    open_term(db, section.term_id)
+    email = str(data.email).strip().lower()
+    student_number = data.student_number.strip()
+    if db.scalar(select(Account.id).where(Account.email == email)):
+        fail(409, "email_exists", "An account already uses this email.")
+    if db.scalar(select(Account.id).where(Account.student_number == student_number)):
+        fail(409, "student_number_exists", "An account already uses this student number.")
+
+    account = Account(
+        email=email, display_name=data.display_name, role="student",
+        first_name=data.first_name, middle_name=data.middle_name,
+        last_name=data.last_name, suffix=data.suffix,
+        student_number=student_number, status="invited",
+    )
+    db.add(account)
+    db.flush()
+    token = issue_token(db, account, "invite", actor)
+    place_in_section(db, section, account.id)
+    audit(db, actor, "account.invited", "account", account.id)
+    audit(db, actor, "section.member_added", "section", section.id,
+          {"student_id": str(account.id)})
+    db.commit()
+    return account, (account.email, account.display_name, token)
+
+
 def withdraw_member(db, actor, section_id, student_id, reason):
     reason = (reason or "").strip()
     if len(reason) < 3:

@@ -99,11 +99,11 @@ def test_the_attendance_export_lists_recorded_dates_marks_and_totals(db, graded)
     title, rows = sheet_rows(response)
     assert title == "Attendance"
     header = next(r for r in rows if r and r[0] == "Student no.")
-    assert header[2:5] == ["Mon Jul 06 · Mid", "Wed Jul 08 · Mid", "Mon Sep 14 · Fin"] and header[5:] == ["Present", "Late", "Absent", "Excused", "Not marked"]
+    assert header[2:5] == ["Mon Jul 06 · Mid", "Wed Jul 08 · Mid", "Mon Sep 14 · Fin"] and header[5:] == ["Present", "Late", "Absent", "Excused", "Numeric", "Not marked"]
     by_name = {r[1]: r for r in rows if r and r[1] in (s1.display_name, s3.display_name)}
-    assert by_name[s1.display_name][2:5] == ["P", "A", "E"] and by_name[s1.display_name][5:] == [1, 0, 1, 1, 0]
+    assert by_name[s1.display_name][2:5] == ["P", "A", "E"] and by_name[s1.display_name][5:] == [1, 0, 1, 1, 0, 0]
     assert by_name[s3.display_name][2:5] == ["L", None, "P"] or by_name[s3.display_name][2:5] == ["L", "", "P"]
-    assert by_name[s3.display_name][5:] == [1, 1, 0, 0, 1]                                  # never marked on Jul 8: blank, not absent
+    assert by_name[s3.display_name][5:] == [1, 1, 0, 0, 0, 1]                                  # never marked on Jul 8: blank, not absent
     flat = " ".join(str(v) for r in rows for v in r if v)
     assert "not an official institutional form" in flat and "Recorded days" in flat
 
@@ -113,7 +113,7 @@ def test_the_export_can_be_limited_to_a_range_and_refuses_an_empty_or_invalid_on
     record_three_days(db, c)
     _, rows = sheet_rows(export(c, start="2026-07-01", end="2026-07-31"))
     header = next(r for r in rows if r and r[0] == "Student no.")
-    assert header[2:4] == ["Mon Jul 06", "Wed Jul 08"] and "Present" in header and len(header) == 2 + 2 + 5     # one period: no suffix
+    assert header[2:4] == ["Mon Jul 06", "Wed Jul 08"] and "Present" in header and len(header) == 2 + 2 + 6     # one period: no suffix
     only = export(c, start="2026-09-01")
     assert only.status_code == 200 and "Sep 14" in str(sheet_rows(only)[1])
     empty = export(c, start="2027-01-01", end="2027-01-31")
@@ -130,6 +130,24 @@ def test_names_that_start_like_a_formula_are_neutralised_in_the_file(db, graded)
     save(c, "2026-07-06", {str(s1.id): "present"})
     _, rows = sheet_rows(export(c))
     assert any(r[1] == "'=HYPERLINK(\"http://evil\",\"x\")" for r in rows if r and len(r) > 1)
+
+
+def test_numeric_attendance_export_shows_points_and_counts_numeric_marks(db, graded):
+    from helpers import POLICY, publish_syllabus
+
+    publish_syllabus(graded, policy={
+        **POLICY, "attendance_max_points": 2, "attendance_late_points": 0.75,
+        "attendance_excused_points": 2,
+    })
+    s1 = graded["students"][0]
+    response = graded["fac"].put(f"/api/teach/offerings/{graded['oid']}/attendance", {
+        "section_id": graded["sec_a"]["id"], "session_date": "2026-07-06",
+        "period": "midterm", "marks": {str(s1.id): {"points": "1.25"}}})
+    assert response.status_code == 204, response.text
+    _, rows = sheet_rows(export(graded))
+    by_name = {r[1]: r for r in rows if r and r[1] == s1.display_name}
+    assert by_name[s1.display_name][2] == 1.25
+    assert by_name[s1.display_name][3:] == [0, 0, 0, 0, 1, 0]
 
 
 def test_the_pdf_splits_a_long_range_across_tables_and_is_audited(db, graded):

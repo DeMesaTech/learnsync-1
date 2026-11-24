@@ -122,18 +122,29 @@ try{
   await p.getByRole('button',{name:'Add section',exact:true}).click();
   const addSection=p.locator('dialog');
   await addSection.getByLabel('Course').selectOption(college.id);
-  await addSection.getByLabel('Year level').selectOption('1');
+  await addSection.getByLabel('Year Level').selectOption('1');
+  check('Manage Sections starts with an empty list for sections added in this dialog',
+    await addSection.getByRole('heading',{name:'Manage Sections'}).count()===1&&
+    await addSection.getByRole('heading',{name:'Existing Sections'}).count()===0&&
+    await addSection.getByText('0 sections',{exact:true}).count()===1&&
+    await addSection.locator('.section-name-list').count()===0);
   await addSection.getByRole('button',{name:'Add section to list'}).click();
   await addSection.getByRole('button',{name:'Add section to list'}).click();
-  check('college-code section names appear in a downward list',
+  const addedSections=addSection.locator('.section-name-list li');
+  check('the list contains only sections added in this dialog',
+    await addedSections.count()===2&&
     (await addSection.locator('.section-name-list').innerText()).includes('BSE 1B')&&
-    (await addSection.locator('.section-name-list').innerText()).includes('BSE 1C'));
+    (await addSection.locator('.section-name-list').innerText()).includes('BSE 1C')&&
+    !(await addSection.locator('.section-name-list').innerText()).includes('BSE 1A')&&
+    await addSection.getByText('2 sections',{exact:true}).count()===1);
+  check('only the last added section has a remove control',
+    await addedSections.first().locator('button').count()===0&&
+    await addedSections.last().getByRole('button',{name:'Remove section BSE 1C'}).count()===1);
   await addSection.getByRole('button',{name:'Remove section BSE 1C'}).click();
   check('removing the last listed section immediately restores its name in the input',
-    await addSection.locator('#new-section-name').inputValue()==='BSE 1C');
-  check('only the last listed section has a remove control',
-    await addSection.getByRole('button',{name:/Remove section/}).count()===1);
-  await addSection.getByRole('button',{name:'Create 1 section'}).click();await p.waitForTimeout(500);
+    await addSection.locator('#new-section-name').inputValue()==='BSE 1C'&&
+    await addSection.getByText('1 section',{exact:true}).count()===1);
+  await addSection.getByRole('button',{name:'Save Sections'}).click();await p.waitForTimeout(500);
   const createdOffering=(await call(p,'GET',`/terms/${term.id}/offerings`)).data.find(o=>o.subject.code==='LST 101');
   check('new sections are not assigned to subject offerings',!createdOffering.sections.some(s=>s.name==='BSE 1B'));
   await p.getByLabel('Filter by course').selectOption(college.id);
@@ -209,6 +220,31 @@ try{
   check('a subject with every program section assigned is disabled in the subject chooser',
     await d.locator('.bulk-assignment-subject-list li').filter({hasText:'LST 101'}).getByRole('button',{name:'All sections assigned'}).isDisabled());
   await d.getByRole('button',{name:/Close subject list/}).click();await d.getByRole('button',{name:'Cancel'}).click();
+
+  // ---- create one new student directly in the selected section
+  await p.goto(`/admin/terms/${term.id}`);await p.waitForLoadState('networkidle');
+  await p.getByRole('button',{name:'1st year',exact:true}).click();
+  await p.getByRole('button',{name:/BSE 1A/}).click();
+  await p.getByRole('button',{name:'Add student',exact:true}).click();
+  const addStudent=p.getByRole('dialog');
+  check('Add student opens a form for a single student with required account fields',
+    await addStudent.getByRole('heading',{name:'Add student to BSE 1A'}).count()===1&&
+    await addStudent.getByLabel('First name').isVisible()&&
+    await addStudent.getByLabel('Last name').isVisible()&&
+    await addStudent.getByLabel('Email').isVisible()&&
+    await addStudent.getByLabel('Student number').isVisible());
+  check('axe finds no violations on the add-student dialog',(await axe(p)).length===0);
+  await addStudent.getByLabel('First name').fill('Single');
+  await addStudent.getByLabel('Last name').fill('Student');
+  await addStudent.getByLabel('Email').fill('single.student@example.com');
+  await addStudent.getByLabel('Student number').fill('L-SINGLE');
+  await addStudent.getByRole('button',{name:'Add student',exact:true}).click();
+  await addStudent.waitFor({state:'detached'});await p.locator('.toast').waitFor();
+  const sectionA=(await call(p,'GET',`/terms/${term.id}/sections`)).data.find(s=>s.name==='BSE 1A');
+  const singleRoster=(await call(p,'GET',`/sections/${sectionA.id}/roster?page=1&page_size=100&status=active`)).data;
+  check('single student is enrolled and invitation email is queued',
+    singleRoster.items.some(student=>student.student_number==='L-SINGLE'&&student.account_status==='invited')&&
+    (await p.locator('.toast').innerText()).includes('invitation email is queued'));
 }catch(e){console.log('SCRIPT ERROR:',e.message);results.push(false)}
 await browser.close();
 console.log(`${results.filter(Boolean).length}/${results.length} checks passed`);

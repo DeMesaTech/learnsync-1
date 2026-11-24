@@ -60,6 +60,13 @@ textarea {
   min-height: 44px
 }
 
+input[aria-invalid="true"],
+select[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: var(--danger);
+  outline: 2px solid color-mix(in srgb, var(--danger) 35%, transparent)
+}
+
 .quiz-choice-radio,
 .quiz-answer-radio {
   width: 18px;
@@ -548,12 +555,30 @@ dialog.import-dialog {
   width: min(1000px, calc(100vw - 24px))
 }
 
+dialog.section-management-dialog {
+  width: min(560px, calc(100vw - 24px))
+}
+
+.section-management-dialog .dialog-sticky-header > .section-dialog-description {
+  margin: 8px 0 0
+}
+
 dialog.ai-quiz-dialog {
   width: min(640px, calc(100vw - 24px))
 }
 
 .import-dialog .panel {
   margin: 14px 0
+}
+
+.import-dialog .teacher-import-actions {
+  position: sticky;
+  bottom: -24px;
+  z-index: 3;
+  margin: 16px -22px -22px;
+  padding: 12px 22px;
+  background: var(--surface);
+  border-top: 1px solid var(--border)
 }
 
 .import-dialog table input {
@@ -1019,6 +1044,33 @@ h3 {
   margin-top: 8px;
   font-size: 1.06rem;
   font-weight: 700
+}
+
+.grading-highlights {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-alt)
+}
+
+.grading-highlights.has-errors {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface))
+}
+
+.grading-highlights h3 {
+  margin: 0 0 6px
+}
+
+.grading-highlights ul,
+.grading-highlights p {
+  margin: 0
+}
+
+.grading-highlights input[aria-invalid="true"] {
+  border-color: var(--danger);
+  outline: 2px solid color-mix(in srgb, var(--danger) 35%, transparent)
 }
 
 .grading-category-allowlist {
@@ -2044,62 +2096,115 @@ code {
   height: 15px
 }
 
+.section-dialog-form {
+  display: grid;
+  gap: 20px
+}
+
 .section-dialog-form > label {
   display: grid;
-  grid-template-columns: 100px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  margin: 12px 0
+  gap: 8px;
+  margin: 0;
+  font-weight: 650
 }
 
 .section-dialog-form > label select {
-  min-width: 0
+  width: 100%;
+  min-width: 0;
+  font-weight: 400
+}
+
+.section-dialog-group {
+  border-top: 1px solid var(--border);
+  padding-top: 20px
+}
+
+.section-dialog-group-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px
+}
+
+.section-dialog-group h3,
+.section-dialog-pending h4 {
+  margin: 0;
+  font-size: 1rem
+}
+
+.section-dialog-count {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  color: var(--action);
+  font-size: .8rem;
+  font-weight: 650;
+  white-space: nowrap
+}
+
+.section-dialog-help {
+  margin: 8px 0 12px
 }
 
 .section-name-entry {
-  display: grid;
-  grid-template-columns: 100px minmax(0, 1fr);
+  display: flex;
   align-items: center;
-  gap: 12px;
-  margin: 16px 0
-}
-
-.section-name-entry > label {
+  gap: 8px;
   margin: 0
 }
 
-.section-name-entry > div {
-  display: flex;
-  gap: 8px
+.section-name-entry input {
+  flex: 1;
+  min-width: 0
 }
 
-.section-name-entry > div button {
+.section-name-entry button {
   min-width: 44px;
   font-size: 1.25rem
+}
+
+.section-dialog-pending {
+  margin-top: 14px
+}
+
+.section-dialog-pending h4 {
+  margin-bottom: 8px
 }
 
 .section-name-list {
   display: grid;
   gap: 8px;
-  padding-left: 28px
+  margin: 0;
+  padding: 0;
+  list-style: none
 }
 
 .section-name-list li {
   display: flex;
   align-items: center;
-  gap: 8px
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 8px 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-alt)
 }
 
-.section-name-list input {
-  flex: 1;
-  min-width: 0
+.section-name-list li button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 1.25rem
 }
 
 @media (max-width: 640px) {
-  .section-dialog-form > label,
-  .section-name-entry {
-    grid-template-columns: 78px minmax(0, 1fr);
-    gap: 8px
+  dialog.section-management-dialog {
+    width: calc(100vw - 16px)
+  }
+
+  .section-dialog-form {
+    gap: 16px
   }
 
   .student-section-filter {
@@ -4780,9 +4885,48 @@ dialog[data-confirm] {
   color: var(--muted)
 }
 
+.att-cell.numeric {
+  background: color-mix(in srgb, var(--action) 16%, var(--surface));
+  border-color: var(--action);
+  color: var(--text)
+}
+
+.att-points-input {
+  width: 76px;
+  min-width: 76px;
+  min-height: 44px;
+  margin: 0 auto;
+  padding: 4px;
+  text-align: center
+}
+
+.att-points-input[aria-invalid="true"],
+.attendance-register-points input[aria-invalid="true"] {
+  border-color: var(--danger);
+  outline: 2px solid color-mix(in srgb, var(--danger) 35%, transparent)
+}
+
+.attendance-register-points {
+  display: grid;
+  gap: 4px;
+  max-width: 180px
+}
+
+.attendance-register-points input {
+  min-height: 44px
+}
+
 .att-cell.err {
   outline: 2px solid var(--danger);
   outline-offset: 1px
+}
+
+.attendance-page-heading {
+  align-items: flex-start
+}
+
+.attendance-page-heading .tabs {
+  flex: 0 0 auto
 }
 
 .attendance-tools {

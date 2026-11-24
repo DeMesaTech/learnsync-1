@@ -34,6 +34,7 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
   const colleges=useQuery({queryKey:['colleges'],queryFn:()=>api<College[]>('/colleges')});
   const [dialog,setDialog]=useState<'section'|'offering'|null>(null);
   const [studentImportOpen,setStudentImportOpen]=useState(false);
+  const [addStudentOpen,setAddStudentOpen]=useState(false);
   const [teacherImportOpen,setTeacherImportOpen]=useState(false);
   const [teacherInviteOpen,setTeacherInviteOpen]=useState(false);
   const [teacherSearch,setTeacherSearch]=useState('');
@@ -426,6 +427,7 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
               <div className="actions student-section-actions">
                 {!closed&&invitationCount>0&&<button type="button" className="icon-button" aria-label={`Invite all ${invitationCount} students awaiting invitation`} title={`Invite all ${invitationCount} students awaiting invitation`} disabled={sendingSectionInvitations||bulkActionBusy} onClick={sendSectionInvitations}><StudentManagementIcon name="mail"/></button>}
                 {selectedSection&&!closed&&<button type="button" className="danger icon-button" aria-label={`Delete ${selectedSection.name}`} title="Delete section" disabled={deletingSection!==null} onClick={()=>removeSection(selectedSection)}>{deletingSection===selectedSection.id?'…':<StudentManagementIcon name="delete"/>}</button>}
+                {selectedSection&&term?.status==='active'&&<button type="button" disabled={bulkActionBusy} onClick={()=>setAddStudentOpen(true)}>Add student</button>}
                 <button type="button" disabled={closed} onClick={()=>setStudentImportOpen(true)}>Import students</button>
               </div>
             </div>
@@ -646,6 +648,11 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
       onClose={()=>setLeaving(null)} onSubmit={reason=>withdrawStudent(leaving,reason)}/>}
     {withdrawingSelected&&<BulkWithdrawDialog count={selectedStudents.length}
       onClose={()=>setWithdrawingSelected(false)} onSubmit={withdrawSelectedStudents}/>}
+    {addStudentOpen&&selectedSection&&<AddStudentDialog sectionId={selectedSection.id} sectionName={selectedSection.name}
+      onClose={()=>setAddStudentOpen(false)} onDone={displayName=>{
+        setAddStudentOpen(false);refresh();
+        toast(`${displayName} added to ${selectedSection.name}. Invitation email is queued.`);
+      }}/>}
     {studentImportOpen&&<StudentImport termId={term.id} onClose={()=>setStudentImportOpen(false)} onDone={refresh}/>}
     {teacherImportOpen&&<TeacherImport colleges={colleges.data?.filter(college=>college.status==='active')??[]} onClose={()=>setTeacherImportOpen(false)} onDone={()=>{
       queryClient.invalidateQueries({queryKey:['faculty-management-accounts']});
@@ -742,6 +749,41 @@ function TeacherInviteDialog({colleges,onClose,onDone}:{colleges:College[];onClo
   </Dialog>;
 }
 
+function AddStudentDialog({sectionId,sectionName,onClose,onDone}:{
+  sectionId:string;sectionName:string;onClose:()=>void;onDone:(displayName:string)=>void
+}){
+  const [error,setError]=useState('');
+  const [busy,setBusy]=useState(false);
+  async function submit(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    setBusy(true);setError('');
+    const data=new FormData(event.currentTarget);
+    try{
+      const student=await post<{display_name:string}>(`/sections/${sectionId}/students`,{
+        first_name:data.get('first_name'),middle_name:data.get('middle_name'),
+        last_name:data.get('last_name'),suffix:data.get('suffix'),
+        email:data.get('email'),student_number:data.get('student_number'),
+      });
+      onDone(student.display_name);
+    }catch(err){setError(errorText(err))}
+    finally{setBusy(false)}
+  }
+  return <Dialog title={`Add student to ${sectionName}`} onClose={()=>busy?false:onClose()}>
+    <form onSubmit={submit}>
+      <p className="muted">The student will be enrolled in this section and receive an invitation to set a password.</p>
+      <label>First name<input name="first_name" required maxLength={100} autoFocus/></label>
+      <label>Middle name<input name="middle_name" maxLength={100}/></label>
+      <label>Last name<input name="last_name" required maxLength={100}/></label>
+      <label>Generational suffix (optional)<input name="suffix" maxLength={20} placeholder="Jr., Sr., II"/></label>
+      <label>Email<input name="email" type="email" required maxLength={254}/></label>
+      <label>Student number<input name="student_number" required maxLength={50}/></label>
+      {error&&<p role="alert">{error}</p>}
+      <div className="actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button>
+        <button className="primary" disabled={busy}>{busy?'Adding…':'Add student'}</button></div>
+    </form>
+  </Dialog>;
+}
+
 function TransferOfferingDialog({offering,teachers,onClose,onDone}:{
   offering:OfferingSummary;teachers:Account[];onClose:()=>void;onDone:(teacherName:string)=>void
 }){
@@ -785,7 +827,8 @@ function TransferOfferingDialog({offering,teachers,onClose,onDone}:{
 
 function SectionDialog({termId,yearLevels,initialYear,initialCollegeId,sections,colleges,onClose,onDone}:{
   termId:string;yearLevels:number[];initialYear:number;initialCollegeId:string;
-  sections:Section[];colleges:College[];onClose:()=>void;onDone:(yearLevel:number,collegeId:string)=>void
+  sections:Section[];colleges:College[];onClose:()=>void;
+  onDone:(yearLevel:number,collegeId:string)=>void
 }){
   const [error,setError]=useState('');
   const [yearLevel,setYearLevel]=useState(initialYear);
@@ -830,28 +873,40 @@ function SectionDialog({termId,yearLevels,initialYear,initialCollegeId,sections,
     }
     catch(err){setError(errorText(err))}finally{setBusy(false)}
   }
-  return <Dialog title="Add sections" onClose={()=>busy?false:onClose()}><form className="section-dialog-form" onSubmit={submit}>
-    <label>Course<select required value={collegeId} onChange={e=>{
+  return <Dialog title="Manage Sections" className="section-management-dialog"
+    headerContent={<p className="muted section-dialog-description">Configure class sections for the selected academic program.</p>}
+    onClose={()=>busy?false:onClose()}>
+    <form className="section-dialog-form" onSubmit={submit}>
+    <label>Course<select required value={collegeId} disabled={busy} onChange={e=>{
       const value=e.target.value;const college=colleges.find(item=>item.id===value);
       setCollegeId(value);setNames([]);setDraftName(college?nextSectionName(college.code,yearLevel,sections,[]):'');setError('');
     }}>
       <option value="" disabled>Choose a college/program</option>
       {colleges.filter(college=>college.status==='active').map(college=><option key={college.id} value={college.id}>{college.code} · {college.name}</option>)}
     </select></label>
-    <label>Year level<select value={yearLevel} onChange={e=>{const value=Number(e.target.value);setYearLevel(value);setNames([]);setDraftName(selectedCollege?nextSectionName(selectedCollege.code,value,sections,[]):'');setError('')}}>
+    <label>Year Level<select value={yearLevel} disabled={busy} onChange={e=>{const value=Number(e.target.value);setYearLevel(value);setNames([]);setDraftName(selectedCollege?nextSectionName(selectedCollege.code,value,sections,[]):'');setError('')}}>
       {yearLevels.map(n=><option key={n} value={n}>{yearLabel(n)}</option>)}</select></label>
-    <div className="section-name-entry">
-      <label htmlFor="new-section-name">Section</label>
-      <div><input id="new-section-name" value={draftName} readOnly/>
-        <button type="button" aria-label="Add section to list" disabled={!collegeId||names.length>=26} onClick={addSection}>＋</button></div>
-    </div>
-    {names.length>0&&<ol className="section-name-list">{names.map((name,index)=><li key={`${index}:${name}`}>
-      <span>{name}</span>
-      {index===names.length-1&&<button type="button" aria-label={`Remove section ${name}`} title={`Remove section ${name}`} onClick={removeLastSection}>−</button>}
-    </li>)}</ol>}
-    {selectedCollege&&<p className="muted">New section names use {selectedCollege.code} and will belong to {selectedCollege.name}. Assign subjects later from Offerings.</p>}
+    <section className="section-dialog-group">
+      <header className="section-dialog-group-heading">
+        <h3>Section Names</h3>
+        <span className="section-dialog-count">{names.length} section{names.length===1?'':'s'}</span>
+      </header>
+      <p className="muted section-dialog-help">Add a new section to this course and year level.</p>
+      <div className="section-name-entry">
+        <label className="sr-only" htmlFor="new-section-name">Next section name</label>
+        <input id="new-section-name" value={draftName} placeholder="Enter section name (e.g. BSE 3F)" readOnly/>
+        <button type="button" aria-label="Add section to list" title="Add section" disabled={!collegeId||names.length>=26||busy} onClick={addSection}>＋</button>
+      </div>
+      {names.length===0?<p className="muted section-dialog-help">No sections have been added in this dialog yet.</p>:<div className="section-dialog-pending">
+        <h4>Sections added in this dialog</h4>
+        <ul className="section-name-list" aria-label="Sections added in this dialog">{names.map((name,index)=><li key={`${index}:${name}`}>
+          <span>{name}</span>
+          {index===names.length-1&&<button type="button" aria-label={`Remove section ${name}`} title={`Remove section ${name}`} disabled={busy} onClick={removeLastSection}>−</button>}
+        </li>)}</ul>
+      </div>}
+    </section>
     {error&&<p role="alert">{error}</p>}
-    <div className="actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button><button className="primary" disabled={busy||!collegeId||names.length===0}>{busy?'Creating…':`Create ${names.length} section${names.length===1?'':'s'}`}</button></div>
+    <div className="actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button><button className="primary" disabled={busy||!collegeId||names.length===0}>{busy?'Saving…':'Save Sections'}</button></div>
   </form></Dialog>;
 }
 

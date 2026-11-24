@@ -255,7 +255,8 @@ def list_attendance(offering_id: UUID, section_id: UUID | None = None, actor=Dep
                     db: Session = Depends(get_db)):
     offering = own(db, offering_id, actor, write=False)
     return {"sessions": attendance.sessions_view(db, offering, section_id),
-            "roster": attendance.roster_view(db, offering, section_id) if section_id else []}
+            "roster": attendance.roster_view(db, offering, section_id) if section_id else [],
+            "scoring": attendance.scoring_view(db, offering)}
 
 
 @router.put(T + "/attendance", status_code=204)

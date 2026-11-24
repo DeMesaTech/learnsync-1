@@ -12,6 +12,7 @@ from app.features.accounts.names import (
     split_student_name,
     suffix_from_last_name,
 )
+from app.features.accounts.schemas import Invite as AccountInvite
 
 
 class TermInput(BaseModel):
@@ -152,6 +153,17 @@ class StudentProfileUpdate(BaseModel):
 
 class MemberInput(BaseModel):
     student_id: uuid.UUID
+
+
+class SectionStudentCreate(AccountInvite):
+    role: Literal["student"] = "student"
+
+    @model_validator(mode="after")
+    def clean_student_number(self):
+        self.student_number = (self.student_number or "").strip()
+        if not self.student_number:
+            raise ValueError("Student number is required")
+        return self
 
 
 class OfferingInput(BaseModel):

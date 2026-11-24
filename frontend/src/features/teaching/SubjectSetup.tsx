@@ -3,6 +3,7 @@ import { Link, useNavigate, useOutletContext, useSearchParams } from 'react-rout
 import { useQuery } from '@tanstack/react-query';
 import { api, post, send, upload, errorText } from '../../app/api';
 import { queryClient, useAuth } from '../../app/providers';
+import { Dialog } from '../../components/Dialog';
 import type { OfferingSummary } from '../academics/types';
 import {
   DraftNotices,
@@ -49,6 +50,9 @@ const USUAL_POLICY: GradingPolicy = {
   transmutation: 'raw',
   passing: 75,
   late_attendance_fraction: 0.5,
+  attendance_max_points: 1,
+  attendance_late_points: 0.5,
+  attendance_excused_points: 1,
 };
 const STARTER_CHAPTERS = ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4'];
 
@@ -132,7 +136,9 @@ export function SubjectSetup() {
   if (query.isPending || (initialStep === 'grading' && query.isFetching && !query.data?.draft)) return <p>Loading…</p>;
   if (query.error) return <p role="alert">{query.error.message}</p>;
   const { published, draft } = query.data;
-  if (finished !== null) return <Done offering={offering} planned={finished} />;
+  if (finished !== null) {
+    return <Done offering={offering} planned={finished} onClose={() => setFinished(null)} />;
+  }
   if (draft) {
     return (
       <Flow
@@ -313,12 +319,12 @@ function Start({
   );
 }
 
-function Done({offering,planned}:{offering:OfferingSummary;planned:number}){
-  return <section className="panel" aria-live="polite"><h2>Your subject is set up</h2>
+function Done({offering,planned,onClose}:{offering:OfferingSummary;planned:number;onClose:()=>void}){
+  return <Dialog title="Your subject is set up" onClose={onClose} confirmOnClose={false}>
     <p>The syllabus is published. {planned>0?`${planned} planned assessment${planned===1?'':'s'} wait${planned===1?'s':''} as drafts: students cannot see them until you finish and assign them.`:'Add lessons and assessments whenever you are ready.'}</p>
     <div className="actions"><Link className="button primary" to={`/faculty/offerings/${offering.id}/classwork`}>Finish the planned assessments</Link>
       <Link className="button" to={`/faculty/offerings/${offering.id}/classwork`}>Add lessons and materials</Link>
-      <Link className="button" to={`/faculty/offerings/${offering.id}/attendance`}>Take attendance</Link></div></section>;
+      <Link className="button" to={`/faculty/offerings/${offering.id}/attendance`}>Take attendance</Link></div></Dialog>;
 }
 
 function Flow({offering,draft,published,initialStep,warnings,onChanged,onFinished}:{offering:OfferingSummary;draft:SyllabusRev;published:SyllabusRev|null;initialStep:Step;warnings:string[];onChanged:()=>Promise<unknown>;onFinished:(planned:number)=>void}){

@@ -17,11 +17,11 @@ interface Standing{
   published:Record<string,{grade:number;remark:string;release_number:number;published_at:string}>;
   assessments:{id:string;title:string;kind:Kind;period:string|null;category:string|null;max_points:number;counts_toward_grade:boolean;deadline:string|null;submission:string;scored:boolean;working_score:number|null;feedback:string;released:boolean;released_score:number|null;unreleased_change:boolean;attempts:AttemptRef[]}[];
   historical:{id:string;title:string;kind:Kind;archived:boolean;working_score:number|null;released_score:number|null}[];
-  attendance:{days:{date:string;period:string;status:string|null}[];counts:Record<string,Record<string,number>>};
+  attendance:{days:{date:string;period:string;status:string|null;points:number|null}[];counts:Record<string,Record<string,number>>};
   progress:{total:number;done:number;percent:number|null;steps:{id:string;type:'lesson_completed'|'quiz_submitted'|'activity_submitted';title:string;done:boolean;kind?:string}[];outside_count:number;note:string;days:{date:string;count:number}[];last_activity_at:string|null}|null;
 }
 const SUBMISSION:Record<string,string>={not_attempted:'Not attempted',in_progress:'In progress',submitted:'Submitted',submitted_late:'Submitted late',not_submitted:'Not submitted',teacher_entered:'Entered by teacher'};
-const MARK:Record<string,string>={present:'Present',late:'Late',absent:'Absent',excused:'Excused'};
+const MARK:Record<string,string>={present:'Present',late:'Late',absent:'Absent',excused:'Excused',numeric:'Numeric'};
 const day=(iso:string)=>new Date(iso+'T00:00:00').toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'});
 const stamp=(iso:string|null)=>iso?new Date(iso).toLocaleString():'No recorded activity yet';
 
@@ -104,10 +104,10 @@ export function StudentStanding(){
 
     <details className="panel fold"><summary><h3>Attendance</h3></summary>
       {d.attendance.days.length===0?<p className="muted">No attendance has been recorded for this student’s section yet.</p>:<>
-        <div className="table-wrap" role="region" tabIndex={0} aria-label="Attendance totals"><table><thead><tr><th>Period</th><th>Present</th><th>Late</th><th>Absent</th><th>Excused</th><th>Not marked</th></tr></thead>
-          <tbody>{Object.entries(counts).map(([p,c])=><tr key={p}><td>{PERIOD_LABEL[p]??p}</td><td>{c.present}</td><td>{c.late}</td><td>{c.absent}</td><td>{c.excused}</td><td>{c.not_marked}</td></tr>)}</tbody></table></div>
-        <details className="fold inner"><summary>Day by day ({d.attendance.days.length})</summary><ul className="seq">{[...d.attendance.days].reverse().map(x=><li key={x.date}><span className="grow">{day(x.date)}<span className="muted">{PERIOD_LABEL[x.period]}</span></span><span className="badge">{x.status?MARK[x.status]:'Not marked'}</span></li>)}</ul></details></>}
-      <p className="muted">A day you have not marked is pending, not absent. Excused days are left out of the percentage.</p>
+        <div className="table-wrap" role="region" tabIndex={0} aria-label="Attendance totals"><table><thead><tr><th>Period</th><th>Present</th><th>Late</th><th>Absent</th><th>Excused</th><th>Numeric</th><th>Not marked</th></tr></thead>
+          <tbody>{Object.entries(counts).map(([p,c])=><tr key={p}><td>{PERIOD_LABEL[p]??p}</td><td>{c.present}</td><td>{c.late}</td><td>{c.absent}</td><td>{c.excused}</td><td>{c.numeric}</td><td>{c.not_marked}</td></tr>)}</tbody></table></div>
+        <details className="fold inner"><summary>Day by day ({d.attendance.days.length})</summary><ul className="seq">{[...d.attendance.days].reverse().map(x=><li key={x.date}><span className="grow">{day(x.date)}<span className="muted">{PERIOD_LABEL[x.period]}</span></span><span className="badge">{x.status?MARK[x.status]:x.points!==null?`Numeric · ${fmt(x.points)} points`:'Not marked'}</span></li>)}</ul></details></>}
+      <p className="muted">A day you have not marked is pending, not absent. Excused and numeric points follow the grading policy.</p>
     </details>
 
     {d.progress&&<details className="panel fold"><summary><h3>Learning progress</h3></summary>

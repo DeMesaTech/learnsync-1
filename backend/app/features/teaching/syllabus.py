@@ -1,5 +1,6 @@
 """Syllabus: server-side drafts with compare-and-swap autosave, immutable published revisions."""
 import uuid
+from decimal import Decimal
 from pathlib import Path
 
 from sqlalchemy import func, select
@@ -8,6 +9,7 @@ from app.errors import fail
 from app.features.academics.models import OfferingSection, Subject
 from app.features.accounts.commands import audit
 from app.features.accounts.models import now
+from app.features.assessments.models import AttendanceMark, AttendanceSession
 from app.features.assessments.policy import assessments_outside_policy
 from app.features.assessments.reviews import flag_review
 from app.features.files.models import StoredFile
@@ -109,7 +111,8 @@ def save_draft(db, actor, offering, data):
     draft.outline = data.outline.model_dump(mode="json")
     if data.grading_policy:
         policy = data.grading_policy.model_dump(mode="json")
-        for field in ("online_quiz_categories", "activity_categories"):
+        for field in ("online_quiz_categories", "activity_categories", "attendance_max_points",
+                      "attendance_late_points", "attendance_excused_points"):
             if field not in data.grading_policy.model_fields_set:
                 policy.pop(field)
         draft.grading_policy = policy
@@ -175,6 +178,16 @@ def policy_errors(policy):
         errors.append("Category weights must total 100%.")
     if policy.periods and abs(sum(p.share for p in policy.periods) - 100) > 0.01:
         errors.append("Period shares must total 100%.")
+    if policy.attendance_max_points is not None:
+        if policy.attendance_late_points is None:
+            errors.append("Set the late attendance points.")
+        elif policy.attendance_late_points > policy.attendance_max_points:
+            errors.append("Late attendance points cannot exceed the attendance maximum.")
+        if policy.attendance_excused_points is not None and \
+                policy.attendance_excused_points > policy.attendance_max_points:
+            errors.append("Excused attendance points cannot exceed the attendance maximum.")
+    elif policy.attendance_late_points is not None or policy.attendance_excused_points is not None:
+        errors.append("Set the attendance maximum before configuring attendance points.")
     return errors
 
 
@@ -189,6 +202,15 @@ def publish(db, actor, offering, expected_counter):
     if any(not t["title"].strip() for c in outline["chapters"] for t in c["topics"]):
         problems.append("Every topic needs a title.")
     problems += policy_errors(draft.grading_policy)
+    recorded_max = db.scalar(
+        select(func.max(AttendanceMark.points))
+        .join(AttendanceSession, AttendanceSession.id == AttendanceMark.session_id)
+        .where(AttendanceSession.offering_id == offering.id))
+    configured_max = (draft.grading_policy or {}).get("attendance_max_points")
+    if recorded_max is not None and (configured_max is None or
+                                     Decimal(str(configured_max)) < recorded_max):
+        problems.append(f"Keep the attendance maximum at or above the highest numeric mark "
+                        f"({recorded_max}).")
     dropped = assessments_outside_policy(db, offering.id, draft.grading_policy)
     if dropped:
         problems.append("Graded work would no longer match this grading policy (its category or "

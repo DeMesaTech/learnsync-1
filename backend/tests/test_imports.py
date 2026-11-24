@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from app.config import settings
 from app.features.academics import documents, imports
 from app.features.academics.models import Subject
+from app.features.accounts import commands as account_commands
 from app.features.accounts import faculty_imports
 from app.features.accounts.models import Account
 
@@ -21,9 +22,8 @@ def stage(db, actors, tmp_path, monkeypatch):
     """Isolated upload dir, captured invitation emails, an admin, and a term with sections."""
     monkeypatch.setattr(settings(), "upload_root", tmp_path / "uploads")
     sent = []
-    monkeypatch.setattr(imports, "send_link_to",
+    monkeypatch.setattr(account_commands, "send_link_to",
                         lambda email, display_name, token, purpose: sent.append(email))
-    monkeypatch.setattr(faculty_imports, "send_link", lambda account, token, purpose: sent.append(account.email))
     admin = Api("admin@example.com")
     college = admin.post("/api/colleges", {
         "code": "BSE", "name": "College of Business and Entrepreneurship"}).json()
@@ -167,7 +167,8 @@ def test_reimporting_the_same_file_is_a_no_op(db, stage):
     assert again["summary"] == {"new": 0, "existing": 3, "errors": 0, "total": 3}
     done = stage["admin"].post(f"/api/student-imports/{again['id']}/commit")
     assert done.status_code == 200, done.text
-    assert done.json() == {"created": 0, "existing": 3, "skipped": 0, "email_failed": []}
+    assert done.json() == {"created": 0, "existing": 3, "skipped": 0,
+                           "email_scheduled": 0, "already_committed": False}
     assert stage["sent"] == []                                  # nobody is re-invited
     members = stage["admin"].get(f"/api/sections/{stage['sections']['1A']['id']}/members").json()
     assert len(members) == 2                                    # no duplicate placement
@@ -262,11 +263,31 @@ def test_faculty_import_preview_and_commit(db, stage):
     assert account_count(db) == before
     done = stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit")
     assert done.status_code == 200, done.text
-    assert done.json() == {"created": 2, "existing": 0, "email_failed": []}
+    assert done.json() == {"created": 2, "existing": 0,
+                           "email_scheduled": 2, "already_committed": False}
     assert sorted(stage["sent"]) == ["teacher.one@example.com", "teacher.two@example.com"]
     teacher = db.scalar(select(Account).where(Account.email == "teacher.one@example.com"))
     assert teacher.role == "faculty" and teacher.status == "invited"
-    assert stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit").status_code == 409
+    repeated = stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit")
+    assert repeated.status_code == 200
+    assert repeated.json() == {"created": 2, "existing": 0,
+                               "email_scheduled": 0, "already_committed": True}
+    assert len(stage["sent"]) == 2
+
+
+def test_faculty_import_returns_before_invitation_delivery(db, stage):
+    preview = faculty_upload(stage).json()
+    actor = db.scalar(select(Account).where(Account.email == "admin@example.com"))
+    background_tasks = BackgroundTasks()
+
+    result = faculty_imports.commit_faculty_import(
+        db, actor, UUID(preview["id"]), background_tasks)
+
+    assert result == {"created": 2, "existing": 0,
+                      "email_scheduled": 2, "already_committed": False}
+    assert stage["sent"] == []
+    asyncio.run(background_tasks())
+    assert sorted(stage["sent"]) == ["teacher.one@example.com", "teacher.two@example.com"]
 
 
 def test_faculty_import_removes_titles_and_recovers_attached_surname_initial(db, stage):
@@ -339,7 +360,8 @@ def test_faculty_import_skips_existing_faculty_and_supports_xlsx(db, stage):
     assert preview["summary"] == {"new": 1, "existing": 1, "errors": 0, "total": 2}
     done = stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit")
     assert done.status_code == 200
-    assert done.json() == {"created": 1, "existing": 1, "email_failed": []}
+    assert done.json() == {"created": 1, "existing": 1,
+                           "email_scheduled": 1, "already_committed": False}
     assert stage["sent"] == ["new-teacher@example.com"]
 
 

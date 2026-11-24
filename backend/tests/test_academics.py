@@ -27,6 +27,77 @@ def add_member(w, section, student):
                            {"student_id": str(student.id)})
 
 
+def test_admin_can_add_one_new_student_to_a_section(db, world, monkeypatch):
+    from app.features.academics import router as academics_router
+    from app.features.academics.models import SectionMember
+    from app.features.accounts.models import Account
+
+    queued = []
+    monkeypatch.setattr(
+        academics_router, "send_import_invitation_batch",
+        lambda invitations, import_type, import_id: queued.extend(invitations),
+    )
+    section = world["sections"][0]
+    body = {
+        "first_name": "Ari", "middle_name": "", "last_name": "Santos",
+        "suffix": "", "email": "ari.santos@example.com", "student_number": "NEW-001",
+    }
+
+    added = world["admin"].post(f"/api/sections/{section['id']}/students", body)
+
+    assert added.status_code == 201, added.text
+    student_id = uuid.UUID(added.json()["student_id"])
+    account = db.get(Account, student_id)
+    membership = db.scalar(select(SectionMember).where(
+        SectionMember.section_id == uuid.UUID(section["id"]),
+        SectionMember.student_id == student_id))
+    assert account.role == "student" and account.status == "invited"
+    assert account.display_name == "SANTOS, ARI"
+    assert membership and membership.status == "active"
+    assert len(queued) == 1 and queued[0][:2] == ("ari.santos@example.com", account.display_name)
+
+    denied = Api("faculty@example.com").post(f"/api/sections/{section['id']}/students", {
+        **body, "email": "forbidden.student@example.com", "student_number": "NEW-002",
+    })
+    assert denied.status_code == 403
+    assert db.scalar(select(Account.id).where(
+        Account.email == "forbidden.student@example.com")) is None
+
+
+def test_adding_a_student_rejects_duplicate_section_account_details(db, world):
+    from app.features.accounts.models import Account
+
+    response = world["admin"].post(
+        f"/api/sections/{world['sections'][0]['id']}/students", {
+            "first_name": "New", "last_name": "Student",
+            "email": "new.student@example.com", "student_number": "S-1",
+        })
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "student_number_exists"
+    assert db.scalar(select(Account.id).where(
+        Account.email == "new.student@example.com")) is None
+
+
+def test_adding_a_student_requires_an_active_term(db, world):
+    from app.features.academics.models import AcademicTerm
+    from app.features.accounts.models import Account
+
+    term = db.get(AcademicTerm, uuid.UUID(world["term"]["id"]))
+    term.status = "inactive"
+    db.commit()
+    email = "inactive-term.student@example.com"
+
+    response = world["admin"].post(
+        f"/api/sections/{world['sections'][0]['id']}/students", {
+            "first_name": "New", "last_name": "Student",
+            "email": email, "student_number": "NEW-INACTIVE",
+        })
+
+    assert response.status_code == 409
+    assert db.scalar(select(Account.id).where(Account.email == email)) is None
+
+
 def school_year_body(label="2032-2033", start="2032-08-01", end="2033-05-31"):
     return {
         "label": label,

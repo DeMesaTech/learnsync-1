@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.errors import fail
+from app.features.accounts.commands import send_import_invitation_batch
 from app.security import current_account, require_role
 
 from . import commands, imports, queries
@@ -22,6 +23,7 @@ from .schemas import (
     SchoolYearInput,
     SectionBatchInput,
     SectionInput,
+    SectionStudentCreate,
     StudentProfileUpdate,
     SubjectInput,
     SubjectUpdate,
@@ -168,6 +170,18 @@ def delete_section(section_id: UUID, actor=Depends(admin), db: Session = Depends
 @router.get("/sections/{section_id}/members")
 def section_members(section_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):
     return queries.section_members(db, section_id)
+
+
+@router.post("/sections/{section_id}/students", status_code=201)
+def create_section_student(section_id: UUID, data: SectionStudentCreate,
+                           background_tasks: BackgroundTasks, actor=Depends(admin),
+                           db: Session = Depends(get_db)):
+    account, invitation = commands.create_section_student(db, actor, section_id, data)
+    background_tasks.add_task(send_import_invitation_batch, [invitation],
+                              "section_student", str(account.id))
+    return {"student_id": account.id, "display_name": account.display_name,
+            "email": account.email, "student_number": account.student_number,
+            "account_status": account.status}
 
 
 @router.post("/sections/{section_id}/members", status_code=204)

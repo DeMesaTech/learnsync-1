@@ -98,18 +98,33 @@ class Context:
             self.attempt_states[(aid, sid)] = "submitted" if "submitted" in (seen, state)                 else "in_progress"
         self.sessions = db.scalars(select(AttendanceSession).where(
             AttendanceSession.offering_id == offering.id)).all()
-        self.marks = {(m.session_id, m.student_id): m.status for m in db.scalars(
+        self.marks = {(m.session_id, m.student_id): m for m in db.scalars(
             select(AttendanceMark).join(AttendanceSession,
                                         AttendanceSession.id == AttendanceMark.session_id)
             .where(AttendanceSession.offering_id == offering.id))}
 
 
-def attendance_mark_points(ctx, status):
-    return {
-        "present": Decimal(1),
-        "absent": Decimal(0),
-        "late": D(ctx.policy.get("late_attendance_fraction", 0.5)),
-    }[status]
+def attendance_max_points(policy):
+    return D(policy.get("attendance_max_points") or 1)
+
+
+def attendance_mark_points(ctx, mark):
+    if mark.points is not None:
+        return D(mark.points)
+    if mark.status == "present":
+        return attendance_max_points(ctx.policy)
+    if mark.status == "absent":
+        return Decimal(0)
+    if mark.status == "late":
+        if ctx.policy.get("attendance_late_points") is not None:
+            return D(ctx.policy["attendance_late_points"])
+        return D(ctx.policy.get("late_attendance_fraction", 0.5)) * attendance_max_points(ctx.policy)
+    excused_points = ctx.policy.get("attendance_excused_points")
+    if excused_points is None and "attendance_excused_points" not in ctx.policy:
+        excused_points = ctx.policy.get("attendance_max_points")
+    if mark.status == "excused" and excused_points is not None:
+        return D(excused_points)
+    return None
 
 
 def attendance_category(ctx, enrollment, period):
@@ -117,17 +132,22 @@ def attendance_category(ctx, enrollment, period):
     sessions = sorted((s for s in ctx.sessions
                        if s.section_id == enrollment.section_id and s.period == period),
                       key=lambda s: s.session_date)
-    days = [{"date": s.session_date, "status": ctx.marks.get((s.id, enrollment.student_id))}
-            for s in sessions]
+    days = []
+    for session in sessions:
+        mark = ctx.marks.get((session.id, enrollment.student_id))
+        days.append({"date": session.session_date,
+                     "status": mark.status if mark else None,
+                     "points": attendance_mark_points(ctx, mark) if mark else None})
     for s in sessions:
-        status = ctx.marks.get((s.id, enrollment.student_id))
-        if status is None:
+        mark = ctx.marks.get((s.id, enrollment.student_id))
+        if mark is None:
             missing += 1
-        elif status == "excused":
-            continue
         else:
+            points = attendance_mark_points(ctx, mark)
+            if points is None:
+                continue
             counted += 1
-            total += attendance_mark_points(ctx, status)
+            total += points
     if not sessions:
         return {"status": "no_data", "raw": None, "earned": None, "possible": None,
                 "missing": ["No attendance days recorded"], "sources": days}
@@ -137,8 +157,9 @@ def attendance_category(ctx, enrollment, period):
     if counted == 0:
         return {"status": "no_data", "raw": None, "earned": None, "possible": None,
                 "missing": ["All attendance days excused"], "sources": days}
-    return {"status": "ok", "raw": total / counted * 100, "earned": total,
-            "possible": Decimal(counted), "missing": [], "sources": days}
+    possible = Decimal(counted) * attendance_max_points(ctx.policy)
+    return {"status": "ok", "raw": total / possible * 100, "earned": total,
+            "possible": possible, "missing": [], "sources": days}
 
 
 def assessment_category(ctx, enrollment, key, period):
@@ -253,7 +274,8 @@ def gradebook(db, offering):
         columns.append({
             "id": column_id, "kind": "attendance",
             "title": f"Attendance on {session_date.isoformat()}",
-            "category_key": "attendance", "period": period, "max_points": 1.0,
+            "category_key": "attendance", "period": period,
+            "max_points": float(attendance_max_points(ctx.policy)),
             "include_in_grade": False,
             "section_ids": sorted({session.section_id for session in sessions}, key=str),
             "attendance_date": session_date,
@@ -280,11 +302,10 @@ def gradebook(db, offering):
         for column_id, sessions_by_section in attendance_sessions.items():
             session = sessions_by_section.get(enrollment.section_id)
             if session:
-                status = ctx.marks.get((session.id, account.id))
-                points = (None if status in (None, "excused") else
-                          attendance_mark_points(ctx, status))
+                mark = ctx.marks.get((session.id, account.id))
+                points = attendance_mark_points(ctx, mark) if mark else None
                 cells[column_id] = {
-                    "attendance_status": status,
+                    "attendance_status": mark.status if mark else None,
                     "attendance_points": float(points) if points is not None else None}
         grades = student_grades(ctx, enrollment)
         rows.append({

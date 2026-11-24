@@ -2,14 +2,14 @@
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy import select
 
 from app.errors import fail
 from app.features.academics.documents import MAX_ROWS, read_faculty_rows
-from app.features.accounts.commands import audit, issue_token, send_link
-from app.features.accounts.models import Account, FacultyImport, now
+from app.features.accounts.commands import audit, issue_token, send_import_invitation_batch
+from app.features.accounts.models import Account, AuditEvent, FacultyImport, now
 from app.features.accounts.names import (
     StudentName,
     canonical_suffix,
@@ -154,12 +154,19 @@ def update_faculty_import(db, actor, import_id, rows):
     return imp
 
 
-def commit_faculty_import(db, actor, import_id):
+def commit_faculty_import(db, actor, import_id, background_tasks: BackgroundTasks):
     imp = db.scalar(select(FacultyImport).where(FacultyImport.id == import_id).with_for_update())
     if not imp:
         fail(404, "not_found", "Import not found.")
     if imp.status == "committed":
-        fail(409, "import_committed", "This import was already committed.")
+        event = db.scalar(select(AuditEvent).where(
+            AuditEvent.action == "faculty_import.committed",
+            AuditEvent.entity_type == "faculty_import",
+            AuditEvent.entity_id == str(imp.id),
+        ))
+        if not event:
+            fail(409, "import_result_unavailable", "This import was committed, but its result is unavailable.")
+        return {**event.details, "email_scheduled": 0, "already_committed": True}
     rows = validate_faculty(db, imp.rows)
     if any(row["status"] == "error" for row in rows):
         fail(409, "import_has_errors",
@@ -177,18 +184,15 @@ def commit_faculty_import(db, actor, import_id):
                           status="invited")
         db.add(account)
         db.flush()
-        invitations.append((account, issue_token(db, account, "invite", actor)))
+        invitations.append((account.email, account.display_name,
+                            issue_token(db, account, "invite", actor)))
 
     imp.status, imp.committed_at = "committed", now()
     audit(db, actor, "faculty_import.committed", "faculty_import", imp.id,
           {"created": len(invitations), "existing": len(rows) - len(invitations)})
     db.commit()
-
-    failed = []
-    for account, token in invitations:
-        try:
-            send_link(account, token, "invite")
-        except HTTPException:
-            failed.append(account.email)
+    if invitations:
+        background_tasks.add_task(send_import_invitation_batch, invitations,
+                                  "faculty_import", str(imp.id))
     return {"created": len(invitations), "existing": len(rows) - len(invitations),
-            "email_failed": failed}
+            "email_scheduled": len(invitations), "already_committed": False}

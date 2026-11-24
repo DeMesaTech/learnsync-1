@@ -19,11 +19,12 @@ from app.features.academics.models import AcademicTerm, OfferingSection, Section
 from app.features.accounts.models import now
 from app.features.assessments.attendance import section_roster
 from app.features.assessments.models import AttendanceMark, AttendanceSession
+from app.features.assessments.policy import published_policy
 
 from .tables import NOT_OFFICIAL, local_stamp
 
 LETTER = {"present": "P", "late": "L", "absent": "A", "excused": "E"}
-SUMMARY = ["Present", "Late", "Absent", "Excused", "Not marked"]
+SUMMARY = ["Present", "Late", "Absent", "Excused", "Numeric", "Not marked"]
 DATES_PER_TABLE = 18
 
 
@@ -45,17 +46,24 @@ def attendance_table(db, actor, offering, section_id, start, end):
         fail(422, "no_attendance", "No attendance has been recorded for that range.")
     marks: dict = {}
     for m in db.scalars(select(AttendanceMark).where(AttendanceMark.session_id.in_([s.id for s in sessions]))):
-        marks.setdefault(m.session_id, {})[m.student_id] = m.status
+        marks.setdefault(m.session_id, {})[m.student_id] = m
+    policy, _ = published_policy(db, offering.id)
+    maximum = float((policy or {}).get("attendance_max_points") or 1)
     periods = {s.period for s in sessions}
     short = {"midterm": "Mid", "finals": "Fin"}
     columns = ["Student no.", "Student"] + [
         f"{s.session_date.strftime('%a %b %d')}" + (f" · {short[s.period]}" if len(periods) > 1 else "") for s in sessions] + SUMMARY
     rows = []
     for student in section_roster(db, offering.id, section_id):
-        counted = Counter(marks.get(s.id, {}).get(student.id) for s in sessions)
+        student_marks = [marks.get(s.id, {}).get(student.id) for s in sessions]
+        counted = Counter(mark.status if mark and mark.status is not None else
+                          "numeric" if mark and mark.points is not None else None
+                          for mark in student_marks)
+        values = [LETTER.get(mark.status, "") if mark and mark.status is not None
+                  else mark.points if mark else "" for mark in student_marks]
         rows.append([student.student_number or "", student.display_name,
-                     *[LETTER.get(marks.get(s.id, {}).get(student.id), "") for s in sessions],
-                     counted["present"], counted["late"], counted["absent"], counted["excused"], counted[None]])
+                     *values, counted["present"], counted["late"], counted["absent"],
+                     counted["excused"], counted["numeric"], counted[None]])
     subject, term = db.get(Subject, offering.subject_id), db.get(AcademicTerm, offering.term_id)
     first, last = sessions[0].session_date, sessions[-1].session_date
     return {"banner": None, "sheet": "Attendance", "title": f"Attendance: {subject.code} {subject.title}, {section.name}",
@@ -64,9 +72,9 @@ def attendance_table(db, actor, offering, section_id, start, end):
                      ("Dates", f"{start or first} to {end or last}" if (start or end) else f"All recorded dates ({first} to {last})"),
                      ("Recorded days", len(sessions)), ("Grading period", " and ".join(sorted(p.title() for p in periods))),
                      ("Generated", local_stamp(now()))],
-            "notes": [NOT_OFFICIAL, "P present · L late · A absent · E excused · blank not marked.",
+            "notes": [NOT_OFFICIAL, "P present · L late · A absent · E excused · numeric cells show points earned · blank not marked.",
                       "Only dates with an attendance record are listed; a student who was not marked on a recorded date is blank, not absent.",
-                      "Late counts as part of a day and excused days are left out of the attendance grade (see the grading policy)."],
+                      f"Numeric and status marks are scored against a daily maximum of {maximum:g}; late and excused points follow the grading policy."],
             "columns": columns, "rows": rows, "dates": len(sessions),
             "filename": f"attendance-{subject.code}-{section.name}-{first}-to-{last}"}
 

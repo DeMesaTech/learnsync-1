@@ -24,6 +24,24 @@ try{
   const emails=['student1@example.com','student2@example.com','student3@example.com'];
   for(const e of emails)await call(admin,'POST',`/sections/${section.id}/members`,{student_id:id(e)});
   const teach=await newPage(browser,{state:F});await teach.goto('/faculty');
+  const syllabus=(await call(teach,'POST',`/teach/offerings/${O}/syllabus/draft`)).data;
+  syllabus.outline.chapters=[{id:'57e8a534-5a6d-4c1d-8e88-9dd431e0c65f',title:'Chapter 1',weeks:'',is_intro:false,topics:[],subsections:[]}];
+  const savedSyllabus=await call(teach,'PUT',`/teach/offerings/${O}/syllabus/draft`,{
+    expected_counter:syllabus.counter,outline:syllabus.outline,
+    grading_policy:{categories:[{key:'attendance',label:'Attendance',weight:100}],
+      periods:[{key:'midterm',label:'Midterm',share:50},{key:'finals',label:'Finals',share:50}],
+      transmutation:'raw',passing:75,late_attendance_fraction:0.5,
+      attendance_max_points:2,attendance_late_points:0.75,attendance_excused_points:2}});
+  const publishedSyllabus=await call(teach,'POST',`/teach/offerings/${O}/syllabus/draft/publish`,{expected_counter:savedSyllabus.data.counter});
+  check('disposable attendance offering publishes configurable scoring',savedSyllabus.status===200&&publishedSyllabus.status===200);
+  await teach.goto(`/faculty/offerings/${O}/setup?step=grading`);await teach.waitForLoadState('networkidle');
+  const latePoints=teach.getByRole('spinbutton',{name:'Late attendance points'});
+  check('grading setup shows attendance point fields and highlights',await teach.getByRole('heading',{name:'Highlights'}).count()===1&&await latePoints.count()===1);
+  await latePoints.fill('2.01');
+  await teach.getByRole('alert').filter({hasText:'Late attendance points cannot exceed'}).waitFor();
+  check('grading highlights flag late points above the maximum',await latePoints.getAttribute('aria-invalid')==='true');
+  await latePoints.fill('0.75');
+  await teach.getByText('No errors or required fields missing.').waitFor();
   await call(teach,'PUT',`/teach/offerings/${O}/schedule`,{meeting_days:21});            // Monday, Wednesday, Friday
   const sessions=async()=>(await call(teach,'GET',`/teach/offerings/${O}/attendance?section_id=${section.id}`)).data;
   const roster=(await sessions()).roster;const rid=n=>roster[n].student_id;
@@ -67,6 +85,20 @@ try{
   await page.getByText('All changes saved.').waitFor();
   s=await sessions();
   check('the unmark button clears the selected attendance in the grid',(await cell(0,0).innerText())==='·'&&s.sessions[0].marks[rid(0)]===undefined);
+
+  // ---- numeric points use the published daily maximum and flag invalid input
+  await page.getByRole('button',{name:'Numeric points',exact:true}).click();
+  const numericCell=page.getByRole('spinbutton',{name:/attendance points/}).first();
+  await numericCell.fill('1.25');await page.getByText('All changes saved.').waitFor();
+  s=await sessions();
+  check('numeric attendance stores points instead of a status',s.sessions[0].marks[rid(0)]?.points===1.25);
+  await numericCell.fill('2.5');
+  await page.getByRole('alert').filter({hasText:'Enter a score from 0 to 2'}).waitFor();
+  check('numeric input above the policy maximum is highlighted and not sent',await numericCell.getAttribute('aria-invalid')==='true'&&(await sessions()).sessions[0].marks[rid(0)]?.points===1.25);
+  await numericCell.fill('1.5');await page.getByText('All changes saved.').waitFor();
+  await numericCell.fill('');await page.getByText('All changes saved.').waitFor();
+  await page.getByRole('button',{name:'Statuses',exact:true}).click();
+  check('a cleared numeric mark returns to not marked',Object.keys((await sessions()).sessions[0].marks).length===0);
 
   // ---- keyboard: letters mark and move down, Delete clears
   await cell(1,0).focus();

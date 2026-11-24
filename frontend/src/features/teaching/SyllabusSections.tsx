@@ -77,10 +77,46 @@ export function GradingStep({policy,onChange}:{policy:GradingPolicy|null;onChang
   const undo=useUndo();const latestChange=useRef(onChange);latestChange.current=onChange;
   if(!policy)return <section className="panel"><h2>Grading policy</h2>
     <p>No grading policy yet. You must confirm one before grades can be calculated. LearnSync does not guess percentages for you.</p>
-    <button type="button" className="primary" onClick={()=>onChange({categories:[],periods:[{key:'midterm',label:'Midterm',share:50},{key:'finals',label:'Finals',share:50}],online_quiz_categories:[],activity_categories:[],transmutation:'raw',passing:75,late_attendance_fraction:0.5})}>Set up grading policy</button></section>;
+    <button type="button" className="primary" onClick={()=>onChange({categories:[],periods:[{key:'midterm',label:'Midterm',share:50},{key:'finals',label:'Finals',share:50}],online_quiz_categories:[],activity_categories:[],transmutation:'raw',passing:75,late_attendance_fraction:0.5,attendance_max_points:1,attendance_late_points:0.5,attendance_excused_points:1})}>Set up grading policy</button></section>;
   const total=policy.categories.reduce((a,c)=>a+Number(c.weight||0),0);
   const shares=policy.periods.reduce((a,p)=>a+Number(p.share||0),0);
   const set=(patch:Partial<GradingPolicy>)=>onChange({...policy,...patch});
+  const hasAttendancePointSettings=policy.attendance_max_points!==undefined||policy.attendance_late_points!==undefined||policy.attendance_excused_points!==undefined;
+  const attendanceMaxValue=hasAttendancePointSettings?policy.attendance_max_points??'':1;
+  const attendanceLateValue=hasAttendancePointSettings?policy.attendance_late_points??'':policy.late_attendance_fraction;
+  const attendanceExcusedValue=hasAttendancePointSettings
+    ?policy.attendance_excused_points!==undefined?policy.attendance_excused_points??'':policy.attendance_max_points??''
+    :'';
+  const attendanceMax=Number(attendanceMaxValue);
+  const attendanceLate=Number(attendanceLateValue);
+  const attendanceExcused=attendanceExcusedValue===''?null:Number(attendanceExcusedValue);
+  const validPoint=(value:number|null,min:number)=>value!==null&&Number.isFinite(value)&&value>=min&&value<=100000&&Math.abs(value*100-Math.round(value*100))<0.000001;
+  const attendanceIssues:string[]=[];
+  if(hasAttendancePointSettings){
+    if(!validPoint(attendanceMax,0.01))attendanceIssues.push('Set an attendance maximum from 0.01 to 100000, with at most two decimal places.');
+    if(!validPoint(attendanceLate,0))attendanceIssues.push('Set late attendance points from 0 to 100000, with at most two decimal places.');
+    if(validPoint(attendanceMax,0.01)&&validPoint(attendanceLate,0)&&attendanceLate>attendanceMax)attendanceIssues.push('Late attendance points cannot exceed the attendance maximum.');
+    if(attendanceExcused!==null&&(!validPoint(attendanceExcused,0)||validPoint(attendanceMax,0.01)&&attendanceExcused>attendanceMax))attendanceIssues.push('Excused attendance points must be from 0 to the attendance maximum.');
+  }
+  const highlights=[
+    ...(policy.categories.length===0?['Add at least one grading category.']:[]),
+    ...(policy.categories.some(c=>!c.label.trim())?['Name every grading category.']:[]),
+    ...(Math.abs(total-100)>0.01?['Category weights must total 100%.']:[]),
+    ...(policy.periods.length===0?['Add at least one grading period.']:[]),
+    ...(Math.abs(shares-100)>0.01?['Period shares must total 100%.']:[]),
+    ...(!Number.isFinite(policy.passing)||policy.passing<0||policy.passing>100?['Set a passing grade from 0 to 100.']:[]),
+    ...attendanceIssues,
+  ];
+  const setAttendanceField=(field:'attendance_max_points'|'attendance_late_points'|'attendance_excused_points',value:number|null)=>{
+    const defaults=hasAttendancePointSettings?{}:{
+      attendance_max_points:1,
+      attendance_late_points:policy.late_attendance_fraction,
+      attendance_excused_points:null,
+    };
+    const increaseExcused=field==='attendance_max_points'&&policy.attendance_excused_points!==undefined&&
+      policy.attendance_excused_points!==null&&policy.attendance_excused_points===policy.attendance_max_points&&value!==null;
+    set({...defaults,[field]:value,...(increaseExcused?{attendance_excused_points:value}:{})});
+  };
   const selectableCategories=policy.categories.filter(category=>category.key!=='attendance');
   const allowed=(keys:string[]|null|undefined)=>keys??selectableCategories.map(category=>category.key);
   const updateCategories=(categories:GradingPolicy['categories'])=>{
@@ -100,10 +136,14 @@ export function GradingStep({policy,onChange}:{policy:GradingPolicy|null;onChang
     </fieldset>;
   };
   return <section className="panel"><h2>Grading policy</h2>
+    <section className={`grading-highlights${highlights.length?' has-errors':''}`} aria-labelledby="grading-highlights-heading">
+      <h3 id="grading-highlights-heading">Highlights</h3>
+      {highlights.length>0?<ul role="alert">{highlights.map((issue,i)=><li key={`${i}:${issue}`}>{issue}</li>)}</ul>:<p role="status">No errors or required fields missing.</p>}
+    </section>
     <fieldset><legend>Category weights</legend>
       {policy.categories.map((c,i)=><div className="topic-row" key={i}>
-        <input aria-label="Category name" value={c.label} maxLength={80} onChange={e=>set({categories:replace(policy.categories,i,{...c,label:e.target.value})})}/>
-        <input aria-label={`${c.label||'Category'} weight (%)`} type="number" min={0} max={100} step="any" value={c.weight===0?'':c.weight} onChange={e=>set({categories:replace(policy.categories,i,{...c,weight:Number(e.target.value)||0})})}/>
+        <input aria-label="Category name" required aria-invalid={!c.label.trim()} value={c.label} maxLength={80} onChange={e=>set({categories:replace(policy.categories,i,{...c,label:e.target.value})})}/>
+        <input aria-label={`${c.label||'Category'} weight (%)`} type="number" min={0} max={100} step="any" required aria-invalid={Math.abs(total-100)>0.01} value={c.weight===0?'':c.weight} onChange={e=>set({categories:replace(policy.categories,i,{...c,weight:Number(e.target.value)||0})})}/>
         <button type="button" className="icon-button" aria-label={`Remove ${c.label||'category'}`} title={`Remove ${c.label||'category'}`} onClick={()=>updateCategories(remove(policy.categories,i))}>×</button></div>)}
       <div className="actions">{PRESETS.filter(([k])=>!policy.categories.some(c=>c.key===k)).map(([k,l])=><button type="button" key={k} onClick={()=>set({categories:[...policy.categories,{key:k,label:l,weight:0}]})}>Add {l.toLowerCase()}</button>)}
         <button type="button" className="primary" onClick={()=>set({categories:[...policy.categories,{key:`custom-${newId().slice(0,8)}`,label:'Other',weight:0}]})}>＋ Add another category</button></div>
@@ -111,10 +151,17 @@ export function GradingStep({policy,onChange}:{policy:GradingPolicy|null;onChang
     {categoryChoices('online_quiz_categories','Categories allowed for online quizzes')}
     {categoryChoices('activity_categories','Categories allowed for activities')}
     <fieldset><legend>Period shares</legend>
-      {policy.periods.map((p,i)=><label key={p.key}>{p.label} share (%)<input type="number" min={0} max={100} step="any" value={p.share} onChange={e=>set({periods:replace(policy.periods,i,{...p,share:Number(e.target.value)})})}/></label>)}
+      {policy.periods.map((p,i)=><label key={p.key}>{p.label} share (%)<input type="number" min={0} max={100} step="any" required aria-invalid={Math.abs(shares-100)>0.01} value={p.share} onChange={e=>set({periods:replace(policy.periods,i,{...p,share:Number(e.target.value)})})}/></label>)}
       <p className={`grading-total ${Math.abs(shares-100)>0.01?'error':'muted'}`} role="status">Total: {shares}% {Math.abs(shares-100)>0.01?'(must equal 100%)':'✓'}</p></fieldset>
     <div className="grid-2"><label>Scores are<select value={policy.transmutation} onChange={e=>set({transmutation:e.target.value as GradingPolicy['transmutation']})}><option value="raw">Raw percentage</option><option value="transmuted">Transmuted (50 + raw ÷ 2)</option></select></label>
-      <label>Passing grade<input type="number" min={0} max={100} value={policy.passing} onChange={e=>set({passing:Number(e.target.value)})}/></label>
-      <label>Late attendance counts as<input type="number" min={0} max={1} step="0.05" value={policy.late_attendance_fraction} onChange={e=>set({late_attendance_fraction:Number(e.target.value)})}/></label></div>
+      <label>Passing grade<input type="number" min={0} max={100} required aria-invalid={!Number.isFinite(policy.passing)||policy.passing<0||policy.passing>100} value={policy.passing} onChange={e=>set({passing:Number(e.target.value)})}/></label></div>
+    <fieldset><legend>Attendance points per date</legend>
+      <p className="muted">Present earns the maximum and Absent earns zero. Late earns its fixed points value. Excused earns its configured points; leave it blank to exclude excused days as older policies did. Numeric marks are enabled after this policy is published.</p>
+      <div className="grid-2">
+        <label>Attendance maximum (points)<input type="number" min="0.01" max="100000" step="0.01" required={hasAttendancePointSettings} aria-invalid={hasAttendancePointSettings&&!validPoint(attendanceMax,0.01)} value={attendanceMaxValue} onChange={e=>setAttendanceField('attendance_max_points',e.target.value===''?null:Number(e.target.value))}/></label>
+        <label>Late attendance points<input type="number" min="0" max={validPoint(attendanceMax,0.01)?attendanceMax:100000} step="0.01" required={hasAttendancePointSettings} aria-invalid={hasAttendancePointSettings&&(!validPoint(attendanceLate,0)||validPoint(attendanceMax,0.01)&&attendanceLate>attendanceMax)} value={attendanceLateValue} onChange={e=>setAttendanceField('attendance_late_points',e.target.value===''?null:Number(e.target.value))}/></label>
+        <label>Excused attendance points (optional)<input type="number" min="0" max={validPoint(attendanceMax,0.01)?attendanceMax:100000} step="0.01" aria-invalid={attendanceExcused!==null&&(!validPoint(attendanceExcused,0)||validPoint(attendanceMax,0.01)&&attendanceExcused>attendanceMax)} value={attendanceExcusedValue} onChange={e=>setAttendanceField('attendance_excused_points',e.target.value===''?null:Number(e.target.value))}/></label>
+      </div>
+    </fieldset>
     <button type="button" onClick={()=>{const before=policy;onChange(null);undo('Grading policy removed.',()=>latestChange.current(before))}}>Remove grading policy</button></section>;
 }

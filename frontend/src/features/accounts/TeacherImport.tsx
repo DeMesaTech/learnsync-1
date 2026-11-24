@@ -1,5 +1,5 @@
 import {useState,type FormEvent} from 'react';
-import {post,send,upload,errorText} from '../../app/api';
+import {api,post,send,upload,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
 import {Dialog} from '../../components/Dialog';
 import {useConfirm} from '../../components/confirm';
@@ -23,7 +23,7 @@ interface FacultyPreview{
   summary:{new:number;existing:number;errors:number;total:number};
   rows:ImportRow[];
 }
-interface ImportResult{created:number;existing:number;email_failed:string[]}
+interface ImportResult{created:number;existing:number;email_scheduled:number;already_committed:boolean}
 
 export function TeacherImport({colleges,onClose,onDone}:{colleges:College[];onClose:()=>void;onDone:()=>void}){
   const ask=useConfirm();
@@ -33,6 +33,13 @@ export function TeacherImport({colleges,onClose,onDone}:{colleges:College[];onCl
   const [busy,setBusy]=useState(false);
   const [dirty,setDirty]=useState(false);
   const [collegeId,setCollegeId]=useState('');
+
+  function showCompletion(completed:ImportResult){
+    setResult(completed);setPreview(null);
+    queryClient.invalidateQueries({queryKey:['accounts']});
+    queryClient.invalidateQueries({queryKey:['faculty-list']});
+    onDone();
+  }
 
   async function requestClose(){
     if(dirty&&!await ask({title:'Discard unsaved preview edits?',message:'Your edited names and email addresses have not been rechecked or saved yet.',yes:'Discard edits',danger:true}))return false;
@@ -70,28 +77,41 @@ export function TeacherImport({colleges,onClose,onDone}:{colleges:College[];onCl
 
   async function commit(){
     if(!preview||dirty)return;
+    const selectedPreview=preview;
     setBusy(true);setError('');
     try{
-      setResult(await post<ImportResult>(`/faculty-imports/${preview.id}/commit`,{}));
-      setPreview(null);
-      queryClient.invalidateQueries({queryKey:['accounts']});
-      queryClient.invalidateQueries({queryKey:['faculty-list']});
-      onDone();
-    }catch(err){setError(errorText(err))}
+      showCompletion(await post<ImportResult>(`/faculty-imports/${selectedPreview.id}/commit`,{}));
+    }catch(err){
+      let latest:FacultyPreview;
+      try{latest=await api<FacultyPreview>(`/faculty-imports/${selectedPreview.id}`)}
+      catch(statusError){
+        setError(`${errorText(err)} Import status could not be checked: ${errorText(statusError)}`);
+        return;
+      }
+      if(latest.status==='committed'){
+        showCompletion({
+          created:selectedPreview.summary.new,
+          existing:selectedPreview.summary.existing,
+          email_scheduled:0,
+          already_committed:true,
+        });
+      }else setError(errorText(err));
+    }
     finally{setBusy(false)}
   }
 
   return <Dialog title="Import teachers" onClose={()=>busy?false:requestClose()} className="import-dialog" confirmOnClose={false}>
     <p className="muted">Required columns: <code>email</code>, <code>first_name</code>, and <code>last_name</code>. <code>middle_name</code> and <code>suffix</code> are optional. LearnSync generates <code>display_name</code> from these fields; you do not need to include it. Legacy files with <code>email</code> and <code>display_name</code> are also supported. Edit the preview and save your changes to recheck validation before inviting anyone. New teachers receive an invitation link to set their password.</p>
-    {!preview&&<section className="panel"><form onSubmit={submit}>
+    {!preview&&!result&&<section className="panel"><form onSubmit={submit}>
       <label>Teacher list<input name="file" type="file" required accept=".csv,.xlsx" disabled={busy}/></label>
       <button className="primary" disabled={busy}>{busy?'Checking…':'Preview import'}</button>
     </form></section>}
     {error&&<p role="alert">{error}</p>}
     {result&&<section className="panel" role="status">
-      <h3>Import complete</h3>
+      <h3>{result.already_committed?'Import already complete':'Import complete'}</h3>
       <p>{result.created} teacher{result.created===1?'':'s'} invited, {result.existing} already existed.</p>
-      {result.email_failed.length>0&&<p className="warn">Invitation emails could not be sent to: {result.email_failed.join(', ')}. Use the Send invitation action in Faculty Management to retry.</p>}
+      {result.already_committed&&<p className="muted">The import was already saved. Check Faculty Management and resend any invitation links that were not received.</p>}
+      {result.email_scheduled>0&&<p className="muted">Invitation emails are being sent separately. If a teacher does not receive one, use the Send invitation action in Faculty Management.</p>}
       <button type="button" className="primary" onClick={onClose}>Done</button>
     </section>}
     {preview&&<section className="panel">
@@ -120,7 +140,8 @@ export function TeacherImport({colleges,onClose,onDone}:{colleges:College[];onCl
           </tr>)}</tbody>
         </table>
       </div>
-      <div className="actions">
+      <div className="actions teacher-import-actions">
+        {busy&&<span role="status">Importing teachers…</span>}
         {dirty&&<button type="button" disabled={busy} onClick={saveEdits}>{busy?'Checking…':'Save changes & recheck'}</button>}
         <button type="button" className="primary" disabled={busy||dirty||preview.summary.errors>0||(preview.summary.new>0&&!collegeId)} onClick={commit}>
           {preview.summary.new>0&&!collegeId?'Choose a college before importing':dirty?'Save edits before importing':preview.summary.errors>0?`Fix ${preview.summary.errors} ${preview.summary.errors===1?'row':'rows'} to import`:`Import ${preview.summary.total} teachers`}

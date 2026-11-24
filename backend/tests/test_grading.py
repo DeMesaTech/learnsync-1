@@ -184,6 +184,85 @@ def test_attendance_rules(graded):
     assert unlinked.status_code == 422
 
 
+def test_configured_attendance_points_score_numeric_and_status_marks(graded):
+    s1 = graded["students"][0]
+    publish_syllabus(graded, policy={
+        **POLICY, "attendance_max_points": 2, "attendance_late_points": 0.75,
+    })
+    for day, mark in (
+        ("2026-07-01", {"points": "1.25"}),
+        ("2026-07-02", "late"),
+        ("2026-07-03", "excused"),
+    ):
+        response = graded["fac"].put(g(graded, "/attendance"), {
+            "section_id": graded["sec_a"]["id"], "session_date": day,
+            "period": "midterm", "marks": {str(s1.id): mark}})
+        assert response.status_code == 204, response.text
+
+    attendance = graded["fac"].get(
+        g(graded, f"/attendance?section_id={graded['sec_a']['id']}")).json()
+    assert attendance["scoring"] == {
+        "max_points": 2.0, "late_points": 0.75, "excused_points": 2.0,
+        "numeric_enabled": True,
+    }
+    assert attendance["sessions"][2]["marks"][str(s1.id)] == {"points": 1.25}
+    rows, gradebook_data = book(graded)
+    category = next(c for c in rows["s1"]["grades"]["midterm"]["categories"]
+                    if c["key"] == "attendance")
+    assert (category["earned"], category["possible"], category["raw_percent"]) == (4.0, 6.0, 66.67)
+    numeric = rows["s1"]["cells"]["attendance:2026-07-01:midterm"]
+    assert numeric == {"attendance_status": None, "attendance_points": 1.25}
+    column = next(c for c in gradebook_data["columns"]
+                  if c["id"] == "attendance:2026-07-01:midterm")
+    assert column["max_points"] == 2.0
+
+    too_high = graded["fac"].put(g(graded, "/attendance"), {
+        "section_id": graded["sec_a"]["id"], "session_date": "2026-07-04",
+        "period": "midterm", "marks": {str(s1.id): {"points": "2.01"}}})
+    assert too_high.status_code == 422
+    assert too_high.json()["error"]["code"] == "attendance_points_exceeded"
+    too_precise = graded["fac"].put(g(graded, "/attendance"), {
+        "section_id": graded["sec_a"]["id"], "session_date": "2026-07-05",
+        "period": "midterm", "marks": {str(s1.id): {"points": "1.001"}}})
+    assert too_precise.status_code == 422
+
+
+def test_numeric_attendance_requires_a_published_daily_maximum(graded):
+    s1 = graded["students"][0]
+    response = graded["fac"].put(g(graded, "/attendance"), {
+        "section_id": graded["sec_a"]["id"], "session_date": "2026-07-01",
+        "period": "midterm", "marks": {str(s1.id): {"points": "0.5"}}})
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "attendance_points_unconfigured"
+
+
+def test_published_maximum_cannot_be_reduced_below_saved_numeric_marks(graded):
+    s1 = graded["students"][0]
+    publish_syllabus(graded, policy={
+        **POLICY, "attendance_max_points": 2, "attendance_late_points": 1,
+        "attendance_excused_points": 2,
+    })
+    saved = graded["fac"].put(g(graded, "/attendance"), {
+        "section_id": graded["sec_a"]["id"], "session_date": "2026-07-01",
+        "period": "midterm", "marks": {str(s1.id): {"points": "1.75"}}})
+    assert saved.status_code == 204, saved.text
+
+    draft = graded["fac"].post(g(graded, "/syllabus/draft")).json()
+    policy = {
+        **POLICY, "attendance_max_points": 1, "attendance_late_points": 0.5,
+        "attendance_excused_points": 1,
+    }
+    updated = graded["fac"].put(g(graded, "/syllabus/draft"), {
+        "expected_counter": draft["counter"], "outline": draft["outline"],
+        "grading_policy": policy})
+    assert updated.status_code == 200, updated.text
+    refused = graded["fac"].post(g(graded, "/syllabus/draft/publish"), {
+        "expected_counter": updated.json()["counter"]})
+    assert refused.status_code == 422
+    assert "Keep the attendance maximum at or above the highest numeric mark" in \
+        refused.json()["error"]["message"]
+
+
 # ---------------- publication, review flags, and independence ----------------
 
 def test_grade_publication_review_flags_and_republication(graded):
@@ -434,6 +513,13 @@ def test_a_students_standing_matches_the_gradebook_and_is_faculty_only(db, grade
     from test_assessments import make_manual, make_quiz, second_offering, start, submit
     fac, st1, admin = graded["fac"], graded["st1"], graded["admin"]
     s1, s2 = graded["students"]
+    publish_syllabus(graded, policy={
+        **POLICY, "attendance_max_points": 2, "attendance_late_points": 0.75,
+    })
+    recorded = fac.put(g(graded, "/attendance"), {
+        "section_id": graded["sec_a"]["id"], "session_date": "2026-07-01",
+        "period": "midterm", "marks": {str(s1.id): {"points": "1.25"}}})
+    assert recorded.status_code == 204, recorded.text
     quiz = make_quiz(graded, "Standing quiz")
     submit(st1, graded, start(st1, graded, quiz["aid"]).json()["id"], quiz["correct"])
     exam = make_manual(graded, "exam", "Standing exam", points="50")
@@ -443,6 +529,8 @@ def test_a_students_standing_matches_the_gradebook_and_is_faculty_only(db, grade
     book = fac.get(g(graded, "/gradebook")).json()
     row = next(r for r in book["rows"] if r["student_id"] == str(s1.id))
     assert page["calculation"]["grades"] == row["grades"]                       # the same numbers, not a recalculation
+    assert page["attendance"]["days"][0]["points"] == 1.25
+    assert page["attendance"]["counts"]["midterm"]["numeric"] == 1
     by_title = {a["title"]: a for a in page["assessments"]}
     assert by_title["Standing quiz"]["submission"] == "submitted" and by_title["Standing quiz"]["scored"] is True
     attempts = by_title["Standing quiz"]["attempts"]                                 # one tap from here to the answers

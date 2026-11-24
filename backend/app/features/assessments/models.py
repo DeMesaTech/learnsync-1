@@ -263,11 +263,15 @@ class AttendanceMark(Base):
         UniqueConstraint("session_id", "student_id", name="attendance_mark_unique"),
         CheckConstraint("status IN ('present','absent','late','excused')",
                         name="attendance_status"),
+        CheckConstraint("(status IS NULL) <> (points IS NULL)",
+                        name="attendance_mark_value"),
+        CheckConstraint("points IS NULL OR points >= 0", name="attendance_points_nonnegative"),
     )
     id: Mapped[uuid.UUID] = uid()
     session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("attendance_session.id"), index=True)
     student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("account.id"), index=True)
-    status: Mapped[str] = mapped_column(String(10))
+    status: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    points: Mapped[Decimal | None] = mapped_column(POINTS)
 
 
 class GradePublication(Base):

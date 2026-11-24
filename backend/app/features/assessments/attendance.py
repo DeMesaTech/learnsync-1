@@ -1,4 +1,6 @@
 """Attendance sessions and marks. An unmarked student is pending, never silently absent."""
+from decimal import Decimal
+
 from sqlalchemy import delete, select
 
 from app.errors import fail
@@ -7,7 +9,9 @@ from app.features.accounts.commands import audit
 from app.features.accounts.models import Account
 
 from .models import AttendanceMark, AttendanceSession
+from .policy import published_policy
 from .reviews import flag_review
+from .schemas import NumericAttendanceMark
 
 
 def section_roster(db, offering_id, section_id):
@@ -29,6 +33,15 @@ def save_session(db, actor, offering, data):
     stray = set(data.marks) - roster
     if stray:
         fail(422, "student_invalid", "Marks can only be recorded for students in this section.")
+    policy, _ = published_policy(db, offering.id)
+    for value in data.marks.values():
+        if isinstance(value, NumericAttendanceMark):
+            if not policy or policy.get("attendance_max_points") is None:
+                fail(422, "attendance_points_unconfigured",
+                     "Configure and publish an attendance maximum before entering numeric points.")
+            if value.points > Decimal(str(policy["attendance_max_points"])):
+                fail(422, "attendance_points_exceeded",
+                     "Attendance points cannot exceed the published daily maximum.")
     session = db.scalar(select(AttendanceSession).where(
         AttendanceSession.offering_id == offering.id,
         AttendanceSession.section_id == data.section_id,
@@ -44,17 +57,20 @@ def save_session(db, actor, offering, data):
     existing = {m.student_id: m for m in db.scalars(select(AttendanceMark).where(
         AttendanceMark.session_id == session.id))}
     changed = []
-    for student_id, status in data.marks.items():
+    for student_id, value in data.marks.items():
         mark = existing.get(student_id)
-        if status is None:
+        status = value if isinstance(value, str) else None
+        points = value.points if isinstance(value, NumericAttendanceMark) else None
+        if value is None:
             if mark is not None:
                 db.delete(mark)
                 changed.append(student_id)
         elif mark is None:
-            db.add(AttendanceMark(session_id=session.id, student_id=student_id, status=status))
+            db.add(AttendanceMark(session_id=session.id, student_id=student_id,
+                                  status=status, points=points))
             changed.append(student_id)
-        elif mark.status != status:
-            mark.status = status
+        elif mark.status != status or mark.points != points:
+            mark.status, mark.points = status, points
             changed.append(student_id)
     if changed:
         audit(db, actor, "attendance.recorded", "offering", offering.id,
@@ -85,11 +101,30 @@ def sessions_view(db, offering, section_id=None):
         query = query.where(AttendanceSession.section_id == section_id)
     out = []
     for s in db.scalars(query):
-        marks = {str(m.student_id): m.status for m in db.scalars(
-            select(AttendanceMark).where(AttendanceMark.session_id == s.id))}
+        marks = {}
+        for mark in db.scalars(select(AttendanceMark).where(AttendanceMark.session_id == s.id)):
+            marks[str(mark.student_id)] = (mark.status if mark.status is not None
+                                           else {"points": float(mark.points)})
         out.append({"id": s.id, "section_id": s.section_id, "date": s.session_date,
                     "period": s.period, "marks": marks})
     return out
+
+
+def scoring_view(db, offering):
+    policy, _ = published_policy(db, offering.id)
+    if not policy:
+        return {"max_points": 1.0, "late_points": 0.5, "excused_points": None,
+                "numeric_enabled": False}
+    maximum = float(policy.get("attendance_max_points") or 1)
+    late = policy.get("attendance_late_points")
+    if late is None:
+        late = policy.get("late_attendance_fraction", 0.5) * maximum
+    excused = policy.get("attendance_excused_points")
+    if excused is None and "attendance_excused_points" not in policy:
+        excused = policy.get("attendance_max_points")
+    return {"max_points": maximum, "late_points": float(late),
+            "excused_points": float(excused) if excused is not None else None,
+            "numeric_enabled": policy.get("attendance_max_points") is not None}
 
 
 def roster_view(db, offering, section_id):

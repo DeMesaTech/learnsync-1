@@ -257,6 +257,23 @@ def test_a_students_standing_pdf_has_a_published_and_a_faculty_basis(graded):
     assert len(events) == 2 and all(set(e["details"]) == {"student_id", "basis"} for e in events) and {e["details"]["basis"] for e in events} == {"published", "working"}
 
 
+def test_standing_pdf_includes_numeric_attendance_points(graded):
+    from helpers import POLICY, publish_syllabus
+
+    publish_syllabus(graded, policy={
+        **POLICY, "attendance_max_points": 2, "attendance_late_points": 0.75,
+    })
+    student = graded["students"][0]
+    saved = graded["fac"].put(g(graded, "/attendance"), {
+        "section_id": graded["sec_a"]["id"], "session_date": "2026-07-01",
+        "period": "midterm", "marks": {str(student.id): {"points": "1.25"}}})
+    assert saved.status_code == 204, saved.text
+    response = graded["fac"].get(g(graded, f"/students/{student.id}/standing.pdf"))
+    assert response.status_code == 200
+    text = " ".join(pdf_pages(response))
+    assert "Numeric" in text and "1.25 points" in text
+
+
 def test_class_standing_ranks_with_ties_keeps_unranked_apart_and_matches_the_export(db, graded):
     full_term(graded)
     publish_grades(graded, "midterm")                                    # s1 released, s2 not

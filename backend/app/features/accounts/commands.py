@@ -1,3 +1,4 @@
+import logging
 import secrets
 import smtplib
 from datetime import timedelta
@@ -38,6 +39,7 @@ def issue_token(db, account, purpose, actor=None, payload=None):
 SUBJECTS = {"invite": "You are invited to LearnSync: set up your account",
             "reset": "Reset your LearnSync password",
             "handover": "LearnSync: confirm the administrator ownership transfer"}
+logger = logging.getLogger("learnsync.imports")
 
 
 def send_link_to(email, display_name, raw, purpose):
@@ -62,6 +64,18 @@ def send_link_to(email, display_name, raw, purpose):
 
 def send_link(account, raw, purpose):
     send_link_to(account.email, account.display_name, raw, purpose)
+
+
+def send_import_invitation_batch(invitations, import_type, import_id):
+    failed = 0
+    for email, display_name, token in invitations:
+        try:
+            send_link_to(email, display_name, token, "invite")
+        except HTTPException:
+            failed += 1
+    if failed:
+        logger.warning("%s invitation delivery failed: import_id=%s failed=%s total=%s",
+                       import_type, import_id, failed, len(invitations))
 
 
 def invite(db, actor, data):

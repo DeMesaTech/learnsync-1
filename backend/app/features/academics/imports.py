@@ -1,6 +1,5 @@
 """Reviewed imports: student lists and prospectus drafts. Nothing is created until an admin
 commits, and a commit with any invalid row creates nothing (no silent partial import)."""
-import logging
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -9,7 +8,7 @@ from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy import select
 
 from app.errors import fail
-from app.features.accounts.commands import audit, issue_token, send_link_to
+from app.features.accounts.commands import audit, issue_token, send_import_invitation_batch
 from app.features.accounts.models import Account, AuditEvent, now
 from app.features.accounts.names import (
     StudentName,
@@ -26,7 +25,6 @@ from .models import College, ProspectusImport, Section, SectionMember, StudentIm
 EMAIL = TypeAdapter(EmailStr)
 STUDENT_TYPES = {".csv", ".xlsx"}
 PROSPECTUS_TYPES = {".pdf", ".docx", ".xlsx", ".csv"}
-logger = logging.getLogger("learnsync.imports")
 
 
 # ---------- students ----------
@@ -135,18 +133,6 @@ def create_student_import(db, actor, upload, term_id):
     return imp
 
 
-def send_student_import_invitations(invitations, import_id):
-    failed = 0
-    for email, display_name, token in invitations:
-        try:
-            send_link_to(email, display_name, token, "invite")
-        except HTTPException:
-            failed += 1
-    if failed:
-        logger.warning("Student import invitation delivery failed: import_id=%s failed=%s total=%s",
-                       import_id, failed, len(invitations))
-
-
 def commit_student_import(db, actor, import_id, background_tasks: BackgroundTasks):
     imp = db.scalar(select(StudentImport).where(StudentImport.id == import_id).with_for_update())
     if not imp:
@@ -191,7 +177,8 @@ def commit_student_import(db, actor, import_id, background_tasks: BackgroundTask
           {"created": created, "existing": len(importable) - created, "skipped": skipped})
     db.commit()
     if invitations:
-        background_tasks.add_task(send_student_import_invitations, invitations, str(imp.id))
+        background_tasks.add_task(send_import_invitation_batch, invitations,
+                                  "student_import", str(imp.id))
     return {"created": created, "existing": len(importable) - created, "skipped": skipped,
             "email_scheduled": len(invitations), "already_committed": False}
 

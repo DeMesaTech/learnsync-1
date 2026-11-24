@@ -146,6 +146,37 @@ def test_invalid_grading_policy_blocks_publish_but_valid_one_passes(course):
                     {"expected_counter": saved["counter"]}).status_code == 200
 
 
+def test_attendance_point_policy_requires_valid_maximum_and_status_points(course):
+    fac = course["fac"]
+    outline, _, _ = make_outline()
+    draft = fac.post(t(course, "/syllabus/draft")).json()
+    policy = {
+        "categories": [{"key": "attendance", "label": "Attendance", "weight": 100}],
+        "periods": [{"key": "midterm", "label": "Midterm", "share": 50},
+                    {"key": "finals", "label": "Finals", "share": 50}],
+        "attendance_max_points": 2,
+        "attendance_late_points": 2.01,
+        "attendance_excused_points": 2,
+    }
+    saved = fac.put(t(course, "/syllabus/draft"), {
+        "expected_counter": draft["counter"], "outline": outline, "grading_policy": policy})
+    assert saved.status_code == 200, saved.text
+    refused = fac.post(t(course, "/syllabus/draft/publish"),
+                       {"expected_counter": saved.json()["counter"]})
+    assert refused.status_code == 422
+    assert "Late attendance points cannot exceed" in refused.json()["error"]["message"]
+
+    policy["attendance_late_points"] = 1
+    policy["attendance_excused_points"] = 2.01
+    saved = fac.put(t(course, "/syllabus/draft"), {
+        "expected_counter": saved.json()["counter"], "outline": outline, "grading_policy": policy})
+    assert saved.status_code == 200, saved.text
+    refused = fac.post(t(course, "/syllabus/draft/publish"),
+                       {"expected_counter": saved.json()["counter"]})
+    assert refused.status_code == 422
+    assert "Excused attendance points cannot exceed" in refused.json()["error"]["message"]
+
+
 def test_syllabus_category_allowlists_must_reference_usable_categories(course):
     fac = course["fac"]
     outline, _, _ = make_outline()

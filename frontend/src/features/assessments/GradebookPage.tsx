@@ -320,8 +320,8 @@ function CellView({cell,kind,column,student,editing,value,problem,onType}:{cell?
     if(!cell)return <span className="muted" title="No attendance session is recorded for this student's section on this date">n/a</span>;
     const status='attendance_status' in cell?cell.attendance_status:null;
     const points='attendance_points' in cell?cell.attendance_points:null;
-    const label=status==='excused'?'Excused; excluded from attendance points':
-      status?`${ATTENDANCE_LABEL[status]} · ${fmt(points)} points`:'Not marked';
+    const label=status==='excused'?(points===null?'Excused; excluded from attendance points':`Excused · ${fmt(points)} points`):
+      status?`${ATTENDANCE_LABEL[status]} · ${fmt(points)} points`:points===null?'Not marked':`Numeric mark · ${fmt(points)} points`;
     return <div className="cell"><span title={label}>{fmt(points)}</span></div>;
   }
   if(!cell||!('score' in cell))return <span className="muted" title="Does not apply to this student's section">n/a</span>;

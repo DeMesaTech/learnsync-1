@@ -94,11 +94,16 @@ class PermissionInput(BaseModel):
     expires_at: datetime
 
 
+class NumericAttendanceMark(BaseModel):
+    points: Decimal = Field(ge=0, le=100000, decimal_places=2)
+
+
 class AttendanceInput(BaseModel):
     section_id: uuid.UUID
     session_date: date
     period: Literal["midterm", "finals"]
-    marks: dict[uuid.UUID, Literal["present", "absent", "late", "excused"] | None] = Field(
+    marks: dict[uuid.UUID, Literal["present", "absent", "late", "excused"]
+                | NumericAttendanceMark | None] = Field(
         default_factory=dict)   # null returns a student to "not marked"
 
 

@@ -107,11 +107,13 @@ def to_standing_pdf(data, context, basis):
     days = data["attendance"]["days"]
     if days:
         counts = data["attendance"]["counts"]
-        story.append(table(["Period", "Present", "Late", "Absent", "Excused", "Not marked"],
-                           [[PERIOD_LABELS.get(p, p)] + [c[k] for k in ("present", "late", "absent", "excused", "not_marked")] for p, c in counts.items()],
-                           [40 * mm] + [(full - 40 * mm) / 5] * 5))
-        story += [Spacer(1, 2 * mm), table(["Date", "Period", "Status"],
-                                           [[str(d["date"]), PERIOD_LABELS.get(d["period"], d["period"]), MARK[d["status"]]] for d in days],
+        story.append(table(["Period", "Present", "Late", "Absent", "Excused", "Numeric", "Not marked"],
+                           [[PERIOD_LABELS.get(p, p)] + [c[k] for k in ("present", "late", "absent", "excused", "numeric", "not_marked")] for p, c in counts.items()],
+                           [40 * mm] + [(full - 40 * mm) / 6] * 6))
+        story += [Spacer(1, 2 * mm), table(["Date", "Period", "Status / points"],
+                                           [[str(d["date"]), PERIOD_LABELS.get(d["period"], d["period"]),
+                                             f"Numeric · {num(d['points'])} points" if d["status"] is None and d["points"] is not None
+                                             else MARK[d["status"]]] for d in days],
                                            [40 * mm, 40 * mm, full - 80 * mm])]
     else:
         story.append(Paragraph("No attendance has been recorded for this student's section.", body))

@@ -650,7 +650,7 @@ Faculty coverage and student completion are separate records and labels.
 | `assessment_score` | assessment/student, selected attempt/submission where applicable, working score, feedback, revision, grading actor/time |
 | `assessment_result_publication` | score FK, release number, immutable score/feedback/source snapshot, publisher/time |
 | `attendance_session` | offering, section, date, grading period, revision/state |
-| `attendance_mark` | session/student, status (`present/absent/late/excused`), unique session/student |
+| `attendance_mark` | session/student, exactly one of status (`present/absent/late/excused`) or numeric points, unique session/student |
 
 Using a common assessment identity avoids separate unrelated score systems. Type-specific logic still belongs in the appropriate feature functions; do not build a generic configurable assessment framework.
 
@@ -769,10 +769,11 @@ Participation/recitation normally uses named activity-category entries. If a syl
 
 Attendance:
 
-- Present: 1.
-- Absent: 0.
-- Late: configurable fraction; default 0.5.
-- Excused: excluded from numerator and denominator.
+- Each attendance date has a configured maximum; Present earns that maximum and Absent earns 0.
+- Late earns a fixed point value configured by the grading policy.
+- Excused earns its configured point value and counts toward possible points; new policies default to full credit. Leaving the value unset excludes excused days, preserving older policy behavior.
+- A cell may instead store a numeric score from 0 through the date maximum.
+- Policies without attendance point settings retain the legacy one-point maximum, late fraction (default 0.5), and excluded excused days until explicitly configured.
 - Unmarked attendance is pending.
 - An entirely excused/no-data category is pending when its weight is nonzero.
 
@@ -1470,7 +1471,7 @@ Prioritize:
 - Missing score versus explicit zero.
 - Weighted points calculation.
 - Transmutation.
-- Attendance credit/excused behavior.
+- Configured attendance maximum, fixed Late points, Excused points, numeric marks, and validation against lowering the maximum below saved numeric marks.
 - Separate score and grade publication.
 - Correction retains old publication and marks review.
 - Republication appends history.

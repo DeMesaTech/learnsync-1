@@ -13,7 +13,7 @@ function Read-DotEnv {
 
 # postgresql+psycopg://user:pass@host:port/db  ->  parts
 function Split-DatabaseUrl([string]$Url) {
-    if ($Url -notmatch '^postgresql\+psycopg://([^:]+):([^@]*)@([^:/]+):(\d+)/(\w+)$') { throw "Unrecognised DATABASE_URL shape." }
+    if ($Url -notmatch '^postgresql(?:\+psycopg)?://([^:]+):([^@]*)@([^:/]+):(\d+)/(\w+)$') { throw "Unrecognised DATABASE_URL shape." }
     @{ User = $Matches[1]; Password = $Matches[2]; Host = $Matches[3]; Port = $Matches[4]; Db = $Matches[5] }
 }
 

@@ -1,5 +1,6 @@
 import uuid
 from datetime import date
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -100,6 +101,12 @@ class GradingPolicy(BaseModel):
     transmutation: Literal["raw", "transmuted"] = "raw"
     passing: float = Field(default=75, ge=0, le=100)
     late_attendance_fraction: float = Field(default=0.5, ge=0, le=1)
+    attendance_max_points: Decimal | None = Field(
+        default=None, ge=Decimal("0.01"), le=Decimal(100000), decimal_places=2)
+    attendance_late_points: Decimal | None = Field(
+        default=None, ge=0, le=Decimal(100000), decimal_places=2)
+    attendance_excused_points: Decimal | None = Field(
+        default=None, ge=0, le=Decimal(100000), decimal_places=2)
 
     @model_validator(mode="after")
     def unique_assessment_categories(self):
@@ -107,6 +114,9 @@ class GradingPolicy(BaseModel):
             keys = getattr(self, field)
             if keys is not None and len(keys) != len(set(keys)):
                 raise ValueError(f"{field} must not contain duplicate category keys.")
+        if self.attendance_max_points is not None and \
+                "attendance_excused_points" not in self.model_fields_set:
+            self.attendance_excused_points = self.attendance_max_points
         return self
 
 

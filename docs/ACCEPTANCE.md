@@ -1,5 +1,43 @@
 # Acceptance status
 
+### 2026-11-25 (Single-student section enrollment)
+- Added an Add student dialog to the selected section controls. It creates an invitation-pending account and active section membership atomically, is available only in an active term, rejects duplicate email/student numbers, and queues invitation delivery after commit.
+- Added backend coverage for successful enrollment with optional fields blank, admin-only access, active-term enforcement, and duplicate student numbers. Updated the disposable admin-lists E2E to submit one student and verify enrollment.
+- Passed `pytest tests/test_academics.py -q` (46 passed), Ruff for changed backend files, frontend build/type-check, ESLint, `node --check frontend/e2e/admin-lists.mjs`, and `git diff --check`. The build retains the existing Vite large-chunk warning.
+- Did not run the admin-lists browser E2E because it creates academic records and requires `ADMIN_LISTS_E2E_DISPOSABLE=1` against a verified disposable database.
+
+### 2026-11-25 (Development database schema sync)
+- Diagnosed the Gradebook 500: the configured database was at `ea917a6bd204`, before the attendance-points column required by the app.
+- Created a pre-migration database/uploads backup using native PostgreSQL tools; `pg_restore` listing and the app's manifest verification passed. The Docker-based backup script could not run because Docker is unavailable on this machine.
+- Updated the backup URL parser to accept both `postgresql://` and `postgresql+psycopg://`, matching supported database URL forms.
+- Applied migration `8a6e4c1d9f23` and verified Alembic head. Restarted the API (health endpoint returned 200) and reloaded the existing Gradebook page successfully.
+- Port 5173 was already serving the frontend, so it was left running rather than launching a duplicate.
+
+### 2026-11-25 (Syllabus completion dialog)
+- After a successful “Publish and finish,” show the completion message and next-step actions in a native modal dialog instead of replacing the setup page with a panel. Closing the dialog returns to syllabus setup.
+- Passed frontend build/type-check, ESLint, and `git diff --check`. The Vite build retains its existing large-chunk warning.
+- Did not click Publish and finish in the shared browser session because it would publish the current subject's syllabus; the modal interaction was not exercised end-to-end.
+
+### 2026-11-25 (Configurable attendance scoring)
+- Added policy-configured attendance maximum, Late and Excused points, numeric marks, gradebook/standing/export support, and validation highlights in grading setup. Legacy policies retain their existing scoring behavior; numeric marks are bounded by the published maximum.
+- Fixed student standing and PDF generation to omit attendance columns from assessment lookup; attendance remains available in the separate attendance summary and now reports numeric points.
+- Passed the focused backend gate across exports, grading, and attendance: 60 passed, 1 deselected. The deselected `test_headers_and_labels_are_formula_protected_too` fails in an unfiltered run on a formula-protection assertion in the workbook export.
+- Passed the four targeted numeric-attendance and standing tests, backend Ruff, frontend build/type-check, ESLint, attendance E2E syntax check, Alembic head check, and `git diff --check`. The Vite build retains the existing large-chunk warning.
+- The browser attendance E2E was not run; it requires `ATTENDANCE_E2E_DISPOSABLE=1` and a verified disposable database. A separate teaching test, `test_upload_replaces_published_syllabus_only_after_review_and_keeps_policy`, previously failed with `KeyError: 'id'` in the student syllabus response and was not part of this attendance gate.
+
+### 2026-11-24 (Teacher import completion and Manage Sections dialog)
+- Teacher imports now schedule invitations after the account transaction commits, and repeated commits replay the recorded result without duplicating accounts or invitations. The UI shows an explicit in-progress status, recovers a successful commit after a lost response, and replaces the upload form with the result.
+- Redesigned Manage Sections with the selected course/year, generated next-section name, pending-section controls, and visible API errors.
+- Updated the disposable admin-lists E2E to assert the Manage Sections layout and section-list behavior, while retaining the last-pending-section name restoration check.
+- Passed 7 focused student/faculty import tests, backend Ruff, frontend build/type-check, ESLint, `node --check frontend/e2e/admin-lists.mjs`, and `git diff --check`. The build retains the existing Vite large-chunk warning.
+- The admin-lists E2E was not run because it creates academic records and requires a disposable database. The integrated browser opened at the login page, so the authenticated dialog and live teacher import could not be visually exercised; the API was not restarted for live verification.
+
+### 2026-11-25 (Session-only section list)
+- Manage Sections now lists only names staged while the dialog is open; persisted sections still inform the next generated name but are not shown in this list. Only the last staged section has a remove control.
+- Updated the disposable admin-lists E2E to verify existing sections are omitted, newly added sections are listed, and only the last added row can be removed.
+- Passed frontend build/type-check, ESLint, `node --check frontend/e2e/admin-lists.mjs`, and `git diff --check`. Browser verified the empty list, generated name, and last-row remove control after staging two names; canceled without saving.
+- Reduced the Manage Sections dialog max width from 768px to 560px. Browser screenshot verified the narrower layout; frontend build/type-check and `git diff --check` passed.
+
 ### 2026-11-24 (Read-only standalone student management)
 - Standalone Student Management now explains that section/student actions require an active semester and links administrators to Settings to manage semester status.
 - Frontend build/type-check, ESLint, and `git diff --check` passed.
