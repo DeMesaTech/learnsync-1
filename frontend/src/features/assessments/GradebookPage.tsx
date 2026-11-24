@@ -73,8 +73,8 @@ export function GradebookPage(){
   },[showPublishing,showExport]);
   const [message,setMessage]=useState('');
   const [find,setFind]=useState('');const [section,setSection]=useState('');const [only,setOnly]=useState('');   // view filters: they never change what Publish acts on
-  const [showSection,setShowSection]=useState(true);
-  const [showStudentNumber,setShowStudentNumber]=useState(true);
+  const [showSection,setShowSection]=useState(false);
+  const [showStudentNumber,setShowStudentNumber]=useState(false);
   const [page,setPage]=useState(1);const [pageSize,setPageSize]=useState(25);
   const [editing,setEditing]=useState(false);
   const [edits,setEdits]=useState<Record<string,string>>({});          // cellKey -> typed score, only for cells that differ

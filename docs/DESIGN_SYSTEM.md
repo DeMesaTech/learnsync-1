@@ -48,7 +48,7 @@ Confirmations and undo (Phase 3): confirm only what cannot be undone or what stu
 - Faculty Grades stays visible while an offering has no published assessments. From Classwork, choosing a material or assessment creates an unpublished draft with a default title and all-section audience, then opens its editor directly; the editor is where title and audience are changed. Direct assessment edit links remain pages.
 
 ## Faculty gradebook
-- Keep student search, Section and Period filters, column visibility toggles, and the result count in one compact row on desktop; allow the controls to wrap at narrow viewport widths.
+- Keep student search, Section and Period filters, column visibility toggles, and the result count in one compact row on desktop; allow the controls to wrap at narrow viewport widths. Hide Section and Student number by default, while leaving both toggles available.
 - Render every configured grading-policy category within each period, even when it has no assessments; keep a blank, accessible placeholder column for empty categories.
 - Show each category's configured weight in its header and carry the thick accent borders around its columns through the last student row, including empty-category placeholders.
 - Place an Add manual grade column icon beside Edit scores in the sticky student-detail header. Its popover asks for title, total score, grading category, and period; new columns are immediately available for score entry and participate in grade calculation.

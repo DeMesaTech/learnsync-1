@@ -1,8 +1,8 @@
 # Acceptance status
 
 ### 2026-11-24 (Gradebook controls row)
-- Combined student search, Section and Period filters, column visibility toggles, and the student count into one compact desktop row, with responsive wrapping for narrower viewports.
-- Browser verified at the active Gradebook viewport: all controls fit on one row without horizontal overflow. Frontend build/type-check, ESLint, and `git diff --check` passed.
+- Combined student search, Section and Period filters, column visibility toggles, and the student count into one compact desktop row, with responsive wrapping for narrower viewports. Section and Student number are unchecked by default.
+- Browser verified at the active Gradebook viewport: all controls fit on one row without horizontal overflow; after a fresh load, both visibility toggles are unchecked and both columns are hidden. Frontend build/type-check, ESLint, and `git diff --check` passed.
 
 ### 2026-11-23 (Gradebook return action and attendance columns)
 - Added an icon-only return action to assessment headers when scores or feedback are unreleased. The existing confirmation remains the gate before students see results; the action is disabled for closed terms and refreshes the Gradebook after release.
