@@ -353,7 +353,9 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
       <div><p className="eyebrow">{standalone ? 'Administration' : year?.label}</p><h1 className={activeTab==='sections'?'student-management-title':''}>{headingLabel}</h1>
         {!standalone&&<span className={`badge ${term.status}`}>{term.status}</span>}</div>
     </div>
-    {!standalone&&closed&&<p className="warn" role="status">This semester is read-only until it is active.</p>}
+    {closed&&<p className="warn" role="status">
+      {term.name} ({year?.label}) is {term.status}, so academic changes are disabled. Only an active semester allows section and student changes. <Link to="/admin/settings">Manage semester status in Settings</Link>.
+    </p>}
     {!standalone&&<div className="stats-grid">
       <div className="stat-card"><span>Sections</span><strong>{totalSections}</strong></div>
       <div className="stat-card"><span>Students</span><strong>{totalStudents}</strong></div>

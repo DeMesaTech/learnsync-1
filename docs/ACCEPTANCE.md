@@ -1,5 +1,9 @@
 # Acceptance status
 
+### 2026-11-24 (Read-only standalone student management)
+- Standalone Student Management now explains that section/student actions require an active semester and links administrators to Settings to manage semester status.
+- Frontend build/type-check, ESLint, and `git diff --check` passed.
+
 ### 2026-11-24 (Section list remove control)
 - Added a minus control to the last pending section only. Removing it immediately restores that section name as the next generated name.
 - Extended the admin-list browser test to cover the last-item control and immediate input update.
