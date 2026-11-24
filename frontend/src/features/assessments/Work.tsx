@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
+import {useCallback,useEffect,useRef,useState,type FormEvent,type ReactNode} from 'react';
 import {Link,useLocation,useNavigate,useOutletContext,useParams} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
 import {ApiError,api,post,send,upload,errorText} from '../../app/api';
@@ -36,16 +36,16 @@ export function WorkList(){
 
 const SECTIONS:[string,string,string][]=[['todo','To do','Earliest deadline first.'],['again','Another attempt available',''],['upcoming','Upcoming','Not open yet.'],['awaiting','Submitted · awaiting feedback',''],['done','Completed',''],['closed','Closed','No longer open and nothing was submitted.']];
 
-export function detail(i:LearnItem){
-  const due=i.deadline?`${i.late_allowed?'was due':'due'} ${when(i.deadline)}`:'no deadline';
+export function detail(i:LearnItem):ReactNode{
+  const due=i.deadline?<time className="due-date" dateTime={i.deadline}>{i.late_allowed?'was due':'due'} {when(i.deadline)}</time>:'no deadline';
   const left=i.max_attempts!==undefined?Math.max(i.max_attempts-(i.attempts_used??0),0):0;
   switch(i.bucket){
-    case 'upcoming':return `opens ${when(i.available_from)}${i.deadline?` · due ${when(i.deadline)}`:''}`;
+    case 'upcoming':return <>opens {when(i.available_from)}{i.deadline&&<> · <time className="due-date" dateTime={i.deadline}>due {when(i.deadline)}</time></>}</>;
     case 'again':return `${i.attempts_used} of ${i.max_attempts} attempts used · ${left} left`;
     case 'awaiting':return i.state==='resubmit'?'submitted · you can replace it':'submitted';
     case 'done':return i.kind==='online_quiz'?`finished · ${i.attempts_used} of ${i.max_attempts} attempt${i.max_attempts===1?'':'s'} used`:'submitted';
-    case 'closed':return `closed · ${due}`;
-    default:return i.kind==='online_quiz'&&i.max_attempts!==undefined?`${due} · attempt ${Math.min((i.attempts_used??0)+(i.state==='in_progress'?0:1),i.max_attempts)} of ${i.max_attempts}`:due;
+    case 'closed':return <>closed · {due}</>;
+    default:return i.kind==='online_quiz'&&i.max_attempts!==undefined?<>{due} · attempt {Math.min((i.attempts_used??0)+(i.state==='in_progress'?0:1),i.max_attempts)} of {i.max_attempts}</>:due;
   }
 }
 
@@ -78,7 +78,7 @@ export function WorkDetail(){
     <p className="back"><Link to={origin.to}>← Back to {origin.label}</Link></p>
     <section className="panel"><p className="eyebrow">{item.kind==='online_quiz'?'Quiz':'Activity'} · {STATE_LABEL[item.state]??item.state}</p><h2>{item.title}</h2>
       {item.instructions&&<p className="pre">{item.instructions}</p>}
-      <p className="muted">{item.available_from?`Opens ${when(item.available_from)}. `:''}{item.deadline?`Due ${when(item.deadline)}.${item.allow_late?' Late work is accepted.':''}`:'No deadline.'} Worth {fmt(item.max_points)} points.</p>
+      <p className="muted">{item.available_from?`Opens ${when(item.available_from)}. `:''}{item.deadline?<><time className="due-date" dateTime={item.deadline}>Due {when(item.deadline)}</time>.{item.allow_late?' Late work is accepted.':''}</>:'No deadline.'} Worth {fmt(item.max_points)} points.</p>
       {item.result&&<p role="status"><strong>Released result: {fmt(item.result.score)} / {fmt(item.result.max_points)}</strong>{item.result.feedback&&<><br/>{item.result.feedback}</>}</p>}
       {message&&<p role="status">{message}</p>}
       {item.kind==='online_quiz'&&<>

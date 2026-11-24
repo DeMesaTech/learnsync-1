@@ -739,6 +739,11 @@ dialog.assessment-editor-dialog {
   font-size: .85rem
 }
 
+.due-date {
+  color: var(--deadline);
+  font-weight: 700
+}
+
 dialog.gradebook-detail-dialog {
   width: min(920px, calc(100vw - 24px));
   max-height: 92dvh

@@ -1,4 +1,4 @@
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {Link} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
 import {api} from '../../app/api';
@@ -12,7 +12,7 @@ const todayAndTime=()=>new Date().toLocaleString(undefined,{weekday:'long',day:'
 const greeting=()=>{const h=new Date().getHours();return h<12?'Good morning':h<18?'Good afternoon':'Good evening'};
 const plural=(n:number,one:string,many=one+'s')=>`${n} ${n===1?one:many}`;
 
-function Page<T>({query,children}:{query:{isPending:boolean;error:Error|null;data?:T};children:(data:T)=>React.ReactNode}){
+function Page<T>({query,children}:{query:{isPending:boolean;error:Error|null;data?:T};children:(data:T)=>ReactNode}){
   if(query.isPending)return <p role="status">Loading your dashboard…</p>;
   if(query.error)return <section className="panel"><h2>The dashboard could not be loaded</h2><p role="alert">{query.error.message}</p></section>;
   return <>{children(query.data as T)}</>;
@@ -39,6 +39,11 @@ export interface Work{late_allowed?:boolean;offering_id:string;assessment_id:str
 interface StudentHomeData{name:string;subjects:{offering_id:string;code:string;title:string;percent:number|null;done:number;total:number;to_do:number}[];
   next_step:{type:string;title:string;subject:string;link:string}|null;todo:Work[];todo_total:number;awaiting_feedback:Work[];another_attempt:Work[];
   updates:{type:string;title:string;subject:string;at:string;link:string}[]}
+const DueDate=({deadline,lateAllowed=false}:{deadline:string;lateAllowed?:boolean})=><time className="due-date" dateTime={deadline}>
+  {lateAllowed?'was due':'due'} {dateTime(deadline)}
+</time>;
+const dueText=(work:Work):ReactNode=>work.deadline?<>{work.late_allowed&&'late submission allowed, '}
+  <DueDate deadline={work.deadline} lateAllowed={work.late_allowed}/></>:'no deadline';
 const UPDATE_LABEL:Record<string,string>={announcement:'Announcement',material:'New material',result:'Result',grade:'Grade'};
 export const workLink=(w:Work)=>`/student/offerings/${w.offering_id}/work/${w.assessment_id}`;
 
@@ -65,7 +70,7 @@ export function StudentHome(){
         <div className="dash-side">
           <section className="panel"><h2>To do</h2>
             {d.todo.length===0?<p className="muted">Nothing needs your action.</p>:<ul className="rows">{d.todo.map(w=><li className="todo-row" key={w.assessment_id}><Link state={here} to={workLink(w)}><strong>{w.title}</strong>
-              <span className="muted">{w.subject} · {w.kind==='online_quiz'?'Quiz':'Activity'} · {w.state==='not_open'?(w.available_from?`opens ${dateTime(w.available_from)}`:'not open yet'):w.deadline?(w.late_allowed?`late submission allowed, was due ${dateTime(w.deadline)}`:`due ${dateTime(w.deadline)}`):'no deadline'}</span></Link></li>)}</ul>}
+              <span className="muted">{w.subject} · {w.kind==='online_quiz'?'Quiz':'Activity'} · {w.state==='not_open'?(w.available_from?`opens ${dateTime(w.available_from)}`:'not open yet'):dueText(w)}</span></Link></li>)}</ul>}
             {d.todo_total>d.todo.length&&<p className="muted">and {d.todo_total-d.todo.length} more. </p>}
             <Link state={here} className="touch" to="/student/todo">See everything to do</Link>
             {d.awaiting_feedback.length>0&&<><h3>Awaiting feedback</h3><ul className="rows">{d.awaiting_feedback.map(w=><li className="todo-row" key={w.assessment_id}><Link state={here} to={workLink(w)}><strong>{w.title}</strong><span className="muted">{w.subject} · submitted</span></Link></li>)}</ul></>}
@@ -158,19 +163,18 @@ export function AdminHome(){
 export function StudentTodo(){
   const here=useHere();
   const query=useQuery({queryKey:['todo','student'],queryFn:()=>api<{todo:Work[];awaiting_feedback:Work[];another_attempt:Work[]}>('/dashboard/student/todo')});
-  const row=(w:Work,note:string)=><li className="todo-row" key={w.assessment_id}><Link state={here} to={workLink(w)}><strong>{w.title}</strong><span className="muted">{w.subject} · {w.kind==='online_quiz'?'Quiz':'Activity'} · {note}</span></Link></li>;
-  const group=(title:string,hint:string,items:Work[],note:(w:Work)=>string)=><section className="panel" key={title}><h2>{title}</h2><p className="muted">{hint}</p>
+  const row=(w:Work,note:ReactNode)=><li className="todo-row" key={w.assessment_id}><Link state={here} to={workLink(w)}><strong>{w.title}</strong><span className="muted">{w.subject} · {w.kind==='online_quiz'?'Quiz':'Activity'} · {note}</span></Link></li>;
+  const group=(title:string,hint:string,items:Work[],note:(w:Work)=>ReactNode)=><section className="panel" key={title}><h2>{title}</h2><p className="muted">{hint}</p>
     {items.length===0?<p className="muted">Nothing here.</p>:<ul className="rows">{items.map(w=>row(w,note(w)))}</ul>}</section>;
   return <>
     <div className="page-heading"><div><p className="eyebrow">All subjects</p><h1>To do</h1><p className="muted">Quizzes and activities from every current subject, earliest deadline first.</p></div></div>
     <Page query={query}>{d=>{
       const open=d.todo.filter(w=>w.state!=='not_open'),later=d.todo.filter(w=>w.state==='not_open');
-      const due=(w:Work)=>w.deadline?(w.late_allowed?`late submission allowed, was due ${dateTime(w.deadline)}`:`due ${dateTime(w.deadline)}`):'no deadline';
       return <>
         {d.todo.length+d.awaiting_feedback.length+d.another_attempt.length===0&&<section className="panel"><h2>You’re up to date</h2><p className="muted">Nothing needs your action. New work appears here when your teacher publishes it.</p><Link state={here} className="button" to="/student/subjects">See My Classes</Link></section>}
-        {open.length>0&&group('Available now','Open for you, earliest deadline first.',open,due)}
-        {d.another_attempt.length>0&&group('Another attempt available','You have submitted these once and can try again.',d.another_attempt,w=>`${plural(w.attempts_left??0,'attempt')} left${w.late_allowed&&w.deadline?` · late submission allowed, was due ${dateTime(w.deadline)}`:''}`)}
-        {later.length>0&&group('Not open yet','These open later.',later,w=>w.available_from?`opens ${dateTime(w.available_from)}`:due(w))}
+        {open.length>0&&group('Available now','Open for you, earliest deadline first.',open,dueText)}
+        {d.another_attempt.length>0&&group('Another attempt available','You have submitted these once and can try again.',d.another_attempt,w=><>{plural(w.attempts_left??0,'attempt')} left{w.late_allowed&&w.deadline&&<> · late submission allowed, <DueDate deadline={w.deadline} lateAllowed/></>}</>)}
+        {later.length>0&&group('Not open yet','These open later.',later,w=>w.available_from?`opens ${dateTime(w.available_from)}`:dueText(w))}
         {d.awaiting_feedback.length>0&&group('Awaiting feedback','Submitted. Your teacher has not released a result yet.',d.awaiting_feedback,()=>'submitted')}
       </>}}</Page>
   </>;

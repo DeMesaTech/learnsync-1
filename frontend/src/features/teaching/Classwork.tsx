@@ -321,7 +321,7 @@ function ChapterDraftEditor({offering,draft,closeRef,onCloseReady,onAdded}:{offe
 }
 
 interface WorkRow extends Work{anchor_node_id?:string|null}
-interface SRow{key:string;kind:'item'|'work';icon:string;cat:Cat;title:string;anchor:string|null;to:string;label:string;detail:string;chips:{text:string;cls?:string}[];todo:boolean;done:boolean;result?:string}
+interface SRow{key:string;kind:'item'|'work';icon:string;cat:Cat;title:string;anchor:string|null;to:string;label:string;detail:React.ReactNode;chips:{text:string;cls?:string}[];todo:boolean;done:boolean;result?:string}
 type Filter='all'|'todo'|'done';
 
 interface TNode<T=SRow>{id:string;title:string;rows:T[];kids:TNode<T>[]}

@@ -17,6 +17,7 @@
     --success: #167457;
     --warning: #ad6b14;
     --danger: #b64343;
+    --deadline: #c6283d;
     --focus: #186891;
     --radius: 14px
 }
@@ -36,5 +37,6 @@
     --success: #8cd7b8;
     --warning: #f4c077;
     --danger: #ffb0b0;
+    --deadline: #ff7884;
     --focus: #8ed6e8
 }
