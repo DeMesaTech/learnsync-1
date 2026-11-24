@@ -43,6 +43,18 @@ try{
 
   // ---- A: read-first
   check('the gradebook opens read-first: no score inputs',await page.locator('input.score-input').count()===0);
+  const exportTrigger=page.getByRole('button',{name:'Export grades'});
+  const publishTrigger=page.getByRole('button',{name:/Ready to publish/});
+  const publishBox=await publishTrigger.boundingBox();const exportBox=await exportTrigger.boundingBox();
+  check('gradebook puts exports beside Ready to publish',await exportTrigger.count()===1&&await exportTrigger.getAttribute('aria-expanded')==='false'&&publishBox!==null&&exportBox!==null&&Math.abs(publishBox.y-exportBox.y)<2&&exportBox.x>publishBox.x+publishBox.width);
+  await exportTrigger.click();
+  const exports=page.getByRole('dialog',{name:'Export grades'}).locator('.grade-export-panel');
+  check('export popover offers PDF and Excel downloads with icons',await exports.getByRole('heading',{name:'Export grades'}).count()===1&&await exports.getByRole('button',{name:'Download PDF'}).locator('svg[aria-hidden="true"]').count()===1&&await exports.getByRole('button',{name:'Download Excel'}).locator('svg[aria-hidden="true"]').count()===1);
+  check('export scope remains selectable in the popover',await exports.getByLabel('Period').count()===1&&await exports.getByLabel('Section').count()===1&&await exports.getByRole('group',{name:'What to export'}).count()===1);
+  await page.keyboard.press('Escape');
+  check('Escape closes the export popover',await exportTrigger.getAttribute('aria-expanded')==='false'&&await page.getByRole('dialog',{name:'Export grades'}).count()===0);
+  const pager=page.getByRole('navigation',{name:'Pages'});
+  check('gradebook pager shows compact controls with accessible names',await pager.getByRole('button',{name:'Previous page'}).innerText()==='<<'&&await pager.getByRole('button',{name:'Next page'}).innerText()==='>>');
   const categoryLabels=(await page.locator('.gradebook-category-header').allTextContents()).join(' ');
   check('all policy categories appear in the period headers',['Quizzes','Activities','Attendance','Examinations'].every(label=>categoryLabels.includes(label)),categoryLabels);
   check('empty categories retain blank columns for each period',await page.locator('th.gradebook-assessment-header[aria-label="Activities: no items"]').count()===2&&await page.locator('td.gradebook-category-cell[aria-label="Activities: no items"]').count()===6);
@@ -54,7 +66,7 @@ try{
   const editScores=page.getByRole('button',{name:'Edit scores'});
   check('Edit scores is in the sticky Section header with its instruction tooltip',await page.locator('th.sticky-section').getByRole('button',{name:'Edit scores'}).count()===1&&await editScores.getAttribute('title')==='Type scores straight into the table below.');
   check('assessment titles are tooltips without extra score links',await page.locator('th.gradebook-assessment-header[title="Midterm exam"]').count()===1&&await page.locator('.gradebook a.icon-button').count()===0);
-  const bodyControls=await page.evaluate(()=>[...document.querySelectorAll('main a[href],main button,main input,main select,main textarea,main summary')].filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&!e.closest('nav.tabs')}).length);
+  const bodyControls=await page.evaluate(()=>[...document.querySelectorAll('main a[href],main button,main input,main select,main textarea,main summary')].filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&!e.closest('nav.tabs,.grade-export-panel')}).length);
   check(`the page body has ${bodyControls} controls in read mode (target 25 or fewer)`,bodyControls<=25,String(bodyControls));
   check('axe finds no violations in read mode',(await axe(page)).length===0);
 
@@ -127,6 +139,81 @@ try{
   await page.getByText(/Returned \d+ result/).first().waitFor();
   check('the button then says all graded results are returned',await page.getByRole('button',{name:'All graded results returned'}).isDisabled());
   check('the student now sees the returned result',(await call(student,'GET',`/learn/offerings/${O}/results`)).data.results.length===before+1);
+
+  // ---- F: add an immediately published manual grade column from the Section header
+  await page.goto(`/faculty/offerings/${O}/gradebook`);await page.getByRole('heading',{name:'Gradebook'}).waitFor();
+  await page.getByRole('button',{name:'Add manual grade column'}).click();
+  const manualDialog=page.getByRole('dialog',{name:'Add manual grade column'});
+  await manualDialog.getByLabel('Title').fill('   ');
+  await manualDialog.getByLabel('Total score').fill('10');
+  await manualDialog.getByLabel('Grading category').selectOption('exam');
+  await manualDialog.getByLabel('Period').selectOption('finals');
+  await manualDialog.getByRole('button',{name:'Add column'}).click();
+  await manualDialog.getByRole('alert').waitFor();
+  check('invalid manual-column title shows a recoverable error without creating a column',await manualDialog.getByRole('alert').count()===1&&!(await grades()).columns.some(column=>column.title===''));
+  await manualDialog.getByLabel('Title').fill('Final participation');
+  await manualDialog.getByRole('button',{name:'Add column'}).click();
+  await page.locator('th.gradebook-assessment-header[title="Final participation"]').waitFor();
+  check('manual grade column uses the entered title, category, period and total',await page.locator('th.gradebook-assessment-header[title="Final participation"]').count()===1&&await page.getByLabel('Period').inputValue()==='finals');
+  await page.getByRole('button',{name:'Edit scores'}).click();
+  const manualScoreInputs=page.locator('input.score-input[aria-label^="Final participation, score for"]');
+  await manualScoreInputs.first().waitFor();
+  check('the new manual column is ready for per-student score entry',await manualScoreInputs.count()===3);
+  await manualScoreInputs.first().fill('10.01');
+  await page.getByRole('button',{name:'Save 1 changed score'}).click();
+  await manualScoreInputs.first().waitFor();
+  const manualId=(await grades()).columns.find(column=>column.title==='Final participation').id;
+  const overLimitBook=await grades();
+  check('a manual score above its total is marked and not saved',await manualScoreInputs.first().getAttribute('aria-invalid')==='true'&&overLimitBook.rows[0].cells[manualId].score===null);
+  await manualScoreInputs.first().fill('10');
+  await page.getByRole('button',{name:'Save 1 changed score'}).click();
+  await page.getByText('Saved 1 score.').waitFor();
+  const atLimitBook=await grades();
+  check('a manual score equal to its total is accepted',Number(atLimitBook.rows[0].cells[manualId].score)===10);
+  const returnFromHeader=page.getByRole('button',{name:'Return 1 graded result for Final participation'});
+  check('unreleased assessment headers offer an icon-only return action with a tooltip',
+    await returnFromHeader.count()===1&&await returnFromHeader.locator('svg[aria-hidden="true"]').count()===1&&
+    (await returnFromHeader.getAttribute('title')).includes('Return 1 graded result'));
+  await returnFromHeader.click();
+  const confirmReturn=page.locator('dialog[data-confirm]');
+  await confirmReturn.waitFor();
+  check('returning from the header asks for confirmation before students see the score',
+    (await confirmReturn.innerText()).includes('Students will see the scores and feedback'));
+  await confirmReturn.getByRole('button',{name:'Cancel'}).click();
+  check('declining the confirmation leaves the score unreleased',await returnFromHeader.count()===1);
+  await returnFromHeader.click();
+  await page.locator('dialog[data-confirm]').getByRole('button',{name:'Return 1'}).click();
+  await page.getByText('Returned 1 result.').waitFor();
+  check('confirming the header action returns the result and removes the icon',
+    await page.getByRole('button',{name:'Return 1 graded result for Final participation'}).count()===0);
+
+  const attendanceDate='2026-11-30';
+  const attendanceSaved=await call(teach,'PUT',`/teach/offerings/${O}/attendance`,{
+    section_id:section.id,session_date:attendanceDate,period:'finals',
+    marks:{[id('student1@example.com')]:'present'}});
+  check('attendance is saved for the Gradebook projection',attendanceSaved.status===204);
+  await page.reload();
+  await page.getByRole('heading',{name:'Gradebook'}).waitFor();
+  const attendanceHeader=page.locator(`th.gradebook-assessment-header[title*="${attendanceDate}"]`);
+  await attendanceHeader.waitFor();
+  check('attendance date headers use MM/DD/YY with a full-date tooltip',
+    await attendanceHeader.count()===1&&await attendanceHeader.innerText()==='11/30/26'&&
+    (await attendanceHeader.getAttribute('title')).includes(attendanceDate));
+  check('attendance marks appear as earned points, not status text',
+    await page.getByText('1.00',{exact:true}).count()===1&&await page.getByText('Present',{exact:true}).count()===0);
+  await page.getByRole('button',{name:'Edit scores'}).click();
+  check('attendance date cells remain read-only in score-edit mode',
+    await page.locator('input.score-input[aria-label^="Attendance"]').count()===0);
+  const editCategories=page.getByRole('button',{name:'Edit grading categories'});
+  check('Gradebook provides a direct grading-category edit action',await editCategories.isEnabled());
+  await editCategories.click();
+  const setupSteps=page.getByRole('navigation',{name:'Setup steps'});
+  const gradingStep=setupSteps.getByRole('button',{name:'Grading'});
+  await gradingStep.waitFor();
+  check('the action opens a recoverable syllabus draft at Grading with the current Attendance weight',
+    await gradingStep.getAttribute('aria-current')==='step'&&
+    await page.getByLabel('Attendance weight (%)').inputValue()==='10'&&
+    await page.getByRole('navigation',{name:'Classwork type'}).count()===0);
 }catch(e){console.log('SCRIPT ERROR:',e.message);results.push(false)}
 await browser.close();
 console.log(`${results.filter(Boolean).length}/${results.length} checks passed`);

@@ -22,7 +22,7 @@ Admin (`/admin/...`): `settings` is the Settings page, focused on creating a sch
 
 Student management retains the **Course** filter label for college/program selection. Sections are owned by one college/program and use its code in generated names (for example, `BSE 1A`); subject offerings are assigned later in the separate Offerings tab.
 
-Faculty (`/faculty/...`): `subjects`, `issues` (report a problem), and per offering `offerings/:offeringId` with tabs `` (students), `syllabus`, `content`, `content/:itemId/edit`, `assessments`, `assessments/:assessmentId/edit`, `assessments/:assessmentId/scores`, `attendance`, `gradebook` (publish grades and export), `progress`, `announcements`.
+Faculty (`/faculty/...`): `subjects`, `issues` (report a problem), and per offering `offerings/:offeringId` with tabs `` (students), `setup`, `syllabus`, `content`, `content/:itemId/edit`, `assessments`, `assessments/:assessmentId/edit`, `assessments/:assessmentId/scores`, `attendance`, `gradebook` (publish grades and export), `progress`, `announcements`.
 
 Student (`/student/...`): `subjects`, `issues`, and per offering `offerings/:offeringId` with tabs `syllabus`, `lessons`, `lessons/:itemId`, `study`, `work`, `work/:assessmentId`, `work/:assessmentId/attempts/:attemptId`, `progress`, `results`, `announcements`. A withdrawn student sees only `results`.
 
@@ -48,10 +48,18 @@ Confirmations and undo (Phase 3): confirm only what cannot be undone or what stu
 - Faculty Grades stays visible while an offering has no published assessments. From Classwork, choosing a material or assessment creates an unpublished draft with a default title and all-section audience, then opens its editor directly; the editor is where title and audience are changed. Direct assessment edit links remain pages.
 
 ## Faculty gradebook
+- Keep student search, Section and Period filters, column visibility toggles, and the result count in one compact row on desktop; allow the controls to wrap at narrow viewport widths.
 - Render every configured grading-policy category within each period, even when it has no assessments; keep a blank, accessible placeholder column for empty categories.
 - Show each category's configured weight in its header and carry the thick accent borders around its columns through the last student row, including empty-category placeholders.
+- Place an Add manual grade column icon beside Edit scores in the sticky student-detail header. Its popover asks for title, total score, grading category, and period; new columns are immediately available for score entry and participate in grade calculation.
+- Keep PDF and Excel grade exports in an accessible popover beside Ready to publish; include format icons, retain period, section, and published or working scope selection, and include category weights in exported grade summaries.
+- Use compact `<<` and `>>` pager controls on the gradebook only; preserve accessible Previous/Next names and the shared pager's text labels on other pages.
 - Keep the read-mode Edit scores control in the sticky Section header, or the Student header when Section is hidden. Put its entry instruction in the control tooltip. In edit mode, place the Save/Cancel action bar in one merged sticky header cell above the student-detail headers; its span follows the visible Section and Student number columns.
 - Keep assessment titles available as tooltips and accessible names while showing only the maximum points in the compact table header; omit separate assessment-score links from those headers.
+- Show a compact, icon-only, accessibly labeled return action with a tooltip in an assessment header when any result is unreleased. Keep its icon at the table-text scale. It opens the existing confirmation before making scores visible to students; do not show it for attendance columns or already-returned results.
+- Keep all three Gradebook table-header rows sticky while scrolling scores, including the compact assessment/date header row.
+- Add an **Edit grading categories** action to the Gradebook toolbar. It opens the newer subject-setup wizard directly at Grading, reusing an existing draft or creating a recoverable draft from the published syllabus; the published policy remains active until normal review and publication. Disable the action for closed terms and while score edits are unsaved.
+- Include recorded attendance dates as read-only Gradebook columns, with headers in `MM/DD/YY` format and the full date in each header tooltip. Each date has a one-point maximum and uses the same raw points as category calculation: present earns 1, absent earns 0, and late earns the configured fraction. Apply the category weight in the period calculation, not by dividing it among dates. Unmarked and excused entries show no points with an explanatory tooltip. These columns are display-only and do not add another score to grade calculation.
 
 ## Term offering administration
 - The term's Offerings table can be filtered to one teacher when multiple teachers have assignments. Bulk Assign subjects defaults to active subjects placed in that term's semester; an explicit All semesters option remains available for approved exceptions. For a prospectus subject with a year-level placement, the assignment dialog lists only sections in that year.

@@ -3,6 +3,13 @@ import {useToast} from '../../components/undo';
 import {PERIOD_LABEL} from '../assessments/types';
 import type {OfferingSummary} from '../academics/types';
 
+function ExportIcon({format}:{format:'pdf'|'xlsx'}){
+  return <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4"/>
+    {format==='pdf'?<path d="M9 12h6m-6 3h6m-6 3h4"/>:<path d="M9 11h6v7H9zm0 3.5h6m-3-3.5v7"/>}
+  </svg>;
+}
+
 /** Downloads a grade file. Published = what students can see; working = a preview marked on every page. */
 type Choice={period:string;basis:'published'|'working';section:string};
 export function ExportPanel({offering,periods,initial,ranked=false}:{offering:OfferingSummary;periods:string[];initial?:Choice;ranked?:boolean}){
@@ -25,8 +32,8 @@ export function ExportPanel({offering,periods,initial,ranked=false}:{offering:Of
     }catch(e){setMessage(e instanceof Error?e.message:'The export could not be created.')}
     finally{setBusy('')}
   }
-  return <section className="panel"><h3>Export grades</h3>
-    <p className="muted">Real PDF and Excel files for your records, with each student rank. They are not an official institutional form.</p>
+  return <section className="panel grade-export-panel"><h3>Export grades</h3>
+    <p className="muted">Real PDF and Excel files for your records{ranked?', with each student rank':''}. They are not an official institutional form.</p>
     {initial?<p>Exports use the period, section and grades chosen above: <strong>{PERIOD_LABEL[period]??period}</strong>, {section?offering.sections.find(s=>s.id===section)?.name:'all sections'}, {basis==='published'?'published grades':'working preview'}. They include the whole selected scope, whatever the search box shows, and a Rank column.</p>:<>
     <div className="grid-2">
       <label>Period<select value={period} onChange={e=>setPeriod(e.target.value)}>{periods.map(p=><option key={p} value={p}>{PERIOD_LABEL[p]??p}</option>)}</select></label>
@@ -34,9 +41,10 @@ export function ExportPanel({offering,periods,initial,ranked=false}:{offering:Of
     <fieldset><legend>What to export</legend>
       <label className="inline"><input type="radio" name="export-basis" checked={basis==='published'} onChange={()=>setBasis('published')}/> Published grades: the latest release students can see</label>
       <label className="inline"><input type="radio" name="export-basis" checked={basis==='working'} onChange={()=>setBasis('working')}/> Working preview: today’s calculated values, not released</label></fieldset></>}
+    {!initial&&<p className="muted">Exports include every enrolled student in the selected scope, not just the current search results or page.</p>}
     {basis==='working'&&<p className="warn" role="status">Preview files carry a red “PREVIEW - NOT PUBLISHED” banner on every page or sheet. Do not hand them out as final grades.</p>}
-    <div className="actions"><button disabled={!!busy} onClick={()=>download('pdf')}>{busy==='pdf'?'Preparing…':'Download PDF'}</button>
-      <button disabled={!!busy} onClick={()=>download('xlsx')}>{busy==='xlsx'?'Preparing…':'Download Excel'}</button></div>
+    <div className="actions"><button disabled={!!busy} onClick={()=>download('pdf')}><ExportIcon format="pdf"/>{busy==='pdf'?'Preparing…':'Download PDF'}</button>
+      <button disabled={!!busy} onClick={()=>download('xlsx')}><ExportIcon format="xlsx"/>{busy==='xlsx'?'Preparing…':'Download Excel'}</button></div>
     {message&&<p role="status">{message}</p>}
   </section>;
 }

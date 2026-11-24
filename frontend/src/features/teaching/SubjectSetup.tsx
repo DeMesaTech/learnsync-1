@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react';
-import { Link, useNavigate, useOutletContext } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { Link, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, post, send, upload, errorText } from '../../app/api';
 import { queryClient, useAuth } from '../../app/providers';
@@ -105,6 +105,8 @@ export function buildPlan(counts: Counts, policy: GradingPolicy | null): PlanIte
 
 export function SubjectSetup() {
   const { offering } = useOutletContext<{ offering: OfferingSummary }>();
+  const [searchParams] = useSearchParams();
+  const initialStep: Step = searchParams.get('step') === 'grading' ? 'grading' : 'outline';
   const url = `/teach/offerings/${offering.id}/syllabus`;
   const query = useQuery({
     queryKey: ['syllabus', offering.id],
@@ -113,12 +115,12 @@ export function SubjectSetup() {
   const [message, setMessage] = useState('');
   const [warnings, setWarnings] = useState<string[]>([]);
   const [finished, setFinished] = useState<number | null>(null); // lives here: once published the draft is gone and this component re-renders
-  const refresh = () =>
+  const refresh = useCallback(() =>
     Promise.all(
       ['syllabus', 'assessments', 'items', 'offering', 'my-offerings'].map((k) =>
         queryClient.invalidateQueries({ queryKey: [k] }),
       ),
-    );
+    ), []);
   if (offering.term_status !== 'active') {
     return (
       <section className="panel">
@@ -127,7 +129,7 @@ export function SubjectSetup() {
       </section>
     );
   }
-  if (query.isPending) return <p>Loading…</p>;
+  if (query.isPending || (initialStep === 'grading' && query.isFetching && !query.data?.draft)) return <p>Loading…</p>;
   if (query.error) return <p role="alert">{query.error.message}</p>;
   const { published, draft } = query.data;
   if (finished !== null) return <Done offering={offering} planned={finished} />;
@@ -138,6 +140,7 @@ export function SubjectSetup() {
         offering={offering}
         draft={draft}
         published={published}
+        initialStep={initialStep}
         warnings={warnings}
         onChanged={refresh}
         onFinished={setFinished}
@@ -148,6 +151,7 @@ export function SubjectSetup() {
     <Start
       offering={offering}
       published={published}
+      autoStart={initialStep === 'grading'}
       message={message}
       setMessage={setMessage}
       setWarnings={setWarnings}
@@ -159,6 +163,7 @@ export function SubjectSetup() {
 function Start({
   offering,
   published,
+  autoStart,
   message,
   setMessage,
   setWarnings,
@@ -166,6 +171,7 @@ function Start({
 }: {
   offering: OfferingSummary;
   published: SyllabusRev | null;
+  autoStart: boolean;
   message: string;
   setMessage: (m: string) => void;
   setWarnings: (w: string[]) => void;
@@ -179,8 +185,9 @@ function Start({
   const earlier = (mine.data ?? []).filter((o) => o.id !== offering.id);
   const [source, setSource] = useState('');
   const [busy, setBusy] = useState(false);
+  const autoStartRequested = useRef(false);
 
-  async function run(work: () => Promise<unknown>) {
+  const run = useCallback(async (work: () => Promise<unknown>) => {
     setBusy(true);
     setMessage('');
     try {
@@ -191,9 +198,14 @@ function Start({
     } finally {
       setBusy(false);
     }
-  }
+  }, [onChanged, setMessage]);
 
-  const blank = () => run(() => post(`${url}/draft`, {}));
+  const blank = useCallback(() => run(() => post(`${url}/draft`, {})), [run, url]);
+  useEffect(() => {
+    if (!autoStart || autoStartRequested.current) return;
+    autoStartRequested.current = true;
+    void blank();
+  }, [autoStart, blank]);
   const copy = () =>
     run(async () => {
       const r = await post<{ items: number; assessments: number; skipped_files: number }>(
@@ -312,7 +324,7 @@ function Done({offering,planned}:{offering:OfferingSummary;planned:number}){
       <Link className="button" to={`/faculty/offerings/${offering.id}/attendance`}>Take attendance</Link></div></section>;
 }
 
-function Flow({offering,draft,published,warnings,onChanged,onFinished}:{offering:OfferingSummary;draft:SyllabusRev;published:SyllabusRev|null;warnings:string[];onChanged:()=>Promise<unknown>;onFinished:(planned:number)=>void}){
+function Flow({offering,draft,published,initialStep,warnings,onChanged,onFinished}:{offering:OfferingSummary;draft:SyllabusRev;published:SyllabusRev|null;initialStep:Step;warnings:string[];onChanged:()=>Promise<unknown>;onFinished:(planned:number)=>void}){
   const {session}=useAuth();const navigate=useNavigate();
   const url=`/teach/offerings/${offering.id}/syllabus`;
   const auto=useAutosave<SyllabusDraftContent>({storageKey:draftKey(session?.user?.id,offering.id,'syllabus'),counter:draft.counter,
@@ -320,7 +332,7 @@ function Flow({offering,draft,published,warnings,onChanged,onFinished}:{offering
     save:(v,counter)=>send<{counter:number}>('PUT',`${url}/draft`,{expected_counter:counter,outline:v.outline,grading_policy:v.grading_policy})});
   useFlushOnLeave(auto.status,auto.flush);
   const {outline,grading_policy}=auto.value;
-  const [step,setStep]=useState<Step>('outline');
+  const [step,setStep]=useState<Step>(initialStep);
   const [message,setMessage]=useState('');
   const [confirmed,setConfirmed]=useState(false);
   const [counts,setCounts]=useState<Counts>({online_quiz:{midterm:2,finals:2},activity:{midterm:1,finals:1},exam:{midterm:1,finals:1}});

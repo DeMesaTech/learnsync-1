@@ -104,8 +104,15 @@ class Context:
             .where(AttendanceSession.offering_id == offering.id))}
 
 
+def attendance_mark_points(ctx, status):
+    return {
+        "present": Decimal(1),
+        "absent": Decimal(0),
+        "late": D(ctx.policy.get("late_attendance_fraction", 0.5)),
+    }[status]
+
+
 def attendance_category(ctx, enrollment, period):
-    fraction = D(ctx.policy.get("late_attendance_fraction", 0.5))
     counted, total, missing = 0, Decimal(0), 0
     sessions = sorted((s for s in ctx.sessions
                        if s.section_id == enrollment.section_id and s.period == period),
@@ -120,7 +127,7 @@ def attendance_category(ctx, enrollment, period):
             continue
         else:
             counted += 1
-            total += {"present": Decimal(1), "absent": Decimal(0), "late": fraction}[status]
+            total += attendance_mark_points(ctx, status)
     if not sessions:
         return {"status": "no_data", "raw": None, "earned": None, "possible": None,
                 "missing": ["No attendance days recorded"], "sources": days}
@@ -234,6 +241,23 @@ def gradebook(db, offering):
                 "period": rev.period, "max_points": rev.max_points,
                 "include_in_grade": rev.include_in_grade, "section_ids": sorted(secs, key=str)}
                for a, rev, secs in ctx.assessments]
+    attendance_groups = {}
+    for session in ctx.sessions:
+        attendance_groups.setdefault((session.session_date, session.period), []).append(session)
+    attendance_sessions = {}
+    for (session_date, period), sessions in sorted(
+            attendance_groups.items(), key=lambda item: (item[0][0], PERIODS.index(item[0][1]))):
+        column_id = f"attendance:{session_date.isoformat()}:{period}"
+        attendance_sessions[column_id] = {
+            session.section_id: session for session in sessions}
+        columns.append({
+            "id": column_id, "kind": "attendance",
+            "title": f"Attendance on {session_date.isoformat()}",
+            "category_key": "attendance", "period": period, "max_points": 1.0,
+            "include_in_grade": False,
+            "section_ids": sorted({session.section_id for session in sessions}, key=str),
+            "attendance_date": session_date,
+        })
     rows = []
     for enrollment, account in ctx.enrollments:
         cells = {}
@@ -253,6 +277,15 @@ def gradebook(db, offering):
             if a.kind == "online_quiz":
                 cells[str(a.id)]["attempt_state"] = ctx.attempt_states.get(
                     (a.id, account.id), "not_attempted")
+        for column_id, sessions_by_section in attendance_sessions.items():
+            session = sessions_by_section.get(enrollment.section_id)
+            if session:
+                status = ctx.marks.get((session.id, account.id))
+                points = (None if status in (None, "excused") else
+                          attendance_mark_points(ctx, status))
+                cells[column_id] = {
+                    "attendance_status": status,
+                    "attendance_points": float(points) if points is not None else None}
         grades = student_grades(ctx, enrollment)
         rows.append({
             "student_id": account.id, "display_name": account.display_name,

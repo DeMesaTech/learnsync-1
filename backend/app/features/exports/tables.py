@@ -38,6 +38,48 @@ def policy_line(policies, ctx):
     return " | ".join(describe(v, p) for v, p in sorted(policies.items())) + " (as released)"
 
 
+def category_weights(policies, ctx):
+    sources = policies or {ctx.version: ctx.policy}
+    multiple = len(sources) > 1
+    return " | ".join(
+        (f"version {version}: " if multiple else "")
+        + ", ".join(
+            f'{category["label"]} {Decimal(str(category["weight"])).normalize():f}%'
+            for category in policy["categories"])
+        for version, policy in sorted(sources.items()))
+
+
+def activity_label(source):
+    """A compact, unambiguous header for a scored activity."""
+    points = number(source.get("max_points"))
+    return f"{source.get('title') or 'Untitled activity'} / {points:g}" if points is not None \
+        else source.get("title") or "Untitled activity"
+
+
+def activity_columns(ctx, chosen, period, basis, category_keys):
+    """Gradable activities ordered under each category in the applicable data scope."""
+    columns, seen = ({key: [] for key in category_keys}, {key: set() for key in category_keys})
+    if period == "course":
+        return columns
+    if basis == "working":
+        sources = ({"assessment_id": a.id, "title": rev.title, "max_points": rev.max_points,
+                    "category_key": rev.category_key}
+                   for a, rev, _ in ctx.assessments
+                   if rev.include_in_grade and rev.period == period and rev.category_key in columns)
+    else:
+        sources = (dict(source, category_key=category["key"])
+                   for release in chosen.values()
+                   for category in (release.snapshot or {}).get("periods", {}).get(period, {}).get("categories", [])
+                   if category.get("key") in columns
+                   for source in category.get("sources", []) if source.get("assessment_id") is not None)
+    for source in sources:
+        key, assessment_id = source["category_key"], str(source["assessment_id"])
+        if assessment_id not in seen[key]:
+            seen[key].add(assessment_id)
+            columns[key].append({"id": assessment_id, "label": activity_label(source)})
+    return columns
+
+
 def grade_table(db, actor, offering, period, basis, section_id, rank=False):
     ctx = grading.Context(db, offering)
     keys = [p["key"] for p in ctx.policy["periods"]]
@@ -68,8 +110,26 @@ def grade_table(db, actor, offering, period, basis, section_id, rank=False):
                 seen.setdefault(c["key"], c["label"])
         value_columns = [(f"{label} (%)", key) for key, label in seen.items()]
     mixed = len(policies) > 1
-    columns = ["Student no.", "Name", "Section", *[label for label, _ in value_columns],
-              *(["Policy version"] if mixed else []), "Grade", "Remark", "Status"]
+    activities = activity_columns(ctx, chosen, period, basis, [key for _, key in value_columns])
+    detail_columns = []
+    column_groups = ["STUDENT INFORMATION"] * 3
+    column_roles = ["identity", "name", "identity"]
+    for label, key in value_columns:
+        category = label.removesuffix(" (%)")
+        for activity in activities[key]:
+            detail_columns.append((activity["label"], key, activity["id"]))
+            column_groups.append(category.upper())
+            column_roles.append("activity")
+        detail_columns.append((label, key, None))
+        column_groups.append(category.upper())
+        column_roles.append("category")
+    columns = ["Student no.", "Name", "Section", *[label for label, _, _ in detail_columns],
+               *(["Policy version"] if mixed else []), "Grade", "Remark", "Status"]
+    if mixed:
+        column_groups.append("RELEASE DETAILS")
+        column_roles.append("details")
+    column_groups.extend(["FINAL GRADE"] * 3)
+    column_roles.extend(["grade", "remark", "status"])
     rows, ids, counts = [], [], {"published": 0, "not_published": 0, "preview": 0, "pending": 0}
     for enrollment, account in ctx.enrollments:
         if section_id is not None and enrollment.section_id != section_id:
@@ -79,18 +139,23 @@ def grade_table(db, actor, offering, period, basis, section_id, rank=False):
         if basis == "published":
             release = published.get((account.id, period))
             if release is None:
-                rows.append([*head, *[None] * len(value_columns), *([None] if mixed else []),
+                rows.append([*head, *[None] * len(detail_columns), *([None] if mixed else []),
                              None, "", "Not published"])
                 counts["not_published"] += 1
                 continue
             periods = (release.snapshot or {}).get("periods", {})
             values = []
-            for _, key in value_columns:
+            for _, key, assessment_id in detail_columns:
                 if period == "course":
                     values.append(number(periods.get(key, {}).get("grade")))
                 else:
                     cats = {c["key"]: c for c in periods.get(period, {}).get("categories", [])}
-                    values.append(number(cats.get(key, {}).get("percent")))
+                    category = cats.get(key, {})
+                    if assessment_id is None:
+                        values.append(number(category.get("percent")))
+                    else:
+                        sources = {str(s.get("assessment_id")): s for s in category.get("sources", [])}
+                        values.append(number(sources.get(assessment_id, {}).get("score")))
             status = f"Published release {release.release_number} ({local_stamp(release.published_at)})"
             if (account.id, period) in flags:
                 status += "; working data changed since, review pending"
@@ -101,10 +166,17 @@ def grade_table(db, actor, offering, period, basis, section_id, rank=False):
             result = grading.student_grades(ctx, enrollment)[period]
             if period == "course":
                 others = grading.student_grades(ctx, enrollment)
-                values = [number(others[k]["grade"]) for _, k in value_columns]
+                values = [number(others[k]["grade"]) for _, k, _ in detail_columns]
             else:
                 cats = {c["key"]: c for c in result["categories"]}
-                values = [number(cats[k]["percent"]) for _, k in value_columns]
+                values = []
+                for _, key, assessment_id in detail_columns:
+                    category = cats[key]
+                    if assessment_id is None:
+                        values.append(number(category["percent"]))
+                    else:
+                        sources = {str(s["assessment_id"]): s for s in category["sources"]}
+                        values.append(number(sources.get(assessment_id, {}).get("score")))
             if result["grade"] is None:
                 rows.append([*head, *values, None, "", "Pending: " + "; ".join(result["pending"])])
                 counts["pending"] += 1
@@ -121,9 +193,15 @@ def grade_table(db, actor, offering, period, basis, section_id, rank=False):
          else "Working values (preview)"),
         ("Grading policy", policy_line(policies, ctx) if basis == "published" and policies
          else describe(ctx.version, ctx.policy) + " (current)"),
+    ]
+    if period != "course":
+        weights_label = "Category weights (as released)" if basis == "published" and policies \
+            else "Category weights (current)"
+        meta.append((weights_label, category_weights(policies, ctx)))
+    meta.extend([
         ("Generated", f"{local_stamp(now())} ({settings().app_timezone}) by {actor.display_name}"),
         ("Students", str(len(rows))),
-    ]
+    ])
     notes = [NOT_OFFICIAL]
     if mixed:
         notes.append("Releases in this file were made under different grading policy versions; each "
@@ -133,6 +211,7 @@ def grade_table(db, actor, offering, period, basis, section_id, rank=False):
     table = {"title": f"{subject.code} grades - {PERIOD_LABELS[period]}",
              "banner": PREVIEW if basis == "working" else None, "meta": meta, "notes": notes,
              "columns": columns, "rows": rows, "student_ids": ids, "counts": counts,
+             "column_groups": column_groups, "column_roles": column_roles,
              "filename": f"grades-{subject.code}-{period}-{basis}"}
     if rank:
         scope = sections.get(section_id) if section_id else "all sections of this offering"
@@ -159,6 +238,8 @@ def add_rank(table, scope, period, basis):
     table["rows"] = [[ranks[i], *table["rows"][i]] for i in order]
     table["student_ids"] = [table["student_ids"][i] for i in order]
     table["columns"] = ["Rank", *table["columns"]]
+    table["column_groups"] = ["STUDENT INFORMATION", *table.get("column_groups", [])]
+    table["column_roles"] = ["identity", *table.get("column_roles", [])]
     ranked = [g for g in grades if g is not None]
     passed = sum(1 for r in table["rows"] if r[0] is not None and r[-2] == "passed")
     table["ranking"] = {

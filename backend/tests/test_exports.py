@@ -43,6 +43,7 @@ def test_published_export_is_what_students_can_see_and_nothing_more(graded):
     banner, meta, header, rows = sheet_rows(response)
     assert banner is None                                              # released data is not a preview
     assert meta["Period"] == "Midterm" and meta["Basis"].startswith("Published")
+    assert "Quizzes" in meta["Category weights (as released)"] and "%" in meta["Category weights (as released)"]
     assert meta["Subject"].count("-") >= 1 and meta["Students"] == "2"
     assert header[:3] == ["Student no.", "Name", "Section"] and header[-3:] == ["Grade", "Remark", "Status"]
     by_name = {r[1]: r for r in rows}
@@ -167,6 +168,7 @@ def test_published_metadata_comes_from_the_release_not_from_todays_policy(db, gr
     assert s1["Remark"] == "passed" and s1["Grade"] == 81.0               # still what the student saw
     _, meta, _, _ = sheet_rows(export(graded, basis="working"))
     assert "version 2; passing grade 90" in meta["Grading policy"] and meta["Grading policy"].endswith("(current)")
+    assert "Category weights (current)" in meta
 
 
 def test_releases_from_different_policy_versions_are_identified_per_row(db, graded):
@@ -184,6 +186,7 @@ def test_releases_from_different_policy_versions_are_identified_per_row(db, grad
     db.commit()
     _, meta, header, rows = sheet_rows(export(graded, basis="published"))
     assert "Policy version" in header and "Participation (%)" in header and "Quizzes (%)" in header
+    assert "version 1:" in meta["Category weights (as released)"] and "version 7:" in meta["Category weights (as released)"]
     by_name = {r[1]: dict(zip(header, r, strict=True)) for r in rows}
     assert by_name["s1"]["Policy version"] == 1 and by_name["s2"]["Policy version"] == 7
     assert by_name["s2"]["Participation (%)"] == 70.0 and by_name["s2"]["Quizzes (%)"] is None

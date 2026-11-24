@@ -1,5 +1,42 @@
 # Acceptance status
 
+### 2026-11-24 (Gradebook controls row)
+- Combined student search, Section and Period filters, column visibility toggles, and the student count into one compact desktop row, with responsive wrapping for narrower viewports.
+- Browser verified at the active Gradebook viewport: all controls fit on one row without horizontal overflow. Frontend build/type-check, ESLint, and `git diff --check` passed.
+
+### 2026-11-23 (Gradebook return action and attendance columns)
+- Added an icon-only return action to assessment headers when scores or feedback are unreleased. The existing confirmation remains the gate before students see results; the action is disabled for closed terms and refreshes the Gradebook after release.
+- Projected recorded attendance sessions into read-only Gradebook date columns grouped by date and period. Headers use `MM/DD/YY`; each date shows the raw category points (Present 1, Absent 0, Late the configured fraction) with a one-point maximum. The category weight is applied once by the period calculation, not divided across dates. Sections without a session show "n/a"; unmarked and excused entries show no points.
+- Added backend coverage for category point mapping, status updates, clearing marks, deleting section sessions, and removing the final attendance column. Extended the disposable Gradebook E2E for header return confirmation, points display, read-only attendance, and opening Setup at Grading.
+- Passed: `backend\.venv\Scripts\python.exe -m pytest --basetemp=..\var\pytest-attendance-category-points-20261124 tests\test_gradebook_edit.py tests\test_attendance_grid.py -q` (22 passed), Ruff for changed backend files, frontend build/type-check, ESLint, `node --check frontend\e2e\grades-edit.mjs`, and `git diff --check`.
+- The full Gradebook E2E was not run because it creates academic records and requires an explicitly disposable database. Frontend build passed; Vite printed a large-chunk warning.
+- Browser computed-style check: the return button and adjacent maximum-score text both measure 42px by 12.8px.
+- Browser scroll check confirmed all three header rows stick at 0px, 36px, and 72px within the Gradebook scroller.
+- The running API was stale; with approval, restarted it and reloaded the live Gradebook. The saved Nov 25 attendance column and present marks then appeared.
+- The previous projection incorrectly displayed a weighted share (for example, `1.43` for a 10% category over seven dates). It now matches the existing attendance-category calculation; backend coverage verifies that adding another date does not change a Present point from 1.
+- The Gradebook edit action now opens `/setup?step=grading`, reusing an existing draft or opening a new recoverable draft in the setup wizard. The legacy `?edit=grading` route redirects there, and the obsolete Classwork type tabs are removed from the syllabus page.
+- Browser verification after the latest API restart: a Present cell shows `1.00` with the tooltip “Present · 1.00 points.” The Gradebook action opened Setup at Grading with the existing draft and 10% Attendance weight; the legacy URL redirected there and no Classwork type tabs appeared. No category inputs or draft values were changed.
+
+### 2026-11-23 (Gradebook manual columns)
+- Added an Add manual grade column control beside Edit scores. Its accessible popover collects title, total score, grading category, and period; successful creation selects that period and refreshes the gradebook.
+- Added a faculty-only, atomic endpoint that publishes a manual assessment against the current grading policy. It reuses existing score storage/calculation and flags affected published grades for review; no schema migration is needed.
+- Added API coverage for invalid/blank titles, missing required fields, total-score boundaries and precision, missing policy, invalid category/period, role/ownership, and closed terms. Negative and over-maximum scores are rejected; an over-maximum manual score rejects the whole batch, while the exact maximum succeeds.
+- Matched the manual-column popover typography to the gradebook table's `.88rem` size.
+- Passed: `backend\.venv\Scripts\python.exe -m pytest --basetemp=..\var\pytest-manual-column-error-20261123 tests\test_gradebook_edit.py -q` (13 passed), Ruff for changed backend files, frontend build/type-check, ESLint, `node --check frontend/e2e/grades-edit.mjs`, `git diff --check`, and browser computed-style verification (popover, heading, input, and table all 14.08px).
+- E2E now covers recoverable invalid-title and over-limit-score errors plus a maximum-valid score, but was not run because it requires explicit confirmation of a disposable database. No column was created in the shared browser offering.
+
+### 2026-11-23 (Gradebook export popover)
+- Moved the Gradebook export form into a popover beside Ready to publish and added PDF/Excel icons to the download buttons. Period, section, publication-basis, preview-warning, and download behavior remain intact.
+- Added focused E2E assertions for the trigger, icons, scope controls, and Escape dismissal.
+- Passed frontend production build/type-check, ESLint, `node --check frontend/e2e/grades-edit.mjs`, and `git diff --check`.
+- Browser verified side-by-side triggers, popover contents and icons, Escape dismissal, switching between export/publish popovers, and outside-click dismissal. The full E2E scenario was not run because it requires explicit confirmation of a disposable database.
+
+### 2026-11-23 (Gradebook exports and compact pager)
+- Added the existing audited PDF/XLSX grade export controls to the Gradebook page, retained period/section/publication-basis selection, and included category weights from the current or published policy snapshot in the file metadata.
+- Replaced the Gradebook pager's visible Previous/Next text with `<<` and `>>`, keeping accessible Previous/Next page names; other shared pager users retain their existing labels.
+- Passed frontend production build/type-check, ESLint, `node --check frontend/e2e/grades-edit.mjs`, backend `tests/test_exports.py` (23 passed), backend Ruff for the export implementation/tests, and `git diff --check`.
+- Browser verified the live Gradebook page shows the export controls and compact pager for 206 students. Did not initiate a download on the live offering; actual PDF/XLSX generation and category-weight metadata passed the backend export tests.
+
 ### 2026-11-23 (Gradebook category borders)
 - Carried the thick accent borders from each weighted category header through assessment headers and every student row; empty-category placeholders receive both edges.
 - Added an E2E assertion that the category border remains weighted through all student rows. Passed frontend build/type-check, ESLint, `node --check frontend/e2e/grades-edit.mjs`, and `git diff --check`.

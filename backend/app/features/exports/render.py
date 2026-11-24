@@ -4,7 +4,7 @@ from io import BytesIO
 from xml.sax.saxutils import escape
 
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
@@ -27,43 +27,147 @@ def safe_filename(name):
 
 
 def to_xlsx(table):
+    """Build a teacher-friendly grade sheet while retaining the exact export data.
+
+    The colour roles deliberately follow the departmental grade-sheet template: yellow
+    identifies students/final grades, green identifies component grades, and cyan keeps
+    remarks distinct from the calculated values.
+    """
     book = Workbook()
     sheet = book.active
     sheet.title = table.get("sheet", "Grades")
+    sheet.sheet_view.showGridLines = False
+    total_columns = len(table["columns"])
+    end_column = get_column_letter(total_columns)
+    thin_green = Side(style="thin", color="00A651")
+    medium_green = Side(style="medium", color="00A651")
+    outline = Border(left=medium_green, right=medium_green, top=medium_green, bottom=medium_green)
+    grouped = Border(bottom=medium_green)
+    header_border = Border(left=thin_green, right=thin_green, top=thin_green, bottom=medium_green)
+    lime = "00E600"
+    light_green = "B3EA8A"
+    yellow = "FFFF00"
+    cyan = "00B0F0"
+    soft_gray = "F2F2F2"
+    default_groups = (["STUDENT INFORMATION"] * (4 if table["columns"][0] == "Rank" else 3)
+                      + ["GRADE COMPONENTS"] * max(len(table["columns"]) - 6, 0)
+                      + ["FINAL GRADE"] * 3)
+    column_groups = table.get("column_groups", default_groups)
+    default_roles = (["identity"] * (4 if table["columns"][0] == "Rank" else 3)
+                     + ["category"] * max(len(table["columns"]) - 6, 0)
+                     + ["grade", "remark", "status"])
+    column_roles = table.get("column_roles", default_roles)
+
     row = 1
     if table["banner"]:
         cell = sheet.cell(row=row, column=1, value=safe_cell(table["banner"]))
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = PatternFill("solid", fgColor="B42318")
-        sheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=max(len(table["columns"]), 4))
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        sheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=total_columns)
         row += 1
-    sheet.cell(row=row, column=1, value=safe_cell(table["title"])).font = Font(bold=True, size=14)
+    # The period/title strip is the first non-warning element, like the supplied grade-sheet
+    # template. Metadata remains above the grid so it prints with the file.
+    sheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=total_columns)
+    title = sheet.cell(row=row, column=1, value=safe_cell(table["title"].upper()))
+    title.font = Font(name="Arial", bold=True, size=18, color="000000")
+    title.fill = PatternFill("solid", fgColor=lime)
+    title.alignment = Alignment(horizontal="center", vertical="center")
+    title.border = outline
+    sheet.row_dimensions[row].height = 30
     row += 1
     for label, value in table["meta"]:
-        sheet.cell(row=row, column=1, value=safe_cell(label)).font = Font(bold=True)
-        sheet.cell(row=row, column=2, value=safe_cell(value))
+        label_cell = sheet.cell(row=row, column=1, value=safe_cell(label))
+        label_cell.font = Font(name="Arial", bold=True, size=10)
+        label_cell.fill = PatternFill("solid", fgColor=soft_gray)
+        label_cell.alignment = Alignment(vertical="center")
+        value_cell = sheet.cell(row=row, column=2, value=safe_cell(value))
+        value_cell.font = Font(name="Arial", size=10)
+        value_cell.alignment = Alignment(vertical="center")
+        if total_columns > 2:
+            sheet.merge_cells(start_row=row, start_column=2, end_row=row, end_column=total_columns)
         row += 1
     for note in table["notes"]:
-        sheet.cell(row=row, column=1, value=safe_cell(note)).font = Font(italic=True)
+        cell = sheet.cell(row=row, column=1, value=safe_cell(note))
+        cell.font = Font(name="Arial", italic=True, size=9)
+        cell.alignment = Alignment(vertical="center")
+        if total_columns > 1:
+            sheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=total_columns)
         row += 1
     row += 1
-    header = row
+
+    # Each activity is grouped beneath its policy category, matching the teacher's grade-sheet
+    # workflow rather than flattening every score into one undifferentiated list.
+    group_row = row
+    start = 1
+    while start <= total_columns:
+        label = column_groups[start - 1]
+        end = start
+        while end < total_columns and column_groups[end] == label:
+            end += 1
+        fill = yellow if label == "STUDENT INFORMATION" else (
+            lime if label == "FINAL GRADE" else soft_gray)
+        if start != end:
+            sheet.merge_cells(start_row=group_row, start_column=start, end_row=group_row, end_column=end)
+        cell = sheet.cell(row=group_row, column=start, value=label)
+        cell.font = Font(name="Arial", bold=True, italic=True, size=10)
+        cell.fill = PatternFill("solid", fgColor=fill)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = grouped
+        start = end + 1
+    sheet.row_dimensions[group_row].height = 22
+
+    header = group_row + 1
     for col, name in enumerate(table["columns"], start=1):
         cell = sheet.cell(row=header, column=col, value=safe_cell(name))
-        cell.font = Font(bold=True)
-        cell.fill = PatternFill("solid", fgColor="DCE6F2")
-        cell.alignment = Alignment(wrap_text=True, vertical="top")
+        role = column_roles[col - 1]
+        fill = {"identity": yellow, "activity": soft_gray, "category": light_green,
+                "details": soft_gray, "grade": yellow, "remark": cyan, "status": cyan}.get(role)
+        cell.font = Font(name="Arial", bold=True, italic=role in ("grade", "remark"), size=10)
+        if fill:
+            cell.fill = PatternFill("solid", fgColor=fill)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = header_border
+    sheet.row_dimensions[header].height = 30
     for r, data in enumerate(table["rows"], start=header + 1):
         for col, value in enumerate(data, start=1):
             cell = sheet.cell(row=r, column=col, value=safe_cell(value))
+            role = column_roles[col - 1]
+            fill = {"category": light_green, "grade": yellow, "remark": cyan, "status": cyan}.get(role)
+            if col == 1 and role == "identity":
+                fill = yellow
+            if fill:
+                cell.fill = PatternFill("solid", fgColor=fill)
+            cell.font = Font(name="Arial", size=10, bold=role == "category")
+            cell.alignment = Alignment(horizontal="left" if role in ("name", "remark", "status")
+                                       else "center", vertical="center", wrap_text=table["columns"][col - 1] == "Status")
+            if role in ("identity", "name", "grade", "remark", "status", "details"):
+                cell.border = Border(left=thin_green, right=thin_green)
             if isinstance(value, float):
                 cell.number_format = "0.00"
+        sheet.row_dimensions[r].height = 18
+    sheet.auto_filter.ref = f"A{header}:{end_column}{max(header, header + len(table['rows']))}"
     sheet.freeze_panes = sheet.cell(row=header + 1, column=4 if table["columns"][0] == "Rank" else 3)
     for col in range(1, len(table["columns"]) + 1):
-        widest = max([len(str(table["columns"][col - 1]))] +
-                     [len(str(d[col - 1])) for d in table["rows"] if d[col - 1] is not None])
-        sheet.column_dimensions[get_column_letter(col)].width = min(max(widest + 2, 10), 60)
+        name = table["columns"][col - 1]
+        widest = max([len(str(name))] + [len(str(d[col - 1])) for d in table["rows"] if d[col - 1] is not None])
+        if name == "Name":
+            width = max(24, min(widest + 2, 38))
+        elif name == "Status":
+            width = max(24, min(widest + 2, 40))
+        elif name == "Remark":
+            width = max(13, min(widest + 2, 20))
+        else:
+            width = min(max(widest + 2, 10), 18)
+        sheet.column_dimensions[get_column_letter(col)].width = width
     sheet.page_setup.orientation = "landscape"
+    sheet.page_setup.fitToWidth = 1
+    sheet.page_setup.fitToHeight = 0
+    sheet.sheet_properties.pageSetUpPr.fitToPage = True
+    sheet.page_margins.left = 0.25
+    sheet.page_margins.right = 0.25
+    sheet.page_margins.top = 0.4
+    sheet.page_margins.bottom = 0.4
     sheet.print_title_rows = f"{header}:{header}"
     out = BytesIO()
     book.save(out)

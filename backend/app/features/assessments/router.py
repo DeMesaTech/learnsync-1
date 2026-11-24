@@ -32,6 +32,7 @@ from .schemas import (
     BatchScores,
     Correction,
     GradePublishInput,
+    ManualColumnInput,
     ParseInput,
     PermissionInput,
     PlanInput,
@@ -274,6 +275,14 @@ def delete_attendance(offering_id: UUID, session_id: UUID, actor=Depends(faculty
 @router.get(T + "/gradebook")
 def get_gradebook(offering_id: UUID, actor=Depends(faculty), db: Session = Depends(get_db)):
     return grading.gradebook(db, own(db, offering_id, actor, write=False))
+
+
+@router.post(T + "/gradebook/manual-columns", status_code=201)
+def create_manual_grade_column(offering_id: UUID, data: ManualColumnInput,
+                               actor=Depends(faculty), db: Session = Depends(get_db)):
+    offering = own(db, offering_id, actor)
+    assessment = definitions.create_manual_column(db, actor, offering, data)
+    return {"id": assessment.id}
 
 
 @router.post(T + "/grades/publish")

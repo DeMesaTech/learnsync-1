@@ -31,6 +31,13 @@ class AssessmentCreate(BaseModel):
     anchor_node_id: uuid.UUID | None = None
 
 
+class ManualColumnInput(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    max_points: Decimal = Field(ge=Decimal("0.01"), le=Decimal(100000), decimal_places=2)
+    category_key: str = Field(min_length=1, max_length=40)
+    period: Literal["midterm", "finals"]
+
+
 class AssessmentDraftSave(BaseModel):
     expected_counter: int
     title: str = Field(default="", max_length=200)

@@ -2,7 +2,7 @@
 rules that freeze answer keys once students have started attempts."""
 from decimal import Decimal
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, text, update
 
 from app.errors import fail
 from app.features.accounts.commands import audit
@@ -111,6 +111,44 @@ def create(db, actor, offering, data):
     audit(db, actor, "assessment.created", "assessment", a.id, {"kind": data.kind})
     db.commit()
     return a
+
+
+def create_manual_column(db, actor, offering, data):
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
+               {"k": f"grades:{offering.id}"})
+    title = data.title.strip()
+    policy, _ = published_policy(db, offering.id)
+    if not policy:
+        fail(422, "policy_missing",
+             "Publish a syllabus with a confirmed grading policy before adding graded work.")
+    problems = []
+    if not title:
+        problems.append("Add a title.")
+    if data.category_key == "attendance":
+        problems.append("Attendance comes from the attendance register. Choose another category.")
+    elif data.category_key not in category_keys(policy):
+        problems.append("Choose a grading category from your syllabus policy.")
+    if data.period not in period_keys(policy):
+        problems.append("Choose a grading period (midterm or finals).")
+    if problems:
+        fail(422, "manual_column_incomplete", " ".join(problems))
+
+    assessment = Assessment(offering_id=offering.id, kind="manual", created_by=actor.id)
+    db.add(assessment)
+    db.flush()
+    rev = AssessmentRevision(
+        assessment_id=assessment.id, version=1, state="published", title=title,
+        category_key=data.category_key, period=data.period, max_points=data.max_points,
+        include_in_grade=True, max_attempts=1, created_by=actor.id,
+        published_by=actor.id, published_at=now())
+    db.add(rev)
+    flag_review(db, offering.id, f"{title}: graded work was added.", periods=[data.period])
+    audit(db, actor, "assessment.created", "assessment", assessment.id,
+          {"kind": "manual", "source": "gradebook"})
+    audit(db, actor, "assessment.published", "assessment", assessment.id,
+          {"version": rev.version, "source": "gradebook"})
+    db.commit()
+    return assessment
 
 
 def locked_draft(db, assessment, expected_counter):

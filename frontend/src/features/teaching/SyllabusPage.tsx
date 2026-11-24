@@ -1,7 +1,6 @@
 import {useToast} from '../../components/undo';
-import {ClassworkTypes,FACULTY_CATS} from '../../components/ClassworkTypes';
-import {useState,type FormEvent} from 'react';
-import {useOutletContext} from 'react-router-dom';
+import {useCallback,useState,type FormEvent} from 'react';
+import {Navigate,useOutletContext,useSearchParams} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
 import {api,post,send,upload,errorText} from '../../app/api';
 import {queryClient,useAuth} from '../../app/providers';
@@ -19,13 +18,22 @@ export function SyllabusPage(){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const closed=offering.term_status!=='active';
   const url=`/teach/offerings/${offering.id}/syllabus`;
+  const [searchParams]=useSearchParams();
+  const editGrading=searchParams.get('edit')==='grading';
   const query=useQuery({queryKey:['syllabus',offering.id],queryFn:()=>api<SyllabusState>(url)});
   const [message,setMessage]=useState('');
   const [warnings,setWarnings]=useState<string[]>([]);
   const [uploading,setUploading]=useState(false);
-  const refresh=()=>queryClient.invalidateQueries({queryKey:['syllabus',offering.id]});
+  const [starting,setStarting]=useState(false);
+  const refresh=useCallback(()=>queryClient.invalidateQueries({queryKey:['syllabus',offering.id]}),[offering.id]);
 
-  async function start(){setMessage('');try{await post(`${url}/draft`,{});refresh()}catch(e){setMessage(errorText(e))}}
+  const start=useCallback(async()=>{
+    setMessage('');setStarting(true);
+    try{await post(`${url}/draft`,{});await refresh()}
+    catch(e){setMessage(errorText(e))}
+    finally{setStarting(false)}
+  },[refresh,url]);
+  if(editGrading)return <Navigate to={`/faculty/offerings/${offering.id}/setup?step=grading`} replace/>;
   async function importFile(e:FormEvent<HTMLFormElement>){
     e.preventDefault();setMessage('');
     setUploading(true);
@@ -36,14 +44,13 @@ export function SyllabusPage(){
   if(query.isPending)return <p>Loading syllabus…</p>;
   if(query.error)return <p role="alert">{query.error.message}</p>;
   const {published,draft}=query.data;
-  const strip=<ClassworkTypes base={`/faculty/offerings/${offering.id}`} cats={FACULTY_CATS} current="syllabus"/>;
-  if(draft)return <>{strip}<DraftEditor key={draft.id} offering={offering} draft={draft} published={published} warnings={warnings} onChanged={refresh}/>{published&&<CoveragePanel offering={offering} published={published} closed={closed}/>}</>;
-  return <>{strip}
+  if(draft)return <><DraftEditor key={draft.id} offering={offering} draft={draft} published={published} warnings={warnings} onChanged={refresh}/>{published&&<CoveragePanel offering={offering} published={published} closed={closed}/>}</>;
+  return <>
     {message&&<p role="alert">{message}</p>}
     {published?<>
       <section className="panel"><div className="page-heading"><div><h2>Published syllabus · version {published.version}</h2>
         <p className="muted">Students see this version. Editing creates a separate draft; students keep seeing this version until you publish.</p></div>
-        <button className="primary" disabled={closed} onClick={start}>Edit syllabus</button></div></section>
+        <button className="primary" disabled={closed||starting} onClick={start}>{starting?'Opening syllabus draft…':'Edit syllabus'}</button></div></section>
       {!closed&&<section className="panel"><h3>Replace syllabus from a file</h3>
         <p className="muted">Upload a DOCX or PDF to create a replacement draft. The current published syllabus and grading policy stay in effect until you review and publish the replacement.</p>
         <form onSubmit={importFile}><label>Replacement syllabus (DOCX or PDF)<input name="file" type="file" required accept=".docx,.pdf" disabled={uploading}/></label>
@@ -83,12 +90,12 @@ function CoveragePanel({offering,published,closed}:{offering:OfferingSummary;pub
   </details>;
 }
 
-function DraftEditor({offering,draft,published,warnings,onChanged}:{offering:OfferingSummary;draft:SyllabusRev;published:SyllabusRev|null;warnings:string[];onChanged:()=>void}){
+function DraftEditor({offering,draft,published,warnings,initialStep='course',onChanged}:{offering:OfferingSummary;draft:SyllabusRev;published:SyllabusRev|null;warnings:string[];initialStep?:Step;onChanged:()=>void}){
   const ask=useConfirm();const toast=useToast();
   const {session}=useAuth();
   const url=`/teach/offerings/${offering.id}/syllabus`;
   const key=draftKey(session?.user?.id,offering.id,'syllabus');
-  const [step,setStep]=useState<Step>('course');
+  const [step,setStep]=useState<Step>(initialStep);
   const [message,setMessage]=useState('');
   const auto=useAutosave<SyllabusDraftContent>({storageKey:key,counter:draft.counter,
     initial:{outline:draft.outline,grading_policy:draft.grading_policy},

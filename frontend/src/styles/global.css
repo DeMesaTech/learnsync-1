@@ -2294,6 +2294,52 @@ details>summary {
   flex: none
 }
 
+.gradebook-sticky-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px
+}
+
+.gradebook-sticky-actions .icon-button {
+  width: 49px;
+  min-width: 49px;
+  height: 49px;
+  min-height: 49px
+}
+
+.gradebook-manual-column-popover {
+  position: fixed;
+  z-index: 1000;
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(80vh, 520px);
+  overflow: auto;
+  font-size: .88rem;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 16px 42px color-mix(in srgb, var(--text) 20%, transparent)
+}
+
+.gradebook-manual-column-popover h3 {
+  margin: 0 0 12px;
+  font-size: 1em
+}
+
+.gradebook-manual-column-popover form {
+  display: grid;
+  gap: 12px
+}
+
+.gradebook-manual-column-popover label {
+  margin: 0
+}
+
+.gradebook-manual-column-popover .actions {
+  justify-content: flex-end;
+  margin: 0
+}
+
 .gradebook .gradebook-edit-header {
   vertical-align: middle
 }
@@ -2411,6 +2457,27 @@ details>summary {
   border-left: 1px solid var(--border);
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border)
+}
+
+.gradebook-assessment-header-content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px
+}
+
+.gradebook-assessment-header-content .gradebook-release-button {
+  width: 46.65px;
+  min-width: 46.65px;
+  height: 14.2px;
+  min-height: 14.2px;
+  padding: 0;
+  border-radius: 3px
+}
+
+.gradebook-assessment-header-content .gradebook-release-button svg {
+  width: 10px;
+  height: 10px
 }
 
 .gradebook tbody .gradebook-category-cell {
@@ -3205,6 +3272,13 @@ a.touch {
 .gradebook thead tr:nth-child(2) th {
   position: sticky;
   top: 36px;
+  background: var(--surface);
+  z-index: 3
+}
+
+.gradebook thead tr:nth-child(3) th {
+  position: sticky;
+  top: 72px;
   background: var(--surface);
   z-index: 3
 }
@@ -4791,14 +4865,101 @@ dialog.attendance-export-dialog {
   padding: 0
 }
 
+.gradebook-controls-row {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  margin: 16px 0 8px;
+  min-width: 0
+}
+
 .gradebook-filters {
-  align-items: end
+  display: grid;
+  grid-template-columns: minmax(145px, 1.25fr) minmax(130px, 1.1fr) minmax(100px, .85fr);
+  align-items: end;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0
 }
 
 .gradebook-filters label {
-  flex: 1 1 200px;
-  max-width: 340px;
-  margin: 0
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  font-size: 13px
+}
+
+.gradebook-filters input,
+.gradebook-filters select {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  height: 34px;
+  padding: 6px 8px;
+  font-size: 13px
+}
+
+.gradebook-column-toggles {
+  flex-wrap: nowrap;
+  flex: 0 0 auto;
+  gap: 8px;
+  margin: 0;
+  white-space: nowrap;
+  font-size: 13px
+}
+
+.gradebook-column-toggles label {
+  gap: 4px
+}
+
+.gradebook-column-toggles input[type="checkbox"] {
+  width: 18px;
+  min-width: 18px;
+  max-width: 18px;
+  height: 18px;
+  min-height: 18px;
+  padding: 0
+}
+
+.gradebook-student-count {
+  flex: 0 0 auto;
+  margin: 0 0 3px;
+  white-space: nowrap;
+  font-size: 13px
+}
+
+@media (max-width: 1100px) {
+  .gradebook-controls-row {
+    flex-wrap: wrap
+  }
+
+  .gradebook-filters {
+    flex-basis: 100%
+  }
+
+  .gradebook-column-toggles {
+    flex: 1 1 auto
+  }
+
+  .gradebook-student-count {
+    margin-left: auto
+  }
+}
+
+@media (max-width: 640px) {
+  .gradebook-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr))
+  }
+
+  .gradebook-filters label:first-child {
+    grid-column: 1 / -1
+  }
+
+  .gradebook-student-count {
+    flex-basis: 100%;
+    margin-left: 0
+  }
 }
 
 .gradebook-publish-trigger {
@@ -4823,6 +4984,37 @@ dialog.attendance-export-dialog {
   width: fit-content
 }
 
+.gradebook-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 16px
+}
+
+.gradebook-toolbar .gradebook-publish-trigger {
+  margin-bottom: 0
+}
+
+.gradebook-export-anchor {
+  position: relative;
+  width: fit-content
+}
+
+.gradebook-export-trigger,
+.grade-export-panel .actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px
+}
+
+.gradebook-export-trigger svg,
+.grade-export-panel .actions svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px
+}
+
 .gradebook-publish-popover {
   position: absolute;
   top: calc(100% - 10px);
@@ -4836,6 +5028,18 @@ dialog.attendance-export-dialog {
   border-radius: 12px;
   background: var(--surface);
   box-shadow: 0 16px 42px color-mix(in srgb, var(--text) 20%, transparent)
+}
+
+.gradebook-export-popover {
+  width: min(600px, calc(100vw - 36px));
+  max-height: min(80vh, 680px)
+}
+
+.gradebook-export-popover .grade-export-panel {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent
 }
 
 .gradebook-publish-popover h3 {
