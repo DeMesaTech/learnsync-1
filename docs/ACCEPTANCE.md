@@ -4,6 +4,14 @@
 - Standalone Student Management now explains that section/student actions require an active semester and links administrators to Settings to manage semester status.
 - Frontend build/type-check, ESLint, and `git diff --check` passed.
 
+### 2026-11-24 (Student import completion)
+- Student import now returns as soon as the account and enrollment transaction commits; invitation emails are sent by a post-response background task instead of keeping the import button busy while SMTP processes each student.
+- Invitation-send failures are logged in aggregate without student email addresses; invited accounts remain recoverable through the existing resend action. The completion screen explains that email delivery is separate from the import.
+- Passed the focused deferred-delivery and all-invalid-row tests (2 passed), Ruff, frontend build/type-check, ESLint, and `git diff --check`. Two broader selected import tests also verified the new response but then failed on their pre-existing assertions for the old student display-name format (`Ana Reyes` / `Fine Student` instead of the current normalized `REYES, ANA` / `STUDENT, FINE`).
+- Added coverage that the commit returns before invitation delivery and that the background task sends the invitations.
+- On the import dialog, the file-upload panel disappears when a preview or result is shown; the commit action uses the shared sticky-dialog footer. The commit button now shows an in-progress label, and a lost response is recovered by checking the persisted import status and replaying its recorded result rather than re-importing students.
+- Added idempotent commit-result replay and passed the deferred-delivery, replay, and all-invalid-row tests (3 passed). Browser verified the upload form is absent in preview, the import action is sticky, and a previously completed 195-row import recovers to a success panel; its selected section refreshed to 39 students without duplicate accounts or invitation sends. Frontend build/type-check, ESLint, backend Ruff, and `git diff --check` passed.
+
 ### 2026-11-24 (Section list remove control)
 - Added a minus control to the last pending section only. Removing it immediately restores that section name as the next generated name.
 - Extended the admin-list browser test to cover the last-item control and immediate input update.

@@ -1,8 +1,11 @@
+import asyncio
 import io
+from uuid import UUID
 
 import openpyxl
 import pytest
 from docx import Document
+from fastapi import BackgroundTasks
 from helpers import Api, make_account
 from sqlalchemy import func, select
 
@@ -18,7 +21,8 @@ def stage(db, actors, tmp_path, monkeypatch):
     """Isolated upload dir, captured invitation emails, an admin, and a term with sections."""
     monkeypatch.setattr(settings(), "upload_root", tmp_path / "uploads")
     sent = []
-    monkeypatch.setattr(imports, "send_link", lambda account, token, purpose: sent.append(account.email))
+    monkeypatch.setattr(imports, "send_link_to",
+                        lambda email, display_name, token, purpose: sent.append(email))
     monkeypatch.setattr(faculty_imports, "send_link", lambda account, token, purpose: sent.append(account.email))
     admin = Api("admin@example.com")
     college = admin.post("/api/colleges", {
@@ -67,14 +71,13 @@ def test_student_import_preview_then_commit(db, stage):
     assert account_count(db) == before            # preview creates nothing
     done = stage["admin"].post(f"/api/student-imports/{preview['id']}/commit")
     assert done.status_code == 200, done.text
-    assert done.json() == {"created": 3, "existing": 0, "skipped": 0, "email_failed": []}
+    assert done.json() == {"created": 3, "existing": 0, "skipped": 0,
+                           "email_scheduled": 3, "already_committed": False}
     assert sorted(stage["sent"]) == ["ana@example.com", "ben@example.com", "cara@example.com"]
     ana = db.scalar(select(Account).where(Account.email == "ana@example.com"))
     assert ana.role == "student" and ana.status == "invited" and ana.student_number == "2026-001"
     members = stage["admin"].get(f"/api/sections/{stage['sections']['1A']['id']}/members").json()
     assert sorted(m["display_name"] for m in members) == ["Ana Reyes", "Ben Cruz"]
-    # committing twice is refused
-    assert stage["admin"].post(f"/api/student-imports/{preview['id']}/commit").status_code == 409
 
 
 def test_student_import_skips_error_rows_and_commits_valid_rows(db, stage):
@@ -96,12 +99,40 @@ def test_student_import_skips_error_rows_and_commits_valid_rows(db, stage):
     assert "does not exist" in by_row[6]["errors"][0]
     done = stage["admin"].post(f"/api/student-imports/{preview['id']}/commit")
     assert done.status_code == 200, done.text
-    assert done.json() == {"created": 1, "existing": 0, "skipped": 4, "email_failed": []}
+    assert done.json() == {"created": 1, "existing": 0, "skipped": 4,
+                           "email_scheduled": 1, "already_committed": False}
     assert account_count(db) == before + 1
     assert stage["sent"] == ["ok@example.com"]
     member = db.scalar(select(Account).where(Account.email == "ok@example.com"))
     assert member.display_name == "Fine Student"
-    assert stage["admin"].post(f"/api/student-imports/{preview['id']}/commit").status_code == 409
+
+
+def test_student_import_commit_is_idempotent(db, stage):
+    preview = upload(stage).json()
+    path = f"/api/student-imports/{preview['id']}/commit"
+    first = stage["admin"].post(path)
+
+    repeated = stage["admin"].post(path)
+
+    assert first.status_code == 200
+    assert repeated.status_code == 200
+    assert repeated.json() == {"created": 3, "existing": 0, "skipped": 0,
+                               "email_scheduled": 0, "already_committed": True}
+    assert len(stage["sent"]) == 3
+
+
+def test_student_import_returns_before_invitation_delivery(db, stage):
+    preview = upload(stage).json()
+    actor = db.scalar(select(Account).where(Account.email == "admin@example.com"))
+    background_tasks = BackgroundTasks()
+
+    result = imports.commit_student_import(db, actor, UUID(preview["id"]), background_tasks)
+
+    assert result == {"created": 3, "existing": 0, "skipped": 0,
+                      "email_scheduled": 3, "already_committed": False}
+    assert stage["sent"] == []
+    asyncio.run(background_tasks())
+    assert sorted(stage["sent"]) == ["ana@example.com", "ben@example.com", "cara@example.com"]
 
 
 def test_student_import_refuses_when_every_row_has_errors(db, stage):

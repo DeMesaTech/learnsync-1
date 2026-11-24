@@ -40,13 +40,13 @@ SUBJECTS = {"invite": "You are invited to LearnSync: set up your account",
             "handover": "LearnSync: confirm the administrator ownership transfer"}
 
 
-def send_link(account, raw, purpose):
+def send_link_to(email, display_name, raw, purpose):
     route = "reset-password" if purpose == "reset" else "accept-invitation"
     message = EmailMessage()
     message["From"] = settings().mail_from
-    message["To"] = account.email
+    message["To"] = email
     message["Subject"] = SUBJECTS.get(purpose, "LearnSync account link")
-    message.set_content(f"Hello {account.display_name},\n\nOpen this single-use link to choose your password:\n"
+    message.set_content(f"Hello {display_name},\n\nOpen this single-use link to choose your password:\n"
                         f"{settings().app_origin}/{route}#token={raw}\n\n"
                         "If you did not expect this message, contact your school administrator.")
     try:
@@ -58,6 +58,10 @@ def send_link(account, raw, purpose):
             smtp.send_message(message)
     except (OSError, smtplib.SMTPException):
         fail(503, "email_unavailable", "Email could not be sent. Please try again.")
+
+
+def send_link(account, raw, purpose):
+    send_link_to(account.email, account.display_name, raw, purpose)
 
 
 def invite(db, actor, data):

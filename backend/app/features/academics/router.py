@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -308,8 +308,9 @@ def student_import(import_id: UUID, actor=Depends(admin), db: Session = Depends(
 
 
 @router.post("/student-imports/{import_id}/commit")
-def commit_student_import(import_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):
-    return imports.commit_student_import(db, actor, import_id)
+def commit_student_import(import_id: UUID, background_tasks: BackgroundTasks,
+                          actor=Depends(admin), db: Session = Depends(get_db)):
+    return imports.commit_student_import(db, actor, import_id, background_tasks)
 
 
 @router.post("/prospectus-imports", status_code=201)

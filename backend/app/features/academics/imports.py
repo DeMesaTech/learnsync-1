@@ -1,15 +1,16 @@
 """Reviewed imports: student lists and prospectus drafts. Nothing is created until an admin
 commits, and a commit with any invalid row creates nothing (no silent partial import)."""
+import logging
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy import select
 
 from app.errors import fail
-from app.features.accounts.commands import audit, issue_token, send_link
-from app.features.accounts.models import Account, now
+from app.features.accounts.commands import audit, issue_token, send_link_to
+from app.features.accounts.models import Account, AuditEvent, now
 from app.features.accounts.names import (
     StudentName,
     canonical_suffix,
@@ -25,6 +26,7 @@ from .models import College, ProspectusImport, Section, SectionMember, StudentIm
 EMAIL = TypeAdapter(EmailStr)
 STUDENT_TYPES = {".csv", ".xlsx"}
 PROSPECTUS_TYPES = {".pdf", ".docx", ".xlsx", ".csv"}
+logger = logging.getLogger("learnsync.imports")
 
 
 # ---------- students ----------
@@ -133,12 +135,31 @@ def create_student_import(db, actor, upload, term_id):
     return imp
 
 
-def commit_student_import(db, actor, import_id):
+def send_student_import_invitations(invitations, import_id):
+    failed = 0
+    for email, display_name, token in invitations:
+        try:
+            send_link_to(email, display_name, token, "invite")
+        except HTTPException:
+            failed += 1
+    if failed:
+        logger.warning("Student import invitation delivery failed: import_id=%s failed=%s total=%s",
+                       import_id, failed, len(invitations))
+
+
+def commit_student_import(db, actor, import_id, background_tasks: BackgroundTasks):
     imp = db.scalar(select(StudentImport).where(StudentImport.id == import_id).with_for_update())
     if not imp:
         fail(404, "not_found", "Import not found.")
     if imp.status == "committed":
-        fail(409, "import_committed", "This import was already committed.")
+        event = db.scalar(select(AuditEvent).where(
+            AuditEvent.action == "student_import.committed",
+            AuditEvent.entity_type == "student_import",
+            AuditEvent.entity_id == str(imp.id),
+        ))
+        if not event:
+            fail(409, "import_result_unavailable", "This import was committed, but its result is unavailable.")
+        return {**event.details, "email_scheduled": 0, "already_committed": True}
     if imp.term_id:
         commands.open_term(db, imp.term_id)
     results = validate_students(db, imp.rows, imp.term_id)   # re-check: data may have changed
@@ -157,7 +178,8 @@ def commit_student_import(db, actor, import_id):
                               student_number=r["student_number"], status="invited")
             db.add(account)
             db.flush()
-            invitations.append((account, issue_token(db, account, "invite", actor)))
+            invitations.append((account.email, account.display_name,
+                                issue_token(db, account, "invite", actor)))
             created += 1
         else:
             account = db.scalar(select(Account).where(Account.email == r["email"]))
@@ -168,14 +190,10 @@ def commit_student_import(db, actor, import_id):
     audit(db, actor, "student_import.committed", "student_import", imp.id,
           {"created": created, "existing": len(importable) - created, "skipped": skipped})
     db.commit()
-    failed = []
-    for account, token in invitations:   # send after commit; failures are resendable
-        try:
-            send_link(account, token, "invite")
-        except HTTPException:
-            failed.append(account.email)
+    if invitations:
+        background_tasks.add_task(send_student_import_invitations, invitations, str(imp.id))
     return {"created": created, "existing": len(importable) - created, "skipped": skipped,
-            "email_failed": failed}
+            "email_scheduled": len(invitations), "already_committed": False}
 
 
 # ---------- prospectus ----------
