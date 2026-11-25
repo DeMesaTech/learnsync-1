@@ -3,7 +3,6 @@ import {useLocation} from 'react-router-dom';
 import {useInfiniteQuery,useQuery} from '@tanstack/react-query';
 import {api,post,send,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
-import {Dialog} from '../../components/Dialog';
 
 export interface Issue{id:string;type:'bug'|'account'|'content'|'other';title:string;description:string;page:string;status:'open'|'in_progress'|'resolved';admin_note:string;created_at:string;updated_at:string}
 interface AdminIssue extends Issue{reporter:{id:string;name:string;email:string;role:string};reviewed_at:string|null}
@@ -20,23 +19,28 @@ const when=(iso:string)=>new Date(iso).toLocaleString();
 
 export function MyIssues(){
   const location=useLocation();
-  const [error,setError]=useState('');const [sent,setSent]=useState(false);const [busy,setBusy]=useState(false);const [open,setOpen]=useState(false);
+  const [error,setError]=useState('');const [sent,setSent]=useState(false);const [busy,setBusy]=useState(false);
   const [type,setType]=useState<Issue['type']>('bug');const [title,setTitle]=useState('');const [description,setDescription]=useState('');
   const [selectedPreset,setSelectedPreset]=useState<string|null>(null);
   const list=useInfiniteQuery({queryKey:['issues'],initialPageParam:0,queryFn:({pageParam})=>api<{items:Issue[];has_more:boolean}>(`/issues?limit=25&offset=${pageParam}`),getNextPageParam:(p,all)=>p.has_more?all.length*25:undefined});
   const mine=list.data?.pages.flatMap(p=>p.items)??[];
   async function submit(e:FormEvent<HTMLFormElement>){
     e.preventDefault();const f=new FormData(e.currentTarget);   // read before awaiting
-    setBusy(true);setError('');
-    try{await post('/issues',{type:f.get('type'),title:f.get('title'),description:f.get('description'),page:String(f.get('page')||'')});setOpen(false);setSent(true);await queryClient.invalidateQueries({queryKey:['issues']})}
-    catch(err){setError(errorText(err))}   // the dialog stays open with what was typed
+    setBusy(true);setError('');setSent(false);
+    try{
+      await post('/issues',{type:f.get('type'),title:f.get('title'),description:f.get('description'),page:String(f.get('page')||'')});
+      setSent(true);setType('bug');setTitle('');setDescription('');setSelectedPreset(null);
+      await queryClient.invalidateQueries({queryKey:['issues']});
+    }
+    catch(err){setError(errorText(err))}
     finally{setBusy(false)}
   }
   return <>
-    <div className="page-heading"><div><h1>Report a problem</h1><p className="muted">Tell the administrators what went wrong. Please do not include passwords or other private information.</p></div>
-      <button className="primary" onClick={()=>{setError('');setSent(false);setType('bug');setTitle('');setDescription('');setSelectedPreset(null);setOpen(true)}}>Report a problem</button></div>
-    {sent&&<p role="status">Thank you. Your report was sent.</p>}
-    {open&&<Dialog title="Report a problem" onClose={()=>setOpen(false)}><form onSubmit={submit}>
+    <div className="page-heading"><div><h1>Report a problem</h1><p className="muted">Tell the administrators what went wrong. Please do not include passwords or other private information.</p></div></div>
+    <section className="panel problem-report-panel" aria-labelledby="problem-report-heading">
+      <h2 id="problem-report-heading">Describe the problem</h2>
+      {sent&&<p role="status">Thank you. Your report was sent.</p>}
+      <form onSubmit={submit}>
       <label>What kind of problem is it?<select name="type" value={type} onChange={e=>setType(e.target.value as Issue['type'])}>{Object.entries(TYPE_LABEL).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
       <div className="problem-presets">
         <p id="problem-presets-help" className="muted">Choose a common problem to fill in the report. You can edit the details before sending.</p>
@@ -48,7 +52,8 @@ export function MyIssues(){
       <label>What happened? What did you expect?<textarea name="description" value={description} onChange={e=>setDescription(e.target.value)} required minLength={10} maxLength={4000}/></label>
       <label>Where did it happen? (optional)<input name="page" maxLength={200} defaultValue={location.state&&typeof location.state==='object'&&'from' in location.state?String((location.state as {from:string}).from):''} placeholder="For example: Quiz 1 in ENT 101"/></label>
       {error&&<p role="alert">{error}</p>}
-      <div className="actions"><button type="button" onClick={()=>setOpen(false)}>Cancel</button><button className="primary" disabled={busy}>{busy?'Sending…':'Send report'}</button></div></form></Dialog>}
+      <div className="actions"><button className="primary" disabled={busy}>{busy?'Sending…':'Send report'}</button></div></form>
+    </section>
     <h2>Your reports</h2>
     {list.isPending?<p>Loading…</p>:list.error?<p role="alert">{list.error.message}</p>:mine.length===0?<section className="panel"><p className="muted">You have not sent any reports.</p></section>:
       <div className="cards">{mine.map(i=><article className="panel" key={i.id}>

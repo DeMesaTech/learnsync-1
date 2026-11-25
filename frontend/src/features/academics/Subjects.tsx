@@ -1,35 +1,57 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, post, send, upload, errorText } from '../../app/api';
 import { queryClient } from '../../app/providers';
 import { Dialog } from '../../components/Dialog';
-import { yearLabel, type College, type DraftRow, type ProspectusDraft, type Subject } from './types';
+import { yearLabel, type College, type ProspectusUploadResult, type Subject } from './types';
 
-const intOrNull = (v: FormDataEntryValue | null) => v ? Number(v) : null;
 const semesterLabel = (n: number | null) => n ? `${['1st', '2nd', '3rd', '4th', '5th', '6th'][n - 1] ?? `${n}th`} semester` : 'No semester';
 
 export function Subjects() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const uploadedResult = (location.state as {prospectusUploadResult?:ProspectusUploadResult}|null)?.prospectusUploadResult ?? null;
+  const [uploadConfirmation, setUploadConfirmation] = useState(uploadedResult);
   const [archived, setArchived] = useState(false);
-  const [collegeFilter, setCollegeFilter] = useState<string>('all');
+  const [collegeFilter, setCollegeFilter] = useState<string>(() => searchParams.get('college_id') ?? 'all');
   const [editing, setEditing] = useState<Subject | 'new' | null>(null);
-  const [collegeEditor, setCollegeEditor] = useState<College | 'new' | null>(null);
+  const [newPlacement, setNewPlacement] = useState<{year:number|null;semester:number|null;collegeId:string}>({year:null,semester:null,collegeId:''});
+  const [collegeHint, setCollegeHint] = useState<{id:string} | null>(null);
   const [message, setMessage] = useState(''); const [search, setSearch] = useState('');
   const [activeYear, setActiveYear] = useState<number | null>(null);
   const query = useQuery({ queryKey: ['subjects', archived, collegeFilter], queryFn: () => api<Subject[]>(`/subjects?include_archived=${archived}${collegeFilter === 'all' ? '' : `&college_id=${collegeFilter}`}`) });
   const colleges = useQuery({ queryKey: ['colleges'], queryFn: () => api<College[]>('/colleges') });
+  const addCollegeId = collegeFilter !== 'all'
+    && colleges.data?.some(college => college.id === collegeFilter && college.status === 'active')
+    ? collegeFilter : '';
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['subjects'] });
-  const refreshColleges = () => queryClient.invalidateQueries({ queryKey: ['colleges'] });
   const yearTabs = Array.from(new Set((query.data ?? []).map(s => s.year_level).filter((n): n is number => n !== null))).sort((a, b) => a - b);
   const highestSubjectYear = Math.max(0, ...(query.data ?? []).map(subject => subject.year_level ?? 0),
     typeof editing === 'object' && editing !== null ? editing.year_level ?? 0 : 0);
   const yearLevelOptions = Array.from({ length: Math.min(6, Math.max(1, highestSubjectYear + 1)) }, (_, index) => index + 1);
   useEffect(() => { if (!query.data) return; if (!yearTabs.length) { setActiveYear(null); return; } if (activeYear === null || !yearTabs.includes(activeYear)) setActiveYear(yearTabs[0]); }, [query.data, activeYear, yearTabs]);
+  useEffect(() => {
+    if (!collegeHint) return;
+    const timeout = window.setTimeout(() => setCollegeHint(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [collegeHint]);
+  useEffect(() => {
+    if (uploadedResult) navigate(`${location.pathname}${location.search}`, {replace:true,state:null});
+  }, [uploadedResult, location.pathname, location.search, navigate]);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); const f = new FormData(e.currentTarget);
-    const collegeId = f.get('college_id');
-    const body = { title: f.get('title'), units: f.get('units'), year_level: intOrNull(f.get('year_level')), semester: intOrNull(f.get('semester')), prerequisite: f.get('prerequisite') || '', description: f.get('description') || '', college_id: collegeId ? String(collegeId) : null };
+    if (!editing) return;
+    const placement = editing === 'new'
+      ? { year_level: newPlacement.year, semester: newPlacement.semester, college_id: newPlacement.collegeId || null }
+      : {
+        year_level: f.get('year_level') ? Number(f.get('year_level')) : null,
+        semester: f.get('semester') ? Number(f.get('semester')) : null,
+        college_id: f.get('college_id') ? String(f.get('college_id')) : null,
+      };
+    const body = { title: f.get('title'), units: f.get('units'), ...placement, prerequisite: f.get('prerequisite') || '', description: f.get('description') || '' };
     try {
       if (editing === 'new') await post('/subjects', { ...body, code: f.get('code') });
       else if (editing) await send('PATCH', `/subjects/${editing.id}`, body);
@@ -47,6 +69,12 @@ export function Subjects() {
     const k = semesterLabel(s.semester);
     grouped.set(k, [...(grouped.get(k) ?? []), s]);
   });
+  if (visibleYear !== null) {
+    for (const semester of [1, 2]) {
+      const label = semesterLabel(semester);
+      if (!grouped.has(label)) grouped.set(label, []);
+    }
+  }
   const semesterOrder = (label: string) => {
     if (label === 'No semester') return Number.MAX_SAFE_INTEGER;
     const match = /^(\d+)(?:st|nd|rd|th) semester$/.exec(label);
@@ -59,33 +87,53 @@ export function Subjects() {
     <div className="page-heading">
       <div><p className="eyebrow">Administration</p><h1>Prospectus</h1>
         <p className="muted">Subjects are placed by year level and semester. Teaching assignments use these.</p></div>
-      <div className="actions"><button type="button" onClick={() => setCollegeEditor('new')}>Add college</button>
-        <button className="primary" onClick={() => { setMessage(''); setEditing('new') }}>Add subject</button></div>
     </div>
     <div className="actions" style={{ alignItems: 'end' }}>
       <label>Search subjects<input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Code or title" /></label>
-      <label>College<select value={collegeFilter} onChange={e => setCollegeFilter(e.target.value)}>
+      <label>College<select value={collegeFilter} onChange={e => { setCollegeFilter(e.target.value); setCollegeHint(null); }}>
         <option value="all">All colleges</option>
         {(colleges.data ?? []).filter(c => c.status === 'active').map(college => <option key={college.id} value={college.id}>{college.name}</option>)}
       </select></label>
       <label className="inline"><input type="checkbox" checked={archived} onChange={e => setArchived(e.target.checked)} /> Show archived subjects</label>
     </div>
+    {!addCollegeId}
     <div className="actions">
       <Link className="button" to={`/admin/subjects/import${collegeFilter === 'all' ? '' : `?college_id=${encodeURIComponent(collegeFilter)}`}`}>Import prospectus</Link>
     </div>
     {message && <p role="status">{message}</p>}
     {query.isPending ? <p>Loading…</p> : query.error ? <p role="alert">{query.error.message}</p> :
-      query.data.length === 0 ? <section className="panel"><h2>No subjects yet</h2><p>Import the prospectus or add subjects manually.</p></section> :
+      query.data.length === 0 ? <section className="panel"><h2>No subjects yet</h2><p>Upload a prospectus to create the subject catalog.</p></section> :
       <>
         {yearTabs.length > 0 && <nav className="tabs" role="tablist" aria-label="Year levels">
-          {yearTabs.map(year => <button key={year} type="button" className={activeYear === year ? 'active' : ''} aria-pressed={activeYear === year} onClick={() => setActiveYear(year)}>{yearLabel(year)}</button>)}
+          {yearTabs.map(year =>                     <button key={year} type="button" className={activeYear === year ? 'active' : ''} aria-pressed={activeYear === year} onClick={() => { setActiveYear(year); setCollegeHint(null); }}>{yearLabel(year)}</button>)}
         </nav>}
         {grouped.size === 0 ? <section className="panel"><h2>No subjects match</h2><p>Change the search or college filter.</p></section> :
-          <div className="prospectus-semesters">{semesterGroups.map(([group, items]) => <section className="panel" key={group}><h2>{group}</h2>
-            <div className="table-wrap" tabIndex={0} role="region" aria-label={`${group} subjects`}><table><thead><tr><th>Code</th><th>Title</th><th>College</th><th>Units</th><th>Pre-requisite</th><th><span className="sr-only">Actions</span></th></tr></thead>
+          <div className="prospectus-semesters">{semesterGroups.map(([group, items], sectionIndex) => {
+            const hintId = `add-subject-tooltip-${visibleYear ?? 'unplaced'}-${sectionIndex}`;
+            return <section className="panel" key={group}>
+            <div className="prospectus-semester-heading"><h2>{group}</h2>
+              <span className="add-subject-action">
+                <button className="primary" type="button" aria-describedby={collegeHint?.id === hintId ? hintId : undefined} onClick={() => {
+                if (!addCollegeId) {
+                  setCollegeHint({id:hintId});
+                  return;
+                }
+                setCollegeHint(null);
+                const match = /^(\d+)(?:st|nd|rd|th) semester$/.exec(group);
+                setNewPlacement({year:visibleYear,semester:match ? Number(match[1]) : null,collegeId:addCollegeId});
+                setMessage('');
+                setEditing('new');
+                }}>Add subject</button>
+                {!addCollegeId && collegeHint?.id === hintId && <span className="add-subject-tooltip" id={hintId} role="tooltip" aria-live="polite">Please select a college in the College filter above first.</span>}
+              </span>
+            </div>
+            {items.length > 0 ? <div className="table-wrap" tabIndex={0} role="region" aria-label={`${group} subjects`}><table><thead><tr><th>Code</th><th>Title</th><th>College</th><th>Units</th><th>Pre-requisite</th><th><span className="sr-only">Actions</span></th></tr></thead>
               <tbody>{items.map(s => <tr key={s.id}><td>{s.code}</td><td>{s.title}{s.status === 'archived' && <span className="badge"> archived</span>}</td><td>{s.college ? s.college.name : 'Unassigned'}</td><td>{s.units}</td>
                 <td>{s.prerequisite || '—'}</td>
-                <td><button onClick={() => { setMessage(''); setEditing(s) }}>Edit</button></td></tr>)}</tbody></table></div></section>)}</div>}
+                <td><button onClick={() => { setMessage(''); setEditing(s) }}>Edit</button></td></tr>)}</tbody></table></div>
+              : <p className="muted">No subjects are assigned to this semester yet.</p>}
+          </section>;
+          })}</div>}
       </>}
     {editing && <Dialog title={editing === 'new' ? 'Add subject' : `Edit ${editing.code}`} onClose={() => setEditing(null)}>
       <form onSubmit={submit}>
@@ -94,226 +142,86 @@ export function Subjects() {
         <label>Units<input name="units" required type="number" step="0.5" min="0" max="99" defaultValue={editing === 'new' ? '3' : editing.units} /></label>
         <label>Pre-requisite<input name="prerequisite" maxLength={300} defaultValue={editing === 'new' ? '' : editing.prerequisite} placeholder="e.g. BCA 1" /></label>
         <div className="grid-2">
-          <label>Year level<select name="year_level" defaultValue={editing === 'new' ? '' : editing.year_level ?? ''}><option value="">Unplaced</option>{yearLevelOptions.map(n => <option key={n} value={n}>{yearLabel(n)}</option>)}</select></label>
-          <label>Semester<select name="semester" defaultValue={editing === 'new' ? '' : editing.semester ?? ''}><option value="">None</option>{[1, 2].map(n => <option key={n} value={n}>{semesterLabel(n)}</option>)}</select></label>
+          <label>Year level<select name="year_level" disabled={editing === 'new'} defaultValue={editing === 'new' ? newPlacement.year ?? '' : editing.year_level ?? ''}><option value="">Unplaced</option>{yearLevelOptions.map(n => <option key={n} value={n}>{yearLabel(n)}</option>)}</select></label>
+          <label>Semester<select name="semester" disabled={editing === 'new'} defaultValue={editing === 'new' ? newPlacement.semester ?? '' : editing.semester ?? ''}><option value="">None</option>{editing !== 'new' && editing.semester !== null && ![1, 2].includes(editing.semester) && <option value={editing.semester}>{semesterLabel(editing.semester)}</option>}{[1, 2].map(n => <option key={n} value={n}>{semesterLabel(n)}</option>)}</select></label>
         </div>
-        <label>College<select name="college_id" defaultValue={editing === 'new' ? '' : editing.college_id ?? ''}><option value="">Unassigned</option>{(colleges.data ?? []).filter(c => c.status === 'active').map(college => <option key={college.id} value={college.id}>{college.name}</option>)}</select></label>
+        <label>College<select name="college_id" disabled={editing === 'new'} defaultValue={editing === 'new' ? newPlacement.collegeId : editing.college_id ?? ''}><option value="">Unassigned</option>{editing !== 'new' && editing.college_id && !(colleges.data ?? []).some(college => college.id === editing.college_id && college.status === 'active') && <option value={editing.college_id}>{editing.college?.name ?? 'Inactive college'}</option>}{(colleges.data ?? []).filter(c => c.status === 'active').map(college => <option key={college.id} value={college.id}>{college.name}</option>)}</select></label>
         {editing !== 'new' && <button type="button" onClick={async () => { try { await send('PATCH', `/subjects/${editing.id}`, { status: editing.status === 'active' ? 'archived' : 'active' }); setEditing(null); refresh() } catch (err) { setMessage(errorText(err)) } }}>{editing.status === 'active' ? 'Archive subject' : 'Restore subject'}</button>}
         {message && <p role="alert">{message}</p>}
         <div className="actions"><button type="button" onClick={() => setEditing(null)}>Cancel</button><button className="primary">Save subject</button></div>
       </form>
     </Dialog>}
-    {collegeEditor && <CollegeDialog college={collegeEditor} onClose={() => setCollegeEditor(null)} onSaved={() => { refreshColleges(); setCollegeEditor(null); setMessage('College saved.'); }} />}
+    {uploadConfirmation && <Dialog title="Prospectus uploaded" onClose={() => setUploadConfirmation(null)}>
+      <p>{uploadConfirmation.college.name} ({uploadConfirmation.college.code}): {uploadConfirmation.created} subjects added and {uploadConfirmation.skipped_existing} existing subjects left unchanged.</p>
+      {uploadConfirmation.warnings.map(warning => <p className="warn" key={warning}>{warning}</p>)}
+      <div className="actions"><button className="primary" type="button" onClick={() => setUploadConfirmation(null)}>Done</button></div>
+    </Dialog>}
   </>;
-}
-
-function CollegeDialog({ college, onClose, onSaved }: { college: College | 'new'; onClose: () => void; onSaved: () => void }) {
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  async function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const f = new FormData(e.currentTarget);
-    const payload = { code: String(f.get('code') ?? '').trim(), name: String(f.get('name') ?? '').trim(), description: String(f.get('description') ?? '').trim(), status: f.get('status') || 'active' };
-    setBusy(true); setError('');
-    try {
-      if (college === 'new') await post('/colleges', payload);
-      else await send('PATCH', `/colleges/${college.id}`, payload);
-      onSaved();
-    } catch (err) { setError(errorText(err)); } finally { setBusy(false); }
-  }
-  return <Dialog title={college === 'new' ? 'Add college' : `Edit ${college.name}`} onClose={onClose}>
-    <form onSubmit={submit}>
-      <label>Code<input name="code" required maxLength={30} defaultValue={college === 'new' ? '' : college.code} /></label>
-      <label>Name<input name="name" required maxLength={150} defaultValue={college === 'new' ? '' : college.name} /></label>
-      <label>Description<textarea name="description" maxLength={5000} defaultValue={college === 'new' ? '' : college.description} /></label>
-      <label>Status<select name="status" defaultValue={college === 'new' ? 'active' : college.status}><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
-      {error && <p role="alert">{error}</p>}
-      <div className="actions">
-        {college !== 'new' && <button type="button" className="danger" disabled={busy} onClick={async () => { try { await send('DELETE', `/colleges/${college.id}`); onSaved(); } catch (err) { setError(errorText(err)); } }}>Delete college</button>}
-        <button type="button" disabled={busy} onClick={onClose}>Cancel</button>
-        <button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save college'}</button>
-      </div>
-    </form>
-  </Dialog>;
 }
 
 export function ProspectusStart() {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const colleges = useQuery({ queryKey: ['colleges'], queryFn: () => api<College[]>('/colleges') });
   const [collegeId, setCollegeId] = useState(searchParams.get('college_id') ?? '');
+  const [operation, setOperation] = useState<'update'|'add'>('update');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const navigate = useNavigate();
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); setError('');
-    if (!colleges.data?.some(college => college.id === collegeId && college.status === 'active')) {
-      setError('Select an active college before reading the prospectus.');
+    if (operation === 'update'
+        && !colleges.data?.some(college => college.id === collegeId && college.status === 'active')) {
+      setError('Select an active college whose prospectus you want to update.');
       return;
     }
     setBusy(true);
     try {
-      const draft = await upload<ProspectusDraft>('/prospectus-imports', new FormData(e.currentTarget));
-      navigate(`/admin/subjects/import/${draft.id}?college_id=${encodeURIComponent(collegeId)}`);
+      const saved = await upload<ProspectusUploadResult>('/prospectus-uploads', new FormData(e.currentTarget));
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['subjects'] }),
+        queryClient.invalidateQueries({ queryKey: ['colleges'] }),
+      ]);
+      navigate(`/admin/subjects?college_id=${encodeURIComponent(saved.college.id)}`, {
+        replace:true,
+        state:{prospectusUploadResult:saved},
+      });
     }
     catch (err) { setError(errorText(err)) } finally { setBusy(false) }
   }
-  async function manual() {
-    if (!colleges.data?.some(college => college.id === collegeId && college.status === 'active')) {
-      setError('Select an active college before creating a manual prospectus draft.');
-      return;
-    }
-    setError('');
-    setBusy(true);
-    try {
-      const draft = await upload<ProspectusDraft>('/prospectus-imports', new FormData());
-      navigate(`/admin/subjects/import/${draft.id}?college_id=${encodeURIComponent(collegeId)}`);
-    }
-    catch (err) { setError(errorText(err)) }
-    finally { setBusy(false) }
-  }
   return <>
-    <p className="back"><Link to="/admin/subjects">← Prospectus</Link></p>
-    <h1>Import prospectus</h1>
-    <p className="muted">Upload the prospectus (PDF, Word, Excel or CSV). Subjects are read into a draft you review before anything is created. Scanned images are not supported.</p>
+    <p className="back"><Link to="/admin/subjects">← Back to Prospectus</Link></p>
+    <h1>Upload a prospectus</h1>
+    <p className="muted">Choose whether this file updates a college's subject catalog or creates a new college with its prospectus. Extracted subjects are added immediately; matching subject codes already in that college are left unchanged.</p>
     <section className="panel"><form onSubmit={submit}>
-      {colleges.isPending ? <p>Loading colleges…</p> : colleges.error ? <p role="alert">{colleges.error.message}</p> :
-        <label>College<select value={collegeId} onChange={e => setCollegeId(e.target.value)} required>
-          <option value="">Select a college</option>
-          {(colleges.data ?? []).filter(college => college.status === 'active').map(college =>
-            <option key={college.id} value={college.id}>{college.name} ({college.code})</option>)}
-        </select></label>}
-      <label>Prospectus file<input name="file" type="file" required accept=".pdf,.docx,.xlsx,.csv" /></label>
-      {error && <p role="alert">{error}</p>}
-      {colleges.data?.every(college => college.status !== 'active') && <p role="alert">Add an active college before importing a prospectus.</p>}
-      <div className="actions"><button className="primary" disabled={busy || colleges.isPending || !!colleges.error || !collegeId}>{busy ? 'Reading file…' : 'Read prospectus'}</button><button type="button" disabled={busy || colleges.isPending || !!colleges.error || !collegeId} onClick={manual}>Enter subjects manually</button></div>
-    </form></section>
-  </>;
-}
-
-export function ProspectusReview() {
-  const { importId } = useParams();
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [collegeId, setCollegeId] = useState(searchParams.get('college_id') ?? '');
-  const query = useQuery({ queryKey: ['prospectus', importId, collegeId], queryFn: () => api<ProspectusDraft>(`/prospectus-imports/${importId}${collegeId ? `?college_id=${encodeURIComponent(collegeId)}` : ''}`) });
-  const colleges = useQuery({ queryKey: ['colleges'], queryFn: () => api<College[]>('/colleges') });
-  const [rows, setRows] = useState<DraftRow[] | null>(null);
-  const [dirty, setDirty] = useState(false);
-  const [message, setMessage] = useState('');
-  const [confirming, setConfirming] = useState(false);
-  const [committing, setCommitting] = useState(false);
-  const [activeReviewYear, setActiveReviewYear] = useState<string | null>(null);
-  useEffect(() => { if (query.data && !dirty) setRows(query.data.subjects) }, [query.data, dirty]);
-  useEffect(() => {
-    if (!dirty) return; const warn = (e: BeforeUnloadEvent) => e.preventDefault();
-    addEventListener('beforeunload', warn); return () => removeEventListener('beforeunload', warn);
-  }, [dirty]);
-  if (query.isPending) return <p>Loading draft…</p>;
-  if (query.error) return <p role="alert">{query.error.message}</p>;
-  const draft = query.data; const list = rows ?? draft.subjects;
-  const locked = draft.status !== 'draft';
-  const existingSubjectCodes = new Set((query.data?.subjects ?? [])
-    .filter(subject => subject.exists).map(subject => subject.code));
-  const edit = (i: number, change: Partial<DraftRow>) => { setRows(list.map((r, j) => j === i ? { ...r, ...change } : r)); setDirty(true) };
-  const payload = () => ({ expected_revision: draft.revision, subjects: list.map(r => ({ code: r.code, title: r.title, units: r.units, year_level: r.year_level, semester: r.semester, prerequisite: r.prerequisite })) });
-  const yearGroups = new Map<string, { year: number | null; entries: { row: DraftRow; index: number }[] }>();
-  list.forEach((row, index) => {
-    const key = row.year_level === null ? 'unplaced' : String(row.year_level);
-    const group = yearGroups.get(key) ?? { year: row.year_level, entries: [] };
-    group.entries.push({ row, index });
-    yearGroups.set(key, group);
-  });
-  const reviewYears = [...yearGroups.entries()]
-    .sort(([, a], [, b]) => (a.year ?? Number.MAX_SAFE_INTEGER) - (b.year ?? Number.MAX_SAFE_INTEGER));
-  const selectedYearKey = reviewYears.some(([key]) => key === activeReviewYear)
-    ? activeReviewYear : reviewYears[0]?.[0];
-  const selectedYear = reviewYears.find(([key]) => key === selectedYearKey)?.[1];
-  const semesterGroups = new Map<number | null, { row: DraftRow; index: number }[]>();
-  selectedYear?.entries.forEach(entry => {
-    semesterGroups.set(entry.row.semester, [...(semesterGroups.get(entry.row.semester) ?? []), entry]);
-  });
-  const orderedSemesters = [...semesterGroups.entries()]
-    .sort(([a], [b]) => (a ?? Number.MAX_SAFE_INTEGER) - (b ?? Number.MAX_SAFE_INTEGER));
-
-  async function save() {
-    try { await send('PUT', `/prospectus-imports/${draft.id}${collegeId ? `?college_id=${encodeURIComponent(collegeId)}` : ''}`, payload()); setDirty(false); setMessage('Draft saved.'); await query.refetch() }
-    catch (err) { setMessage(errorText(err)) }
-  }
-  async function commit() {
-    if (!collegeId) return;
-    setCommitting(true);
-    setMessage('');
-    try {
-      if (dirty) { await send('PUT', `/prospectus-imports/${draft.id}${collegeId ? `?college_id=${encodeURIComponent(collegeId)}` : ''}`, payload()); setDirty(false) }
-      const fresh = await api<ProspectusDraft>(`/prospectus-imports/${draft.id}`);
-      const done = await post<{ created: number; skipped_existing: number }>(`/prospectus-imports/${draft.id}/commit`, { expected_revision: fresh.revision, college_id: collegeId });
-      setDirty(false); queryClient.invalidateQueries({ queryKey: ['subjects'] });
-      navigate('/admin/subjects', { state: { created: done.created } });
-    } catch (err) { setMessage(errorText(err)); await query.refetch() }
-    finally { setCommitting(false) }
-  }
-  return <>
-    <p className="back"><Link to="/admin/subjects">← Prospectus</Link></p>
-    <h1>Review prospectus</h1>
-    {draft.warnings.map(w => <p className="warn" role="status" key={w}>{w}</p>)}
-    {locked && <p role="status">This prospectus was already committed.</p>}
-    <section className="panel">
-      {list.length === 0 && <p>No subjects yet. Add them below.</p>}
-      {reviewYears.length > 0 && <nav className="tabs" aria-label="Prospectus year levels">
-        {reviewYears.map(([key, group]) => <button key={key} type="button"
-          className={selectedYearKey === key ? 'active' : ''}
-          aria-pressed={selectedYearKey === key}
-          onClick={() => setActiveReviewYear(key)}>
-          {yearLabel(group.year)} <span className="muted">({group.entries.length})</span>
-        </button>)}
-      </nav>}
-      {orderedSemesters.map(([semester, entries]) => <section className="prospectus-review-semester"
-        key={semester ?? 'unplaced'} aria-label={`${yearLabel(selectedYear?.year ?? null)}, ${semesterLabel(semester)}`}>
-        <h2>{semesterLabel(semester)} <span className="muted">({entries.length} subjects)</span></h2>
-        {entries.map(({ row: r, index: i }) => <div className="edit-row" key={i}>
-          <label>Code<input value={r.code} onChange={e => edit(i, { code: e.target.value })} disabled={locked} /></label>
-          <label>Title<input value={r.title} onChange={e => edit(i, { title: e.target.value })} disabled={locked} /></label>
-          <label>Units<input value={r.units ?? ''} inputMode="decimal" onChange={e => edit(i, { units: e.target.value })} disabled={locked} /></label>
-          <label>Year<select value={r.year_level ?? ''} onChange={e => edit(i, { year_level: e.target.value ? Number(e.target.value) : null })} disabled={locked}><option value="">—</option>{[1, 2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n}</option>)}</select></label>
-          <label>Semester<select value={r.semester ?? ''} onChange={e => edit(i, { semester: e.target.value ? Number(e.target.value) : null })} disabled={locked}><option value="">—</option>{[1, 2, 3].map(n => <option key={n} value={n}>{semesterLabel(n)}</option>)}</select></label>
-          <label>Pre-requisite<input value={r.prerequisite} maxLength={300} onChange={e => edit(i, { prerequisite: e.target.value })} disabled={locked} placeholder="e.g. BCA 1" /></label>
-          {!locked && <button type="button" aria-label={`Remove ${r.code || 'row'}`} onClick={() => { setRows(list.filter((_, j) => j !== i)); setDirty(true) }}>Remove</button>}
-          <div className="edit-notes">
-            {existingSubjectCodes.has(r.code.trim().toUpperCase()) && <span className="badge">Already in this college catalog; will be skipped</span>}
-            {(r.year_level === null || r.semester === null) && <span className="warn">Year or semester was not detected from a clear heading. Confirm placement before saving.</span>}
-            {r.errors?.map(e => <span className="error" role="alert" key={e}>{e}</span>)}
+        <fieldset>
+          <legend>What would you like to do?</legend>
+          <label className="inline"><input type="radio" name="operation" value="update" checked={operation === 'update'}
+            onChange={() => setOperation('update')} /> Update a college's prospectus</label>
+          <label className="inline"><input type="radio" name="operation" value="add" checked={operation === 'add'}
+            onChange={() => setOperation('add')} /> Add another college with its prospectus</label>
+        </fieldset>
+        {operation === 'update' ? <>
+          {colleges.isPending ? <p>Loading colleges…</p> : colleges.error ? <p role="alert">{colleges.error.message}</p> :
+            <label>College<select name="college_id" value={collegeId} onChange={e => setCollegeId(e.target.value)} required>
+              <option value="">Select a college</option>
+              {(colleges.data ?? []).filter(college => college.status === 'active').map(college =>
+                <option key={college.id} value={college.id}>{college.name} ({college.code})</option>)}
+            </select></label>}
+          {!colleges.isPending && !colleges.error
+            && colleges.data?.every(college => college.status !== 'active')
+            && <p className="muted">No active colleges yet. Choose “Add another college” to start a catalog.</p>}
+        </> : <>
+          <div className="grid-2">
+            <label>College code<input name="college_code" required maxLength={30} /></label>
+            <label>College name<input name="college_name" required maxLength={150} /></label>
           </div>
-        </div>)}
-      </section>)}
-      {!locked && <button type="button" onClick={() => {
-        setRows([...list, { code: '', title: '', units: '3', year_level: null, semester: null, prerequisite: '' }]);
-        setActiveReviewYear('unplaced');
-        setDirty(true);
-      }}>Add subject row</button>}
-    </section>
-    {message && <p role="status">{message}</p>}
-    {!locked && <div className="actions">
-      <button onClick={save} disabled={!dirty}>Save draft</button>
-      <button className="primary" onClick={() => { setCollegeId(''); setMessage(''); setConfirming(true) }} disabled={list.length === 0}>Create subjects</button>
-      {dirty && <span className="muted">Unsaved changes</span>}
-    </div>}
-    {confirming && <Dialog title="Confirm prospectus college" onClose={() => setConfirming(false)} confirmOnClose={false}>
-      <p>Select the college that these prospectus subjects will belong to.</p>
-      {colleges.isPending ? <p>Loading colleges…</p> : colleges.error ? <p role="alert">{colleges.error.message}</p> :
-        <label>College<select value={collegeId} onChange={e => setCollegeId(e.target.value)} disabled={committing} required>
-          <option value="">Select a college</option>
-          {(colleges.data ?? []).filter(c => c.status === 'active').map(college =>
-            <option key={college.id} value={college.id}>{college.name} ({college.code})</option>)}
-        </select></label>}
-      {colleges.data?.every(c => c.status !== 'active') && <p role="alert">Add an active college before creating subjects.</p>}
-      {message && <p role="alert">{message}</p>}
-      <div className="actions">
-        <button type="button" onClick={() => setConfirming(false)} disabled={committing}>Cancel</button>
-        <button type="button" className="primary" onClick={commit}
-          disabled={committing || colleges.isPending || !!colleges.error || !collegeId}>
-          {committing ? 'Creating…' : 'Confirm college and create subjects'}
-        </button>
-      </div>
-    </Dialog>}
+          <label>Description (optional)<textarea name="college_description" maxLength={5000} /></label>
+        </>}
+        <label>Prospectus file<input name="file" type="file" required accept=".pdf,.docx,.xlsx,.csv" /></label>
+        {error && <p role="alert">{error}</p>}
+        <div className="actions"><button className="primary" disabled={busy || (operation === 'update' && (colleges.isPending || !!colleges.error || !collegeId))}>
+          {busy ? 'Uploading and importing…' : 'Upload prospectus'}
+        </button></div>
+    </form></section>
   </>;
 }

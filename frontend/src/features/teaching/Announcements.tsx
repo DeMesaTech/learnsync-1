@@ -36,12 +36,13 @@ export function FacultyAnnouncements({embedded=false,manageActions=false,itemsOn
       {a.state==='published'&&<button disabled={closed} onClick={()=>act(a,'archive')}>Archive</button>}</div></article>);
   const announcementRows=rows.map(a=><li className="manager-material-row stream-announcement-row" key={a.id} data-sort-date={Date.parse(a.published_at??a.created_at)||0}>
     <span className="material-kind-icon kind-announcement" aria-hidden="true">▤</span>
-    <span className="grow"><strong>{a.title}</strong><span className="muted">{a.state} · {names(a.section_ids)} · <time dateTime={a.published_at??a.created_at}>{uploadedAt(a.published_at??a.created_at)}</time></span>
-      <span className="pre stream-announcement-body">{a.body}</span></span>
-    {manageActions&&a.state==='draft'&&<span className="manager-material-actions">
+    <span className="grow"><strong>{a.title}</strong><span className="muted">{a.state}</span><span className="muted">{names(a.section_ids)}</span>
+      <time className="muted" dateTime={a.published_at??a.created_at}>{uploadedAt(a.published_at??a.created_at)}</time>
+      <span className="pre stream-announcement-body">{a.body}</span>
+      {manageActions&&a.state==='draft'&&<span className="manager-material-actions">
       <button type="button" className="icon-button" aria-label={`Edit ${a.title}`} title="Edit announcement" disabled={closed} onClick={()=>setEditing(a)}>✎</button>
       <button type="button" className="icon-button primary" aria-label={`Publish ${a.title}`} title="Publish announcement" disabled={closed} onClick={()=>act(a,'publish')}>↥</button>
-    </span>}
+      </span>}</span>
   </li>);
   const materialRows=Children.toArray(children);
   const orderedRows=sortWithChildren

@@ -1,5 +1,65 @@
 # Acceptance status
 
+### 2026-11-26 (Student learning sequence route)
+- Fixed both Next-item and earlier-incomplete links on student lesson/file/link detail pages. They now use `/student/offerings/:offeringId/lessons/:itemId`, matching the registered React route instead of the `/classwork/:itemId` not-found route.
+- Browser verified the corrected Next link resolves to `/lessons/106f9955-bcb3-423d-8f95-0b51cd8a50c9`; directly opening that route loaded “lesson 5” without the Page not found view. No completion or academic-record action was performed.
+- Passed frontend build/type-check, ESLint, and `git diff --check`. The build retains the existing Vite large-chunk warning.
+
+### 2026-11-26 (Student management confirmation dialogs)
+- Section-wide invitation and individual invitation/password-reset sends now ask for confirmation before contacting the existing send handlers. Selected-student bulk sends retain their existing confirmation. Section deletion failures display the server message in a modal instead of inline.
+- Browser verified the section-wide prompt showed the pending-invitation count and the individual prompt named the recipient; canceled both without sending. Attempted deletion of BSE 1A with 48 students; the API correctly returned 409 and the refusal reason appeared in the modal. No invitations were sent and no academic records were changed.
+- Passed frontend build/type-check, ESLint, and `git diff --check`. The build retains the existing Vite large-chunk warning.
+
+### 2026-11-25 (Editable subject placement in Edit dialog)
+- Enabled year level, semester, and college selectors when editing an existing subject; saving now sends their selected values through the existing subject PATCH endpoint. Existing semester values outside the Add flow's 1/2 options remain selectable. New-subject placement remains locked to its catalog context.
+- Browser verified all three selectors are enabled in an existing subject's Edit dialog, changed their selections, then canceled without saving. A fresh page load retained the editable state. Also opened Add subject and verified all three placement selectors remained disabled. No academic records were changed.
+- Passed frontend build/type-check, ESLint, and `git diff --check`. The build retains the existing Vite large-chunk warning. The existing PATCH schema and command already support these fields, so no backend changes or backend test run were needed.
+
+### 2026-11-25 (Prospectus import back link)
+- Restyled back links as outlined secondary pill controls with a 44px CSS minimum target, clear hover feedback, and a visible keyboard focus ring. The prospectus import link now reads “Back to Prospectus.”
+- Browser verified the control on `/admin/subjects/import`: pill shape, no underline, hover background/border change, and visible focus outline.
+- Passed frontend build/type-check, ESLint, and `git diff --check`. The build retains the existing Vite large-chunk warning.
+
+### 2026-11-25 (Stream/Classwork icon and status columns)
+- Added a dedicated left icon column to Stream and Classwork list tiles. Student Classwork's Up next badge now occupies the right column; titles, metadata, dates, details, and other status/actions remain vertically stacked in the content column.
+- Browser verified the announcement icon is left of vertically stacked student Stream content, and at a 390px CSS viewport the Classwork icon, content/statuses, and Up next badge occupy separate left, center, and right columns without page overflow.
+- Passed frontend build/type-check, ESLint, and `git diff --check`. Faculty-specific browser verification remains unavailable in the shared student session; the faculty list tiles use the same scoped grid styles. The build retains the existing Vite large-chunk warning.
+
+### 2026-11-25 (Vertical Stream and Classwork tiles)
+- Stacked announcement and material tile content vertically across faculty/student Stream and Classwork: icon, title, type/section metadata, date, detail/body, status, and actions. Split timestamps from metadata and stack statuses/actions on separate lines.
+- Browser verified Student Stream order and non-overlapping line positions; Student Classwork rows and status chips also stack vertically within each link at a 390px CSS viewport, with no page overflow.
+- Faculty-specific browser verification was unavailable in the shared student session; faculty Stream cards and both Classwork roles use the updated scoped styles. Frontend build/type-check, ESLint, and `git diff --check` passed. The build retains the existing Vite large-chunk warning.
+
+### 2026-11-25 (Student pages, report form, and mobile classwork)
+- Moved the issue-report form from a dialog into the main report page. Removed the student dashboard next-step hero and the Study buddy link from subject-list cards.
+- Student Stream's updates feed now contains announcements only; its separate weekly activity panel remains. Student Classwork removes the description and chapter search, and its category filter uses tabs while preserving `?type=` routes.
+- Reworked student classwork item links so each link wraps only its own row; on narrow screens, status chips wrap beneath the item title.
+- Browser verified five category tabs, active Quizzes route/filter behavior, no chapter-search control or description, announcements-only feed with the weekly activity panel retained, inline report form with no dialog, no dashboard hero, and no Study buddy subject-card link. At a 390px CSS viewport, document width was 371px and each classwork link stayed within its row.
+- Passed frontend build/type-check, ESLint, and `git diff --check`. The build retains the existing Vite large-chunk warning. No report was submitted and no academic records were changed.
+
+### 2026-11-25 (Faculty stream, classwork tabs, and attendance layout)
+- Faculty Stream now contains announcements only; the published-materials feed and category filter are removed from that route. Faculty Classwork's Material category selector is now a set of tabs.
+- Removed numeric attendance entry controls and their validation/state handlers from Grid and One day views. Status marking remains unchanged; existing numeric records stay visible for history and grading. Reduced vertical padding, margins, and action spacing across the attendance workspace.
+- Updated the disposable attendance E2E to assert status-only entry controls.
+- Browser verified Faculty Stream has the Announcements heading and no published-materials heading; Faculty Classwork has five category tabs, no category select, and the active tab changes on click. Attendance exposes no numeric mode/input; panel padding is 14px top and section gap is 10px.
+- Passed frontend build/type-check, ESLint, `node --check frontend/e2e/attendance-grid.mjs`, and `git diff --check`. The build retains the existing Vite large-chunk warning.
+
+### 2026-11-25 (Auto-dismiss college selection tooltip)
+- The Add subject college-selection tooltip automatically dismisses after seven seconds; retriggering it resets the timer, and unmounting or changing the college/year clears it.
+- Browser verified the tooltip was visible immediately after clicking and absent after waiting 7.2 seconds.
+- Passed frontend build/type-check, ESLint, and `git diff --check`. The build retains the existing Vite large-chunk warning.
+
+### 2026-11-25 (Add-subject college selection prompt)
+- Kept Add subject clickable when no active college is selected; clicking it shows an accessible tooltip directing the admin to the College filter above. Selecting an active college clears the tooltip and opens the dialog normally.
+- Browser verified the tooltip with “All colleges” selected, then selected an active college and confirmed the Add subject dialog showed the clicked section's year/semester and selected college with all three fields disabled. Canceled without saving.
+- Passed frontend build/type-check, ESLint, and `git diff --check`. The build retains the existing Vite large-chunk warning.
+
+### 2026-11-25 (Contextual subject placement and upload confirmation)
+- Locked new-subject year, semester, and college to the active college filter and the selected year/semester section. Clicking Add subject without an active college shows a tooltip directing the admin to the College filter above; the dialog opens only when the college is selected.
+- Replaced the separate prospectus upload success view with a catalog-page dialog showing created/skipped counts and warnings. Updated the implementation, architecture, and design-system notes.
+- Passed frontend build/type-check, ESLint, and `git diff --check`. The build retains the existing Vite large-chunk warning.
+- Browser verification was blocked because the shared browser redirected `/admin/subjects` to login; no upload or catalog records were changed.
+
 ### 2026-11-25 (Gradebook assessment header tooltip)
 - Added published assessment deadlines to faculty Gradebook columns. The maximum-points tooltip and accessible column name include the assessment title, due date (or “Not set”), and total points.
 - Passed `pytest tests/test_gradebook_edit.py -q` (15 passed), Ruff for changed backend files, frontend build/type-check, ESLint, and `git diff --check`. The build retains the existing Vite large-chunk warning.
@@ -1602,3 +1662,22 @@ Note: another process (started from Codex's Python runtime) was already serving 
 - Corrected listed relationships that did not match the schema's foreign keys, including term-to-section, enrollment, assessment submission, and quiz-answer connections.
 - Passed: verified 50 table sections, 414 column rows, and all 108 listed ERD connections against the documented foreign keys; checked balanced text fences and no trailing whitespace.
 - No application tests run (documentation-only change).
+
+### Automatic semester lifecycle and direct prospectus upload (2026-11-25)
+- Scheduled semesters now activate automatically on their start date and close after their end date; a scheduled semester that is already past its end date is closed without late activation. Transitions are audited as system actions. The manual Activate and Close controls are removed; scheduling and the audited reopen exception remain.
+- Draft and scheduled semester cards open an edit dialog for semester name and dates. Prospectus upload now begins with a choice to update an existing college or add a college, then imports directly without a review page. Add subject actions are in each semester section, and the Prospectus heading action group is removed.
+- Verified in the shared browser: semester card opens its edit dialog; both upload choices render; Add subject is available per semester and preselects it. No records were saved during browser checks.
+- Passed: frontend production build (existing Vite large-chunk warning), ESLint, backend Ruff, five focused lifecycle/direct-upload tests, and `git diff --check`.
+- Broader backend module run was attempted: 48 passed, while 34 test setups failed because pytest could not access the default Windows temp directory (`WinError 5`). The targeted tests passed when pytest was given a dedicated basetemp directory. A prior combined run reported 78 passed and three unrelated existing failures (two student display-name expectations and one unsupported `make_account(..., student_number=...)` argument); those issues were not changed here.
+- Not verified: full backend suite and a live scheduled transition while the API background worker is running.
+
+### Semester card and upload route follow-up (2026-11-25)
+- Moved each Add subject button into the same row as its semester heading. Active semester cards now open the same edit dialog as draft and scheduled cards; the server allows active-term edits only when the updated dates still include today's school-local date and pass the existing calendar checks.
+- Diagnosed the upload 404: the API process running before the route was added exposed an OpenAPI schema without `/api/prospectus-uploads`. Restarted the API with `backend/.venv`; the live schema now lists the route, and an unauthenticated POST returns 401 rather than 404.
+- Passed: frontend production build (existing Vite large-chunk warning), ESLint, backend Ruff, the active-term edit regression test (1 passed), `git diff --check`, and shared-browser checks confirming both semester buttons align with their headings and the active card opens its edit dialog. The dialog was canceled without saving.
+- Not verified: a real prospectus file import; the route check intentionally used no credentials or upload file to avoid changing catalog data.
+
+### Fixed subject placement fields (2026-11-25)
+- Existing-subject editing now disables year level, semester, and college selectors; adding a new subject still allows all three to be selected. Saves preserve the existing values from the subject record.
+- Passed: frontend production build (existing Vite large-chunk warning), ESLint, `git diff --check`, and shared-browser checks confirming all three fields are disabled for editing and enabled for creation. Both dialogs were canceled without saving.
+- No backend tests run; the admin API's existing subject reassignment capability is unchanged.

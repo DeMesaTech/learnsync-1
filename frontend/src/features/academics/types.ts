@@ -12,4 +12,5 @@ export interface ImportRow{row:number;source_sheet?:string;source_row?:number;st
 export interface StudentPreview{id:string;status:string;summary:{new:number;existing:number;errors:number;total:number};rows:ImportRow[]}
 export interface DraftRow{index?:number;code:string;title:string;units:string|null;year_level:number|null;semester:number|null;prerequisite:string;exists?:boolean;errors?:string[]}
 export interface ProspectusDraft{id:string;status:string;revision:number;warnings:string[];subjects:DraftRow[]}
+export interface ProspectusUploadResult{college:{id:string;code:string;name:string};created:number;skipped_existing:number;warnings:string[]}
 export const yearLabel=(n:number|null)=>n?['','1st','2nd','3rd','4th','5th','6th'][n]+' year':'Unplaced';

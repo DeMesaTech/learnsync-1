@@ -113,6 +113,6 @@ export function StudentSubjects(){
           meta={s.enrollment_status==='withdrawn'?'Withdrawn':s.term_status==='active'?s.term:`${s.term} · ${s.term_status}`}
           detail={`${s.subject.units} units · ${s.faculty.display_name}${active?'':' · course content is no longer available, but you can still see your own results'}`}
           to={active?`${o}/stream`:`${o}/results`} action={active?'Open':'View results'} cardLink cardLinkLabel={`${active?'Open':'View'} ${s.subject.title} ${active?'Stream':'results'}`}
-          links={active?[['Progress',`${o}/progress`],['Grades & results',`${o}/results`],['Study buddy',`/student/study-buddy?subject=${s.offering_id}`]]:[]}/>})}</div>}
+          links={active?[['Progress',`${o}/progress`],['Grades & results',`${o}/results`]]:[]}/>})}</div>}
   </>;
 }

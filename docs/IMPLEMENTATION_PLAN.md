@@ -10,13 +10,45 @@ The user has accepted the requirements baseline and authorized you to implement 
 
 An inactive semester may be reopened only while the school's current date is within that semester's scheduled start and end dates (inclusive), and only when no other semester is active. Reopening requires an administrator-provided reason, restores the semester to `active`, and records an audit event. The Settings page offers reopening only when those conditions hold; the server enforces them independently. Archived semesters cannot be reopened.
 
+### Current amendment (2026-11-25)
+
+The latest admin workflow decision supersedes the earlier manual activation/closure and prospectus-review steps:
+
+- Scheduling a semester remains an administrator action, but the server automatically activates it on its scheduled start date and closes it after its end date. The API runs a periodic, timezone-aware reconciliation and records system-attributed audit events. Draft, scheduled, and active semester details can be edited; active-term date changes must still contain today's school-local date. Closed and historical semester details remain read-only. Reopening a closed semester remains the audited exception described above.
+- Prospectus upload starts by choosing either an existing college or adding a new college with the file. A successful upload extracts and imports all valid subject rows in one atomic operation; there is no user-facing review page. A file with unreadable/invalid subject rows is rejected without partial creation. Existing subject codes in the selected college are left unchanged. Subjects that lack clear placement are imported as unplaced and can be edited in the catalog.
+- Manual subject creation is available from each catalog semester section rather than the page heading.
+- In the existing-subject Edit dialog, year level, semester, and college are editable and saved with the subject. New subject creation remains locked to the selected college filter and clicked year/semester section.
+
+### Current amendment (2026-11-25; student workflow refinements)
+
+The latest student-page decisions supersede the earlier mixed Stream feed and Classwork selector/search details:
+
+- The Student Stream's updates feed contains published announcements only; the separate weekly activity panel remains.
+- Student Classwork uses category tabs with the existing `?type=all|lesson|quiz|activity|exam` values; remove the chapter-search control and its explanatory header text.
+- Remove the next-step hero from the student dashboard and the Study buddy action from subject-list cards.
+- Render the issue-report form inline on the report page instead of opening it in a dialog.
+- Student material rows use bounded, responsive links so each row remains independently clickable on mobile.
+
+### Current amendment (2026-11-26; student management confirmations)
+
+- Student account invitation and password-reset links require confirmation before sending, including individual and section-wide actions. The selected-student bulk action remains confirmation-backed.
+- When section deletion is refused because students or academic history exist, show the server error in a modal instead of an inline page alert.
+
+### Current amendment (2026-11-26; quiz creation guidance)
+
+- Faculty Classwork's quiz creation options explain that **Online quiz** is for writing questions manually, while **Quiz drafted by AI** generates questions from published materials. AI-drafted quizzes can also be edited and have questions added manually before publication.
+
+### Current amendment (2026-11-25; Stream and Classwork tile layout)
+
+Across faculty and student Stream and Classwork pages, place tile icons in a dedicated left column and keep title, type/section metadata, timestamp, body/detail, statuses, and actions vertically stacked in the content column. In Student Classwork, put the Up next badge in a dedicated right column; keep other status badges below the item details.
+
 ### Previous amendment (2026-10-17; amended 2026-11-15)
 
 The latest academic-calendar requirements supersede the earlier open/closed workflow below. A school year is labeled from consecutive starting/ending years and is created atomically with exactly two semesters, all in `draft`. Draft permits calendar configuration only; `scheduled`, `inactive`, and `archived` are read-only for normal academic operations; only `active` permits role-authorized academic writes. Scheduling and activation are explicit audited transitions. Only one semester may be active institution-wide; switching requires the current semester to be closed and the next scheduled semester to pass readiness checks. Reopening follows the current date-scoped rule above; it is unavailable outside the scheduled dates, when another semester is active, or for archived semesters. School-year and semester date ranges may not overlap.
 
 ### Current amendment (2026-10-18)
 
-By explicit user decision, a one-time Alembic data migration resets every existing academic semester to `draft`, matching the initial state of newly created semesters. This includes currently active, scheduled, inactive, and archived rows. It changes no school-year dates, semester dates, enrollments, offerings, published academic records, or closure/audit metadata. Existing transition actions remain available. The migration is intentionally one-way; rolling back the migration revision does not restore prior semester statuses. Applying it removes the active semester until an administrator schedules and activates one.
+By explicit user decision, a one-time Alembic data migration resets every existing academic semester to `draft`, matching the initial state of newly created semesters. This includes currently active, scheduled, inactive, and archived rows. It changes no school-year dates, semester dates, enrollments, offerings, published academic records, or closure/audit metadata. Existing transition actions remain available. The migration is intentionally one-way; rolling back the migration revision does not restore prior semester statuses. Applying it removes the active semester until an administrator schedules one and its start date arrives.
 
 **Distinction:** Product decisions explicitly confirmed by the user are identified as **confirmed**. Concrete engineering choices added here are **implementation defaults**. They provide a buildable approach without claiming the user individually approved every package, column, or timeout.
 
@@ -57,7 +89,7 @@ Earlier requirements are superseded where they conflict with later decisions. Sp
 Keep or implement:
 
 - School years and semesters.
-- Initial prospectus upload and reviewed subject extraction. Place the catalog import action below its filters and require an active college/program selection before reading a prospectus; carry that selection into the reviewed commit. A subject code is considered existing and skipped only when it is already in that same college/program catalog; the same code in another college/program is a separate subject. Enforce subject-code uniqueness within each college/program while preserving uniqueness for legacy unassigned subjects. For labeled DOCX curriculum tables, extract the Subject Code, Descriptive Title, and Units columns, plus the Pre-Requisite column when present. Save reviewed prerequisite text with each catalog subject. Associate each whole table with the year and semester in its heading (`1st year` → `1`, `2nd semester` → `2`). Group review rows by year and semester for navigation; if either heading is unclear for a table, keep both placement fields blank and flag the subject rows under Unplaced rather than inheriting placement from a prior table.
+- Initial prospectus upload directly imports extracted subjects after the admin chooses an existing active college/program or adds a new college with the file. A subject code is considered existing and skipped only when it is already in that same college/program catalog; the same code in another college/program is a separate subject. Enforce subject-code uniqueness within each college/program while preserving uniqueness for legacy unassigned subjects. For labeled DOCX curriculum tables, extract the Subject Code, Descriptive Title, and Units columns, plus the Pre-Requisite column when present. Save prerequisite text with each catalog subject. Associate each whole table with the year and semester in its heading (`1st year` → `1`, `2nd semester` → `2`). If either heading is unclear for a table, leave both placement fields blank and flag the subjects under Unplaced rather than inheriting placement from a prior table. Reject unreadable or invalid rows atomically; users can edit successfully imported subjects in the catalog.
 - Subject catalog management.
 - Sections and student rosters. Admins can create a chosen number of sections at once; names use the next available alphabetical labels for that year level (for example, `BSE 1A`, `BSE 1B`), without duplicating existing section letters. An unused section may be deleted; sections referenced by current or historical academic records are protected.
 - Regular student enrollment through section membership.
@@ -772,7 +804,7 @@ Attendance:
 - Each attendance date has a configured maximum; Present earns that maximum and Absent earns 0.
 - Late earns a fixed point value configured by the grading policy.
 - Excused earns its configured point value and counts toward possible points; new policies default to full credit. Leaving the value unset excludes excused days, preserving older policy behavior.
-- A cell may instead store a numeric score from 0 through the date maximum.
+- Faculty attendance entry uses Present, Late, Absent, and Excused statuses only; existing numeric marks remain preserved for historical grade calculations and exports.
 - Policies without attendance point settings retain the legacy one-point maximum, late fraction (default 0.5), and excluded excused days until explicitly configured.
 - Unmarked attendance is pending.
 - An entirely excused/no-data category is pending when its weight is nonzero.
@@ -969,7 +1001,7 @@ Examples:
 
 Use dedicated pages for:
 
-- Prospectus/student import review.
+- Prospectus upload and student import review.
 - Syllabus editing.
 - Lesson editing.
 - Quiz construction/review.
@@ -1598,7 +1630,7 @@ Acceptance:
 #### Milestone 2 — academic administration
 
 - School years/terms.
-- Prospectus source upload and reviewed extraction.
+- Prospectus source upload and direct, atomic extraction/import.
 - Catalog/sections.
 - Student import.
 - Teacher-owned offerings.
@@ -1614,7 +1646,7 @@ Acceptance:
 - Import errors are previewed; the admin may explicitly import valid student rows while skipping error rows, with both counts reported. No rows are silently omitted.
 - Historical context survives new-year setup.
 
-Prospectus extraction must produce a reviewed draft, not blindly create subjects. A failed parser still allows manual entry.
+Prospectus extraction must import valid rows atomically, reject unreadable/invalid rows without partial creation, and retain unclear placements under Unplaced without allowing catalog edits to change placement. Manual subject creation remains available in each semester catalog section; the selected active college and clicked year/semester determine its placement, which is locked in the editor. After upload, return to the catalog and show the import result in a dialog rather than a separate success page.
 
 #### Milestone 3 — teaching and recoverable drafts
 

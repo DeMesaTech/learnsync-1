@@ -119,7 +119,7 @@ export function Shell(){
         </div>)}
       </nav>
       {user.role!=='admin'&&classes.error&&<p className="sidebar-note" role="alert">Class links could not be loaded: {classes.error.message}</p>}
-      <p className="sidebar-note">Governor Mariano E. Villafuerte Community College<br/>BS Entrepreneurship</p>
+      <p className="sidebar-note">Governor Mariano E. Villafuerte Community College</p>
     </aside>
     {open&&<button type="button" className="sidebar-backdrop" aria-label="Close navigation" onClick={()=>setOpen(false)}/>}
     <main id="main" className="content">{failure&&<p role="alert" className="error">{failure}</p>}<Outlet/></main>

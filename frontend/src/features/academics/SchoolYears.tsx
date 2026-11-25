@@ -1,32 +1,26 @@
 import {useState,type FormEvent} from 'react';
 import {Link} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
-import {ApiError,api,post,errorText} from '../../app/api';
+import {ApiError,api,post,send,errorText} from '../../app/api';
 import {queryClient} from '../../app/providers';
 import {Dialog} from '../../components/Dialog';
-import {useConfirm} from '../../components/confirm';
 import type {SchoolYear,Term} from './types';
 
 export function SchoolYears(){
-  const ask=useConfirm();
   const years=useQuery({queryKey:['school-years'],queryFn:()=>api<SchoolYear[]>('/school-years')});
   const [creating,setCreating]=useState(false);
   const [reopening,setReopening]=useState<Term|null>(null);
+  const [editingTerm,setEditingTerm]=useState<Term|null>(null);
   const [message,setMessage]=useState('');
   const termCount=years.data?.reduce((count,year)=>count+year.terms.length,0)??0;
   const activeTermCount=years.data?.reduce((count,year)=>
     count+year.terms.filter(term=>term.status==='active').length,0)??0;
 
-  async function transition(term:Term,action:'schedule'|'activate'){
-    try{await post(`/terms/${term.id}/${action}`,{});setMessage(action==='schedule'?'Semester scheduled.':'Semester activated.');queryClient.invalidateQueries({queryKey:['school-years']})}
+  async function transition(term:Term){
+    try{await post(`/terms/${term.id}/schedule`,{});setMessage('Semester scheduled; it will activate on its start date.');queryClient.invalidateQueries({queryKey:['school-years']})}
     catch(e){setMessage(errorText(e))}
   }
 
-  async function close(term:Term){
-    if(!await ask({title:`Close ${term.name}?`,message:'Academic records become read-only. Reopening is possible only during the scheduled dates, requires a reason, and is unavailable while another semester is active.',yes:'Close term',danger:true}))return;
-    try{await post(`/terms/${term.id}/close`,{});setMessage('Term closed.');queryClient.invalidateQueries({queryKey:['school-years']})}
-    catch(e){setMessage(errorText(e))}
-  }
   async function reopen(term:Term,reason:string){
     try{
       await post(`/terms/${term.id}/reopen`,{reason});
@@ -72,33 +66,39 @@ export function SchoolYears(){
                       <p className="muted">{year.start_date} <span aria-hidden="true">→</span> {year.end_date}</p></div>
                     <span className="settings-year-summary">{activeCount} of {year.terms.length} semesters active</span>
                   </header>
-                  <div className="settings-terms">{year.terms.map(term=><article className="settings-term-card" key={term.id}>
+                  <div className="settings-terms">{year.terms.map(term=>{
+                    const editable=term.status==='draft'||term.status==='scheduled'||term.status==='active';
+                    return <article className={`settings-term-card${editable?' editable':''}`} key={term.id}>
+                    {editable&&<button type="button" className="settings-term-card-trigger"
+                      aria-label={`Edit ${term.name} information`}
+                      onClick={()=>setEditingTerm(term)}/>}
                     <div className="settings-term-top">
-                      <div><p className="eyebrow">SEMESTER {term.sequence}</p><h4>{term.name}</h4></div>
+                      <div><p className="eyebrow">SEMESTER {term.sequence}</p><h4>{term.name}</h4>
+                        <p className="settings-term-dates">{term.start_date}<span aria-hidden="true">→</span>{term.end_date}</p></div>
                       <span className={`badge ${term.status}`}>{statusLabel(term.status)}</span>
                     </div>
-                    <p className="settings-term-dates">{term.start_date}<span aria-hidden="true">→</span>{term.end_date}</p>
                     <div className="settings-term-links">
                       <Link to="/admin/students">Student management</Link>
                       <Link to="/admin/offerings">Faculty Management</Link>
                     </div>
-                    <div className="settings-term-actions">
-                      {term.status==='draft'&&<button type="button" onClick={()=>transition(term,'schedule')}>Schedule semester</button>}
-                      {term.status==='scheduled'&&<button type="button" onClick={()=>transition(term,'activate')}>Activate semester</button>}
-                      {term.status==='active'&&<button type="button" onClick={()=>close(term)}>Close semester</button>}
-                      {term.status==='inactive'&&term.reopen_available&&<button type="button" onClick={()=>setReopening(term)}>Reopen semester</button>}
-                    </div>
+                    {(term.status==='draft'||(term.status==='inactive'&&term.reopen_available))&&
+                      <div className="settings-term-actions">
+                        {term.status==='draft'&&<button type="button" onClick={()=>transition(term)}>Schedule semester</button>}
+                        {term.status==='inactive'&&term.reopen_available&&<button type="button" onClick={()=>setReopening(term)}>Reopen semester</button>}
+                      </div>}
                     {term.status==='inactive'&&!term.reopen_available&&<p className="muted">Reopening is available only during the scheduled dates and when no other semester is active.</p>}
-                  </article>)}</div>
+                  </article>;
+                  })}</div>
                 </section>;
               })}
             </div>}
             <p className="settings-calendar-help"><strong>About semester status</strong>
-              <span>Drafts are for calendar setup. Scheduled, inactive, and archived semesters are read-only. Only one semester can be active; close it before activating the next one.</span></p>
+              <span>Schedule a semester in advance. It activates automatically on its start date and closes automatically after its end date. Only one semester can be active at a time.</span></p>
           </>}
       </div>
     </div>
     {creating&&<NewYear onClose={()=>setCreating(false)} onDone={()=>{setCreating(false);setMessage('School year created.');queryClient.invalidateQueries({queryKey:['school-years']})}}/>}
+    {editingTerm&&<EditTerm term={editingTerm} onClose={()=>setEditingTerm(null)} onDone={()=>{setEditingTerm(null);setMessage('Semester information updated.');queryClient.invalidateQueries({queryKey:['school-years']})}}/>}
     {reopening&&<ReopenTerm term={reopening} onClose={()=>setReopening(null)} onSubmit={reason=>reopen(reopening,reason)}/>}
   </>;
 }
@@ -125,6 +125,42 @@ function ReopenTerm({term,onClose,onSubmit}:{term:Term;onClose:()=>void;onSubmit
       <label>Reason (kept in the audit history)<textarea value={reason} onChange={event=>setReason(event.target.value)} minLength={3} maxLength={1000} required autoFocus/></label>
       {error&&<p role="alert">{error}</p>}
       <div className="actions"><button type="button" onClick={onClose} disabled={saving}>Cancel</button><button className="primary" type="submit" disabled={saving}>{saving?'Reopening…':'Reopen semester'}</button></div>
+    </form>
+  </Dialog>;
+}
+
+function EditTerm({term,onClose,onDone}:{term:Term;onClose:()=>void;onDone:()=>void}){
+  const [error,setError]=useState('');
+  const [saving,setSaving]=useState(false);
+
+  async function submit(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    const form=new FormData(event.currentTarget);
+    setSaving(true);
+    setError('');
+    try{
+      await send('PATCH',`/terms/${term.id}`,{
+        name:String(form.get('name')??'').trim(),
+        start_date:form.get('start_date'),
+        end_date:form.get('end_date'),
+      });
+      onDone();
+    }catch(e){setError(errorText(e))}
+    finally{setSaving(false)}
+  }
+
+  return <Dialog title={`Edit ${term.name}`} onClose={()=>saving?false:onClose()}>
+    <form onSubmit={submit}>
+      <label>Semester name<input name="name" required maxLength={60} defaultValue={term.name}/></label>
+      <div className="grid-2">
+        <label>Starts<input name="start_date" type="date" required defaultValue={term.start_date}/></label>
+        <label>Ends<input name="end_date" type="date" required defaultValue={term.end_date}/></label>
+      </div>
+      {error&&<p role="alert">{error}</p>}
+      <div className="actions">
+        <button type="button" onClick={onClose} disabled={saving}>Cancel</button>
+        <button className="primary" disabled={saving}>{saving?'Saving…':'Save semester'}</button>
+      </div>
     </form>
   </Dialog>;
 }

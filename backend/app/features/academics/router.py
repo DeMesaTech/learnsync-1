@@ -1,3 +1,4 @@
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, Response, UploadFile
@@ -331,6 +332,42 @@ def commit_student_import(import_id: UUID, background_tasks: BackgroundTasks,
 def create_prospectus_import(file: UploadFile | None = File(None), actor=Depends(admin),
                              db: Session = Depends(get_db)):
     return imports.prospectus_view(db, imports.create_prospectus_import(db, actor, file))
+
+
+@router.post("/prospectus-uploads", status_code=201)
+def upload_prospectus(
+    file: UploadFile = File(...),
+    operation: Literal["update", "add"] = Form(...),
+    college_id: UUID | None = Form(None),
+    college_code: str | None = Form(None),
+    college_name: str | None = Form(None),
+    college_description: str = Form(""),
+    actor=Depends(admin),
+    db: Session = Depends(get_db),
+):
+    college_data = None
+    if operation == "update":
+        if college_id is None:
+            fail(422, "college_required", "Choose the college whose prospectus you are updating.")
+        if college_code or college_name:
+            fail(422, "college_fields_unexpected", "New college details are not used in update mode.")
+    else:
+        if college_id is not None:
+            fail(422, "college_fields_unexpected", "Choose add mode without an existing college.")
+        code = (college_code or "").strip()
+        name = (college_name or "").strip()
+        description = college_description.strip()
+        field_errors = {}
+        if not code or len(code) > 30:
+            field_errors["college_code"] = "College code is required and must be at most 30 characters."
+        if not name or len(name) > 150:
+            field_errors["college_name"] = "College name is required and must be at most 150 characters."
+        if len(description) > 5000:
+            field_errors["college_description"] = "Description must be at most 5000 characters."
+        if field_errors:
+            fail(422, "college_details_invalid", "Check the new college details.", field_errors)
+        college_data = CollegeInput(code=code, name=name, description=description)
+    return imports.upload_prospectus(db, actor, file, college_id, college_data)
 
 
 @router.get("/prospectus-imports/{import_id}")

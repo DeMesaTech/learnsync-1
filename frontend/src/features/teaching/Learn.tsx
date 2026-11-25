@@ -88,6 +88,7 @@ export function StudentLesson(){
   const {offeringId,itemId}=useParams();
   const query=useQuery({queryKey:['learn-item',offeringId,itemId],queryFn:()=>api<LearnItem>(`/learn/offerings/${offeringId}/items/${itemId}`)});
   const parent=`/student/offerings/${offeringId}/classwork`;
+  const lessonBase=`/student/offerings/${offeringId}/lessons`;
   const origin=useOrigin(parent,'Classwork');const back=origin.to;
   const carried=useLocation().state;
   const toast=useToast();
@@ -103,9 +104,9 @@ export function StudentLesson(){
     {i.kind==='file'&&i.file&&<FileCard file={i.file}/>}
     {i.kind==='reference'&&<LinkCard url={i.reference_url} note={i.reference_note}/>}
     <div className="actions">{i.completed?<span className="badge covered">✓ You marked this {word} complete</span>:<button className="primary" disabled={marking} onClick={complete}>Mark {word} as complete</button>}{i.kind==='lesson'&&<Link className="button" to={`/student/offerings/${offeringId}/study`}>Ask study help</Link>}</div>
-    {i.completed&&<p role="status" className="seq-head">{i.next_lesson?<Link className="button primary" state={carried} to={`${parent}/${i.next_lesson.id}`}>{nextLabel(i.next_lesson.kind)}: {i.next_lesson.title}</Link>
+    {i.completed&&<p role="status" className="seq-head">{i.next_lesson?<Link className="button primary" state={carried} to={`${lessonBase}/${i.next_lesson.id}`}>{nextLabel(i.next_lesson.kind)}: {i.next_lesson.title}</Link>
       :i.all_completed?<><span>Everything published so far is complete.</span><Link className="button" to={`/student/offerings/${offeringId}/classwork`}>Back to classwork</Link></>
-      :<><span>End of the sequence. Some earlier items are not marked complete yet.</span>{i.first_incomplete&&<Link className="button" state={carried} to={`${parent}/${i.first_incomplete.id}`}>Go to: {i.first_incomplete.title}</Link>}</>}</p>}
+      :<><span>End of the sequence. Some earlier items are not marked complete yet.</span>{i.first_incomplete&&<Link className="button" state={carried} to={`${lessonBase}/${i.first_incomplete.id}`}>Go to: {i.first_incomplete.title}</Link>}</>}</p>}
     {i.lesson_number&&<p className="muted">{Word} {i.lesson_number} of {i.lesson_total}</p>}
     {problem&&<p role="alert">{problem}</p>}</article></>;
 }

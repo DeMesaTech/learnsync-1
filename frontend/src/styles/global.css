@@ -1921,6 +1921,7 @@ code {
 }
 
 .settings-term-card {
+  position: relative;
   display: grid;
   align-content: start;
   gap: 10px;
@@ -1929,6 +1930,38 @@ code {
   border: 1px solid var(--border);
   border-radius: 11px;
   background: linear-gradient(180deg, var(--surface) 0%, var(--canvas) 100%)
+}
+
+.settings-term-card.editable {
+  cursor: pointer
+}
+
+.settings-term-card-trigger {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent
+}
+
+.settings-term-card-trigger:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px
+}
+
+.settings-term-card > :not(.settings-term-card-trigger) {
+  position: relative;
+  z-index: 2;
+  pointer-events: none
+}
+
+.settings-term-links a,
+.settings-term-actions button {
+  pointer-events: auto
 }
 
 .settings-term-top {
@@ -2848,7 +2881,31 @@ td input {
   min-height: 44px
 }
 
-.back a,
+.back a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--action);
+  font-weight: 650;
+  text-decoration: none;
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease
+}
+
+.back a:hover {
+  border-color: var(--action);
+  background: var(--surface-alt)
+}
+
+.back a:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px
+}
+
 a.touch {
   display: inline-flex;
   align-items: center;
@@ -4976,31 +5033,6 @@ dialog[data-confirm] {
   color: var(--text)
 }
 
-.att-points-input {
-  width: 76px;
-  min-width: 76px;
-  min-height: 44px;
-  margin: 0 auto;
-  padding: 4px;
-  text-align: center
-}
-
-.att-points-input[aria-invalid="true"],
-.attendance-register-points input[aria-invalid="true"] {
-  border-color: var(--danger);
-  outline: 2px solid color-mix(in srgb, var(--danger) 35%, transparent)
-}
-
-.attendance-register-points {
-  display: grid;
-  gap: 4px;
-  max-width: 180px
-}
-
-.attendance-register-points input {
-  min-height: 44px
-}
-
 .att-cell.err {
   outline: 2px solid var(--danger);
   outline-offset: 1px
@@ -5010,8 +5042,27 @@ dialog[data-confirm] {
   align-items: flex-start
 }
 
-.attendance-page-heading .tabs {
-  flex: 0 0 auto
+.attendance-workspace .panel {
+  padding: 14px 22px;
+  margin-bottom: 10px
+}
+
+.attendance-workspace .page-heading {
+  margin-bottom: 6px;
+  gap: 8px
+}
+
+.attendance-workspace .actions {
+  margin: 6px 0;
+  gap: 6px
+}
+
+.attendance-workspace .panel>p {
+  margin: 4px 0
+}
+
+.attendance-workspace .attendance-filter-tools {
+  gap: 8px
 }
 
 .attendance-tools {
@@ -5968,13 +6019,12 @@ details.topic[open]>summary::before {
   min-width: 180px
 }
 
-.chapter-material-filters .chapter-material-dropdown {
-  margin-left: auto
+.chapter-material-category-tabs {
+  margin: 0
 }
 
-.stream-material-category {
-  max-width: 280px;
-  margin: 12px 0
+.chapter-material-filters .chapter-material-dropdown {
+  margin-left: auto
 }
 
 .chapter-material-dropdown {
@@ -6137,12 +6187,12 @@ details.topic[open]>summary::before {
   margin-top: 4px
 }
 
-.manager-material-list li {
+.seq.compact.manager-material-list li {
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 0;
+  align-items: start;
+  gap: 8px 12px;
+  padding: 12px;
   border-bottom: 1px solid var(--border)
 }
 
@@ -6166,6 +6216,34 @@ details.topic[open]>summary::before {
   outline-offset: -3px
 }
 
+.student-classwork-row-link {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px 12px;
+  width: 100%;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none
+}
+
+.student-classwork-row-link:focus-visible {
+  border-radius: 8px;
+  outline: 3px solid var(--focus);
+  outline-offset: 2px
+}
+
+.student-classwork-row-link .manager-material-actions {
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start
+}
+
+.student-classwork-row-link>.badge.next {
+  justify-self: end
+}
+
 .manager-material-row-clickable .manager-material-actions {
   position: relative;
   z-index: 2
@@ -6176,9 +6254,14 @@ details.topic[open]>summary::before {
   z-index: 2
 }
 
-.manager-material-list .grow {
-  display: grid;
-  gap: 3px;
+.seq.compact.manager-material-list .grow {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
   min-width: 0
 }
 
@@ -6188,9 +6271,31 @@ details.topic[open]>summary::before {
   overflow-wrap: anywhere
 }
 
-.manager-material-list .grow>.muted {
+.seq.compact.manager-material-list .grow .muted {
   display: block;
   overflow-wrap: anywhere
+}
+
+.manager-material-list time {
+  display: block
+}
+
+.manager-material-list .manager-material-actions,
+.manager-material-list .manager-material-actions .actions {
+  flex-direction: column;
+  align-items: flex-start
+}
+
+.faculty-stream-announcements .cards>.panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px
+}
+
+.faculty-stream-announcements .cards>.panel .actions {
+  flex-direction: column;
+  align-items: flex-start
 }
 
 .material-kind-icon {
@@ -6221,23 +6326,15 @@ details.topic[open]>summary::before {
   gap: 8px
 }
 
-.stream-classwork-panel>h3 {
-  font-size: 1.25rem;
-  margin-bottom: 8px
-}
-
 .stream-announcement-body {
   display: block;
   white-space: pre-wrap;
   overflow-wrap: anywhere
 }
 
-.stream-announcement-message {
-  grid-column: 1 / -1
-}
-
+.stream-announcement-message,
 .stream-announcement-more {
-  grid-template-columns: minmax(0, 1fr)
+  grid-column: 1 / -1
 }
 
 @media(max-width:620px) {
@@ -6289,6 +6386,7 @@ details.topic[open]>summary::before {
   .chapter-detail-heading .button {
     width: 100%
   }
+
 }
 
 /* confetti burst (components/celebrate.ts) */
@@ -6708,6 +6806,48 @@ table input[type=checkbox] {
 
 .prospectus-semesters>.panel {
   min-width: 0
+}
+
+.prospectus-semester-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px
+}
+
+.prospectus-semester-heading h2 {
+  margin: 0
+}
+
+.add-subject-action {
+  position: relative;
+  flex: 0 0 auto
+}
+
+.add-subject-tooltip {
+  position: absolute;
+  z-index: 5;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--surface);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .2);
+  font-size: .875rem;
+  line-height: 1.35
+}
+
+.add-subject-tooltip::after {
+  position: absolute;
+  top: 100%;
+  right: 16px;
+  border: 6px solid transparent;
+  border-top-color: var(--text);
+  content: ""
 }
 
 @media (max-width: 760px) {

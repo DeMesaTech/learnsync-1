@@ -12,11 +12,10 @@ import {useFlushOnLeave,type SaveStatus} from '../teaching/autosave';
 import {PERIOD_LABEL,type AttendanceSessionRow,type AttendanceValue,type AttendanceStatus} from './types';
 
 interface Roster{student_id:string;display_name:string;student_number:string}
-interface Scoring{max_points:number;late_points:number;excused_points:number|null;numeric_enabled:boolean}
+interface Scoring{max_points:number;late_points:number;excused_points:number|null}
 type Data={sessions:AttendanceSessionRow[];roster:Roster[];scoring:Scoring};
 type Mode='grid'|'day';
 type Status=AttendanceStatus;
-type EntryMode='status'|'points';
 type Period='midterm'|'finals';
 const STATUS=[['present','Present'],['late','Late'],['absent','Absent'],['excused','Excused']] as const;
 const SHORT:Record<Status,string>={present:'P',late:'L',absent:'A',excused:'E'};
@@ -24,7 +23,7 @@ const LABEL:Record<Status,string>={present:'Present',late:'Late',absent:'Absent'
 const CYCLE:(Status|null)[]=[null,'present','late','absent','excused'];
 const KEYS:Record<string,Status>={p:'present',l:'late',a:'absent',e:'excused'};
 const PAGE_SIZE=25;
-const DEFAULT_SCORING:Scoring={max_points:1,late_points:0.5,excused_points:null,numeric_enabled:false};
+const DEFAULT_SCORING:Scoring={max_points:1,late_points:0.5,excused_points:null};
 const iso=(d:Date)=>{const p=(n:number)=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`};
 const parse=(v:string)=>{const [y,m,d]=v.split('-').map(Number);return new Date(y,m-1,d)};
 const shift=(v:string,days:number)=>{const d=parse(v);d.setDate(d.getDate()+days);return iso(d)};
@@ -40,24 +39,6 @@ function ModeToggle({mode,onChange}:{mode:Mode;onChange:(m:Mode)=>void}){
     <button key={m} className={mode===m?'active':''} aria-pressed={mode===m} onClick={()=>onChange(m)}>{m==='grid'?'Grid':'One day'}</button>)}</div>;
 }
 
-function EntryModeToggle({mode,onChange,scoring}:{mode:EntryMode;onChange:(m:EntryMode)=>void;scoring:Scoring}){
-  return <div className="tabs" role="group" aria-label="Attendance entry mode">
-    <button type="button" className={mode==='status'?'active':''} aria-pressed={mode==='status'} onClick={()=>onChange('status')}>Statuses</button>
-    <button type="button" className={mode==='points'?'active':''} aria-pressed={mode==='points'}
-      disabled={!scoring.numeric_enabled} title={scoring.numeric_enabled?'Enter points for individual attendance cells':'Publish a grading policy with an attendance maximum to enable numeric points'}
-      onClick={()=>onChange('points')}>Numeric points</button>
-  </div>;
-}
-
-function pointsFor(value:AttendanceValue,scoring:Scoring):number|null{
-  if(value===null)return null;
-  if(typeof value==='object')return value.points;
-  if(value==='present')return scoring.max_points;
-  if(value==='late')return scoring.late_points;
-  if(value==='absent')return 0;
-  return scoring.excused_points;
-}
-
 function markLabel(value:AttendanceValue):string{
   if(value===null)return 'Not marked';
   return typeof value==='string'?LABEL[value]:`Numeric · ${value.points} points`;
@@ -71,7 +52,6 @@ export function AttendancePage(){
   const scrollPosition=useRef<number|null>(null);
   const setSectionId=(id:string)=>{scrollPosition.current=window.scrollY;setSelection({offeringId:offering.id,sectionId:id})};
   const [mode,setMode]=useState<Mode>(()=>window.matchMedia('(min-width:768px)').matches?'grid':'day');   // a grid needs room; phones start with one day
-  const [entryMode,setEntryMode]=useState<EntryMode>('status');
   const [date,setDate]=useState(today);
   const [range,setRange]=useState<'week'|'month'>('week');
   const query=useQuery({queryKey:['attendance',offering.id,sectionId],enabled:!!sectionId,
@@ -83,16 +63,14 @@ export function AttendancePage(){
     }
   },[sectionId,query.isFetching]);
   if(offering.sections.length===0)return <section className="panel"><h2>No sections</h2><p>This subject has no sections yet.</p></section>;
-  const props={offering,sectionId,setSectionId,query,setMode,date,setDate,range,setRange,entryMode};
+  const props={offering,sectionId,setSectionId,query,setMode,date,setDate,range,setRange};
   const scoring=query.data?.scoring??DEFAULT_SCORING;
   const excusedDescription=scoring.excused_points===null?'excused points excluded':`excused ${scoring.excused_points} points`;
-  return <>
+  return <div className="attendance-workspace">
     <div className="page-heading attendance-page-heading"><div><h2>Attendance</h2>
-      <p className="muted">Present {scoring.max_points} · Late {scoring.late_points} · Absent 0 · {excusedDescription}. Numeric marks are out of {scoring.max_points}; unmarked attendance is pending, not absent.</p>
-      {!scoring.numeric_enabled&&<p className="muted">Publish attendance points in the grading policy to enable numeric marks.</p>}</div>
-      <EntryModeToggle mode={entryMode} onChange={setEntryMode} scoring={scoring}/></div>
-    {mode==='grid'?<GridView key={`${offering.id}:${sectionId}`} {...props} setEntryMode={setEntryMode}/>:<DayView {...props} setEntryMode={setEntryMode}/>}
-  </>;
+      <p className="muted">Present {scoring.max_points} · Late {scoring.late_points} · Absent 0 · {excusedDescription}. Unmarked attendance is pending, not absent.</p></div></div>
+    {mode==='grid'?<GridView key={`${offering.id}:${sectionId}`} {...props}/>:<DayView {...props}/>}
+  </div>;
 }
 
 /** Downloads the recorded attendance of one section as Excel or PDF: the range on screen, or every recorded date. */
@@ -139,18 +117,15 @@ function AttendanceExport({offering,sectionId,from,to,label}:{offering:OfferingS
 interface ViewProps{
   offering:OfferingSummary;sectionId:string;setSectionId:(id:string)=>void;query:UseQueryResult<Data>;setMode:(m:Mode)=>void;
   date:string;setDate:(date:string)=>void;range:'week'|'month';setRange:(range:'week'|'month')=>void;
-  entryMode:EntryMode;setEntryMode:(mode:EntryMode)=>void;
 }
 
 /** Students down, dates across. Each change is saved on its own (debounced per date); a failed save is flagged with Retry. */
-function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,range,setRange,entryMode}:ViewProps){
+function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,range,setRange}:ViewProps){
   const toast=useToast();const ask=useConfirm();
   const closed=offering.term_status!=='active';
-  const [edits,setEdits]=useState<Record<string,Record<string,AttendanceValue>>>({});
+  const [edits,setEdits]=useState<Record<string,Record<string,Status|null>>>({});
   const [periods,setPeriods]=useState<Record<string,Period>>({});
   const [errors,setErrors]=useState<Record<string,string>>({});
-  const [numericDrafts,setNumericDrafts]=useState<Record<string,Record<string,string>>>({});
-  const [scoreErrors,setScoreErrors]=useState<Record<string,{date:string;student:string;message:string}>>({});
   const [saving,setSaving]=useState(0);
   const [active,setActive]=useState({r:0,c:0});
   const [hasActiveCell,setHasActiveCell]=useState(false);
@@ -158,7 +133,7 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
   const [classDays,setClassDays]=useState(offering.meeting_days??0);
   const [note,setNote]=useState('');
   const [showClassDays,setShowClassDays]=useState(false);
-  const pending=useRef<Record<string,Record<string,AttendanceValue>>>({});
+  const pending=useRef<Record<string,Record<string,Status|null>>>({});
   const timers=useRef<Record<string,number>>({});
   const inFlight=useRef<Record<string,Promise<boolean>>>({});
   const table=useRef<HTMLTableElement>(null);
@@ -177,13 +152,12 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
     return (before??after)?.period??'midterm'};
   const periodOf=(d:string):Period=>byDate.get(d)?.period??periods[d]??nearest(d);
   const valueOf=(d:string,s:string):AttendanceValue=>{const e=edits[d]?.[s];return e!==undefined?e:(byDate.get(d)?.marks[s]??null)};
-  const scoring=query.data?.scoring??DEFAULT_SCORING;
   const pageCount=Math.max(1,Math.ceil(roster.length/PAGE_SIZE));
   const currentPage=Math.min(page,pageCount);
   const pageRoster=roster.slice((currentPage-1)*PAGE_SIZE,currentPage*PAGE_SIZE);
   const activeDate=hasActiveCell?dates[active.c]:undefined;
   const unsaved=Object.values(edits).reduce((n,e)=>n+Object.keys(e).length,0);
-  const status:SaveStatus=Object.keys(scoreErrors).length>0?'failed':unsaved===0?'saved':saving>0?'saving':Object.keys(errors).length>0?'failed':'dirty';
+  const status:SaveStatus=unsaved===0?'saved':saving>0?'saving':Object.keys(errors).length>0?'failed':'dirty';
 
   async function flush(d:string):Promise<boolean>{
     const active=inFlight.current[d];
@@ -216,54 +190,20 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
     for(const d of Object.keys(timers.current))window.clearTimeout(timers.current[d]);
     const dates=new Set([...Object.keys(pending.current),...Object.keys(inFlight.current)]);
     const saved=await Promise.all([...dates].map(flush));
-    return saved.every(Boolean)&&Object.keys(scoreErrors).length===0;
+    return saved.every(Boolean);
   }
   useFlushOnLeave(status,flushAll);
   useEffect(()=>()=>{for(const d of Object.keys(timers.current))window.clearTimeout(timers.current[d])},[]);
 
-  function setMarks(d:string,changes:Record<string,AttendanceValue>){
+  function setMarks(d:string,changes:Record<string,Status|null>){
     if(closed)return;
     setEdits(p=>({...p,[d]:{...p[d],...changes}}));
     pending.current[d]={...pending.current[d],...changes};
     window.clearTimeout(timers.current[d]);
     timers.current[d]=window.setTimeout(()=>void flush(d),600);
   }
-  const scoreErrorKey=(d:string,s:string)=>`${d}:${s}`;
-  function clearScoreError(d:string,s:string){
-    const key=scoreErrorKey(d,s);
-    setScoreErrors(p=>{const n={...p};delete n[key];return n});
-  }
-  function discardPendingMark(d:string,s:string){
-    const next={...(pending.current[d]??{})};delete next[s];pending.current[d]=next;
-    window.clearTimeout(timers.current[d]);
-    if(Object.keys(next).length>0)timers.current[d]=window.setTimeout(()=>void flush(d),600);
-    else delete pending.current[d];
-  }
-  function setStatusMark(d:string,s:string,value:Status|null){
-    clearScoreError(d,s);
-    setNumericDrafts(p=>{const n={...p};const cur={...n[d]};delete cur[s];if(Object.keys(cur).length)n[d]=cur;else delete n[d];return n});
-    setMarks(d,{[s]:value});
-  }
-  function setBulkMarks(d:string,changes:Record<string,Status|null>){
-    for(const s of Object.keys(changes))clearScoreError(d,s);
-    setNumericDrafts(p=>{const n={...p};const cur={...n[d]};for(const s of Object.keys(changes))delete cur[s];if(Object.keys(cur).length)n[d]=cur;else delete n[d];return n});
-    setMarks(d,changes);
-  }
-  function setNumericMark(d:string,s:string,student:string,raw:string){
-    setNumericDrafts(p=>({...p,[d]:{...p[d],[s]:raw}}));
-    const number=raw===''?null:Number(raw);
-    const key=scoreErrorKey(d,s);
-    const message=number!==null&&(!Number.isFinite(number)||number<0||number>scoring.max_points||
-      Math.abs(number*100-Math.round(number*100))>0.000001)
-      ?`Enter a score from 0 to ${scoring.max_points}, with at most two decimal places.`:null;
-    if(message){
-      discardPendingMark(d,s);
-      setScoreErrors(p=>({...p,[key]:{date:d,student,message}}));
-      return;
-    }
-    clearScoreError(d,s);
-    setMarks(d,{[s]:number===null?null:{points:number}});
-  }
+  function setStatusMark(d:string,s:string,value:Status|null){setMarks(d,{[s]:value})}
+  function setBulkMarks(d:string,changes:Record<string,Status|null>){setMarks(d,changes)}
   const markRest=(d:string)=>setBulkMarks(d,Object.fromEntries(roster.filter(r=>valueOf(d,r.student_id)===null).map(r=>[r.student_id,'present' as Status])));
   async function unmarkDate(d:string){
     const marked=roster.filter(r=>valueOf(d,r.student_id)!==null);
@@ -344,16 +284,15 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
         <div className="actions"><button type="button" onClick={closeClassDays}>Cancel</button>
           <button type="button" disabled={classDays===(offering.meeting_days??0)} onClick={async()=>{if(await saveDays())setShowClassDays(false)}}>Save class days</button></div>
       </Dialog>}
-      <p role="status" className="muted">{closed?'This semester is read-only until it is active.':Object.keys(scoreErrors).length>0?'Fix invalid attendance points before leaving this page.':status==='saved'?'All changes saved.':status==='saving'?'Saving…':status==='failed'?`${unsaved} change${unsaved===1?'':'s'} not saved. Use Retry below.`:'Saving in a moment…'}</p>
-      {Object.entries(scoreErrors).map(([key,error])=><p key={key} role="alert" className="error">{error.student}, {pretty(error.date)}: {error.message}</p>)}
+      <p role="status" className="muted">{closed?'This semester is read-only until it is active.':status==='saved'?'All changes saved.':status==='saving'?'Saving…':status==='failed'?`${unsaved} change${unsaved===1?'':'s'} not saved. Use Retry below.`:'Saving in a moment…'}</p>
       {Object.entries(errors).map(([d,m])=><p key={d} role="alert" className="error">{pretty(d)}: {m} <button onClick={()=>void flush(d)}>Retry</button></p>)}
     </section>
     {query.isPending?<p>Loading…</p>:query.error?<p role="alert">{query.error.message}</p>:roster.length===0?<section className="panel"><p className="muted">No students are enrolled through this section.</p></section>:
       <section className="panel">
-        <p className="muted">{entryMode==='status'?'P present · L late · A absent · E excused · · not marked. Click a cell to cycle, or focus it and type P, L, A, E (Delete clears). Each change is saved by itself.':`Enter numeric points from 0 to ${scoring.max_points}; each valid cell saves by itself.`}</p>
+        <p className="muted">P present · L late · A absent · E excused · · not marked. Click a cell to cycle, or focus it and type P, L, A, E (Delete clears). Each change is saved by itself.</p>
         {renderPager(true)}
         <div className="table-wrap" role="region" aria-label="Attendance grid, scrolls sideways" tabIndex={0}>
-        <table className="att-grid" ref={table}><caption className="sr-only">Attendance: students down, dates across. In status mode use the arrow keys to move between cells, then P, L, A or E to mark and Delete to clear. In numeric mode enter points from zero to the policy maximum. Use the unmark buttons to clear a selected mark or every mark for its date.</caption>
+        <table className="att-grid" ref={table}><caption className="sr-only">Attendance: students down, dates across. Use the arrow keys to move between cells, then P, L, A or E to mark and Delete to clear. Use the unmark buttons to clear a selected mark or every mark for its date.</caption>
           <thead><tr><th scope="col" className="sticky">Student</th><th scope="col">Student number</th>{dates.map(d=>{const rec=byDate.get(d);const marked=roster.filter(r=>valueOf(d,r.student_id)!==null).length;
             const allMarked=roster.length>0&&marked===roster.length;
             const full=range==='week'||isClass(d)||!!rec;      // a month is wide: only class days and recorded days carry the controls
@@ -365,11 +304,6 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
               {full&&<button type="button" className="icon-button" aria-label={allMarked?`Unmark all attendance for ${pretty(d)}`:`Mark unmarked students present for ${pretty(d)}`} title={allMarked?'Unmark all':`Mark rest present for ${pretty(d)}`} disabled={closed||(!allMarked&&marked===roster.length)} onClick={()=>allMarked?void unmarkDate(d):markRest(d)}>{allMarked?'×':'✓'}</button>}</div></th>})}</tr></thead>
           <tbody>{pageRoster.map((r,ri)=>{const rowIndex=(currentPage-1)*PAGE_SIZE+ri;return <tr key={r.student_id}><th scope="row" className="sticky">{r.display_name}</th><td className="student-number">{r.student_number}</td>
             {dates.map((d,ci)=>{const v=valueOf(d,r.student_id);const failed=!!errors[d]&&edits[d]?.[r.student_id]!==undefined;
-              if(entryMode==='points')return <td key={d}><input className={`att-points-input${failed?' err':''}`} type="number" min="0" max={scoring.max_points} step="0.01"
-                data-r={rowIndex} data-c={ci} aria-label={`${r.display_name}, ${pretty(d)} attendance points`} aria-invalid={!!scoreErrors[scoreErrorKey(d,r.student_id)]||failed}
-                title={markLabel(v)} value={numericDrafts[d]?.[r.student_id]??(pointsFor(v,scoring)===null?'':String(pointsFor(v,scoring)))}
-                disabled={closed||!scoring.numeric_enabled} onFocus={()=>{setActive({r:rowIndex,c:ci});setHasActiveCell(true)}}
-                onChange={e=>setNumericMark(d,r.student_id,r.display_name,e.target.value)}/></td>;
               const isNumeric=typeof v==='object'&&v!==null;
               const className=typeof v==='string'?v:isNumeric?'numeric':'none';
               return <td key={d}><button type="button" className={`att-cell ${className}${failed?' err':''}`} data-r={rowIndex} data-c={ci} tabIndex={active.r===rowIndex&&active.c===ci?0:-1} disabled={closed}
@@ -379,7 +313,7 @@ function GridView({offering,sectionId,setSectionId,query,setMode,date,setDate,ra
 }
 
 /** The original one-day register: quick roll call, and a place to remove a recorded day. */
-function DayView({offering,sectionId,setSectionId,query,setMode,date,setDate,range,setRange,entryMode}:ViewProps){
+function DayView({offering,sectionId,setSectionId,query,setMode,date,setDate,range,setRange}:ViewProps){
   const ask=useConfirm();
   const [period,setPeriod]=useState<Period>('midterm');
   const [message,setMessage]=useState('');   // lives here: the register remounts after every save
@@ -417,35 +351,16 @@ function DayView({offering,sectionId,setSectionId,query,setMode,date,setDate,ran
           {range==='week'&&<span>{DAY[dow]}</span>}<strong>{parse(d).getDate()}</strong><span className="muted">{rec?`${marked}/${total}`:'—'}</span></button></li>})}</ul>
       <p className="muted">Green underline: everyone marked. Amber: some students still not marked. Dashed outline: today.</p></section>
     {query.isPending?<p>Loading…</p>:query.error?<p role="alert">{query.error.message}</p>:
-      <div ref={register} tabIndex={-1} aria-label="Attendance register" style={{outline:'none',scrollMarginTop:96}}><Register key={`${sectionId}|${date}|${existing?.id??'new'}|${query.dataUpdatedAt}`} offering={offering} sectionId={sectionId} date={date} period={existing?existing.period:period} roster={query.data.roster} initial={existing?.marks??{}} closed={offering.term_status!=='active'} setMessage={setMessage} unsaved={unsaved} sessionId={existing?.id} entryMode={entryMode} scoring={query.data.scoring}/></div>}
+      <div ref={register} tabIndex={-1} aria-label="Attendance register" style={{outline:'none',scrollMarginTop:96}}><Register key={`${sectionId}|${date}|${existing?.id??'new'}|${query.dataUpdatedAt}`} offering={offering} sectionId={sectionId} date={date} period={existing?existing.period:period} roster={query.data.roster} initial={existing?.marks??{}} closed={offering.term_status!=='active'} setMessage={setMessage} unsaved={unsaved} sessionId={existing?.id}/></div>}
     {message&&<p role="status">{message}</p>}
   </>;
 }
 
-function Register({offering,sectionId,date,period,roster,initial,closed,setMessage,unsaved,sessionId,entryMode,scoring}:{offering:OfferingSummary;sectionId:string;date:string;period:'midterm'|'finals';roster:Roster[];initial:Record<string,AttendanceValue>;closed:boolean;setMessage:(m:string)=>void;unsaved:MutableRefObject<boolean>;sessionId?:string;entryMode:EntryMode;scoring:Scoring}){
+function Register({offering,sectionId,date,period,roster,initial,closed,setMessage,unsaved,sessionId}:{offering:OfferingSummary;sectionId:string;date:string;period:'midterm'|'finals';roster:Roster[];initial:Record<string,AttendanceValue>;closed:boolean;setMessage:(m:string)=>void;unsaved:MutableRefObject<boolean>;sessionId?:string}){
   const ask=useConfirm();const toast=useToast();
   const [marks,setMarks]=useState<Record<string,AttendanceValue>>(initial);
-  const [numericDrafts,setNumericDrafts]=useState<Record<string,string>>({});
-  const [validationErrors,setValidationErrors]=useState<Record<string,string>>({});
-  const pointsMode=entryMode==='points'&&scoring.numeric_enabled;
-  const setStatus=(studentId:string,value:Status|null)=>{
-    setValidationErrors(p=>{const n={...p};delete n[studentId];return n});
-    setNumericDrafts(p=>{const n={...p};delete n[studentId];return n});
-    setMarks(p=>({...p,[studentId]:value}));
-  };
-  const setNumeric=(studentId:string,raw:string)=>{
-    setNumericDrafts(p=>({...p,[studentId]:raw}));
-    if(raw===''){setValidationErrors(p=>{const n={...p};delete n[studentId];return n});setMarks(p=>({...p,[studentId]:null}));return}
-    const value=Number(raw);
-    if(!Number.isFinite(value)||value<0||value>scoring.max_points||Math.abs(value*100-Math.round(value*100))>0.000001){
-      setValidationErrors(p=>({...p,[studentId]:`Enter a score from 0 to ${scoring.max_points}, with at most two decimal places.`}));
-      return;
-    }
-    setValidationErrors(p=>{const n={...p};delete n[studentId];return n});
-    setMarks(p=>({...p,[studentId]:{points:value}}));
-  };
+  const setStatus=(studentId:string,value:Status|null)=>setMarks(p=>({...p,[studentId]:value}));
   async function save(){
-    if(Object.keys(validationErrors).length>0)return;
     const cleared=Object.keys(initial).filter(id=>!marks[id]);          // a mark returned to "not marked"
     const body={section_id:sectionId,session_date:date,period,marks:{...Object.fromEntries(Object.entries(marks).filter(([,v])=>v!==null)),...Object.fromEntries(cleared.map(id=>[id,null]))}};
     try{await send('PUT',`/teach/offerings/${offering.id}/attendance`,body);setMessage('Attendance saved.');toast('Attendance saved.');queryClient.invalidateQueries({queryKey:['attendance',offering.id]});queryClient.invalidateQueries({queryKey:['gradebook',offering.id]})}
@@ -458,26 +373,19 @@ function Register({offering,sectionId,date,period,roster,initial,closed,setMessa
     catch(e){setMessage(errorText(e))}
   }
   const dirty=JSON.stringify(Object.entries(marks).filter(([,v])=>v!==null).sort())!==JSON.stringify(Object.entries(initial).filter(([,v])=>v!==null).sort());
-  const hasInvalidPoints=Object.keys(validationErrors).length>0;
-  useEffect(()=>{unsaved.current=dirty||hasInvalidPoints;return()=>{unsaved.current=false}},[dirty,hasInvalidPoints,unsaved]);
+  useEffect(()=>{unsaved.current=dirty;return()=>{unsaved.current=false}},[dirty,unsaved]);
   if(roster.length===0)return <section className="panel"><p className="muted">No students are enrolled through this section.</p></section>;
   const count=(v:Status)=>roster.filter(r=>marks[r.student_id]===v).length;
-  const numericCount=roster.filter(r=>{const mark=marks[r.student_id];return typeof mark==='object'&&mark!==null}).length;
   const unmarked=roster.filter(r=>marks[r.student_id]===undefined||marks[r.student_id]===null).length;
   return <section className="panel"><div className="page-heading"><h3>Mark attendance for {date}</h3>
-    <div className="actions"><button disabled={closed} onClick={()=>{setValidationErrors({});setNumericDrafts({});setMarks(Object.fromEntries(roster.map(r=>[r.student_id,'present'])));}}>Mark everyone present</button>
+    <div className="actions"><button disabled={closed} onClick={()=>setMarks(Object.fromEntries(roster.map(r=>[r.student_id,'present'])))}>Mark everyone present</button>
       <button disabled={closed} onClick={()=>{const added=roster.filter(r=>!marks[r.student_id]);for(const r of added)setStatus(r.student_id,'present')}}>Mark unmarked as present</button></div></div>
-    <p role="status" className="muted">{count('present')} present · {count('late')} late · {count('absent')} absent · {count('excused')} excused · {numericCount} numeric · <strong>{unmarked} not marked</strong>{dirty?' · unsaved changes':hasInvalidPoints?' · fix invalid points before leaving':''}</p>
-    {Object.entries(validationErrors).map(([id,error])=><p key={id} role="alert" className="error">{roster.find(r=>r.student_id===id)?.display_name}: {error}</p>)}
-    <div className="table-wrap" role="region" aria-label="Attendance register" tabIndex={0}><table><thead><tr><th>Student</th><th>{pointsMode?'Points':'Status'}</th></tr></thead>
+    <p role="status" className="muted">{count('present')} present · {count('late')} late · {count('absent')} absent · {count('excused')} excused · <strong>{unmarked} not marked</strong>{dirty?' · unsaved changes':''}</p>
+    <div className="table-wrap" role="region" aria-label="Attendance register" tabIndex={0}><table><thead><tr><th>Student</th><th>Status</th></tr></thead>
       <tbody>{roster.map(r=>{const mark=marks[r.student_id];return <tr key={r.student_id}><td>{r.display_name}<br/><span className="muted">{r.student_number}</span></td>
-        <td>{pointsMode?<label className="attendance-register-points">{r.display_name} points
-          <input type="number" min="0" max={scoring.max_points} step="0.01" aria-label={`${r.display_name} attendance points`} aria-invalid={!!validationErrors[r.student_id]}
-            value={numericDrafts[r.student_id]??(pointsFor(mark??null,scoring)??'')} disabled={closed}
-            onChange={e=>setNumeric(r.student_id,e.target.value)}/></label>
-          :<fieldset className="seg" disabled={closed}><legend className="sr-only">Attendance for {r.display_name}</legend>
+        <td><fieldset className="seg" disabled={closed}><legend className="sr-only">Attendance for {r.display_name}</legend>
             {STATUS.map(([v,l])=><label key={v} className={mark===v?`on ${v}`:''}><input type="radio" name={`m-${r.student_id}`} checked={mark===v} onChange={()=>setStatus(r.student_id,v)}/>{l}</label>)}
             {typeof mark==='object'&&mark!==null&&<span className="muted">{mark.points} points</span>}
-            {mark!==undefined&&mark!==null&&!closed&&<button type="button" className="linklike" onClick={()=>setStatus(r.student_id,null)} aria-label={`Unmark attendance for ${r.display_name}`}>Unmark</button>}</fieldset>}</td></tr>})}</tbody></table></div>
-    <div className="actions sticky-bar"><button className="primary" disabled={closed||!dirty||Object.keys(validationErrors).length>0} onClick={save}>Save attendance</button>{sessionId&&<button disabled={closed} onClick={remove}>Remove this day’s record</button>}{dirty&&<span className="muted">You have unsaved changes.</span>}</div></section>;
+            {mark!==undefined&&mark!==null&&!closed&&<button type="button" className="linklike" onClick={()=>setStatus(r.student_id,null)} aria-label={`Unmark attendance for ${r.display_name}`}>Unmark</button>}</fieldset></td></tr>})}</tbody></table></div>
+    <div className="actions sticky-bar"><button className="primary" disabled={closed||!dirty} onClick={save}>Save attendance</button>{sessionId&&<button disabled={closed} onClick={remove}>Remove this day’s record</button>}{dirty&&<span className="muted">You have unsaved changes.</span>}</div></section>;
 }

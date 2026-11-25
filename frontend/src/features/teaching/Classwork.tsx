@@ -25,9 +25,12 @@ interface MaterialContext{anchorNodeId:string|null;label:string}
 interface Row{canUnpublish:boolean;pending:boolean;key:string;type:'item'|'assessment';kind:string;sectionIds:string[];id:string;title:string;label:string;anchor:string|null;archived:boolean;status:string;published:boolean;to:string;meta:string;sortAt:string}
 type MaterialFilter='all'|'lesson'|'quiz'|'activity'|'exam';
 
-const CREATE_GROUPS:{label:string;options:[string,CreateTarget][]}[]=[
+const CREATE_GROUPS:{label:string;options:[string,CreateTarget,string?][]}[]=[
   {label:'Lessons',options:[['Lesson',{type:'item',kind:'lesson'}],['Module',{type:'item',kind:'file'}],['Link',{type:'item',kind:'reference'}]]},
-  {label:'Quizzes',options:[['Online quiz',{type:'assessment',kind:'online_quiz'}],['Quiz drafted by AI',{type:'ai'}]]},
+  {label:'Quizzes',options:[
+    ['Online quiz',{type:'assessment',kind:'online_quiz'},'Create a quiz manually by writing your own questions and answers. Questions are not AI-generated.'],
+    ['Quiz drafted by AI',{type:'ai'},'Generate questions from published materials. You can also add or edit questions manually before publishing.'],
+  ]},
   {label:'Activities',options:[['Activity',{type:'assessment',kind:'activity'}]]},
   {label:'Announcements',options:[['New announcement',{type:'announcement'}]]},
 ];
@@ -118,7 +121,7 @@ export function FacultyClasswork(){
     <div className="menu-list chapter-create-menu" role="group" aria-label={`Add material to ${context.label}`}>
       <p className="eyebrow material-context-label">{context.label}</p>
       {CREATE_GROUPS.map(group=><div className="menu-category" key={group.label}><strong>{group.label}</strong>
-        {group.options.map(([label,target])=><button key={label} type="button" onClick={event=>choose(target,context,event)}>{label}</button>)}
+        {group.options.map(([label,target,tooltip])=><button key={label} type="button" title={tooltip} onClick={event=>choose(target,context,event)}>{label}</button>)}
       </div>)}
     </div>
   </details>;
@@ -153,13 +156,14 @@ export function FacultyClasswork(){
     const materialRows=n.rows.map(r=><li className={`manager-material-row${setupRequired?'':' manager-material-row-clickable'}`} key={r.key} data-sort-date={Date.parse(r.sortAt)||0}>
       {!setupRequired&&<Link className="manager-material-row-link" to={r.to} aria-label={`Open ${r.title}`}/>}
       <span className={`material-kind-icon kind-${r.kind}`} aria-hidden="true">{materialIcon(r.kind)}</span>
-      <span className="grow"><strong>{r.title}</strong><span className="muted">{r.label}{r.meta?` · ${r.meta}`:''}{r.sortAt&&<> · <time dateTime={r.sortAt}>{new Date(r.sortAt).toLocaleDateString()}</time></>}</span>
-        <span className={r.published&&!r.pending&&!r.archived?'badge done':'badge'}>{r.status}</span></span>
-      <span className="manager-material-actions">
+      <span className="grow"><strong>{r.title}</strong><span className="muted">{r.label}{r.meta?` · ${r.meta}`:''}</span>
+        {r.sortAt&&<time className="muted" dateTime={r.sortAt}>{new Date(r.sortAt).toLocaleDateString()}</time>}
+        <span className={r.published&&!r.pending&&!r.archived?'badge done':'badge'}>{r.status}</span>
+        <span className="manager-material-actions">
         {r.canUnpublish&&!closed&&!setupRequired&&<button type="button" className="linklike" onClick={()=>unpublish(r)}>Unpublish</button>}
         {reorder===n.id&&r.type==='item'&&<span className="actions"><button type="button" aria-label={`Move ${r.title} up`} disabled={closed||setupRequired||items.indexOf(r)===0} onClick={()=>move(n,items,r,-1)}>↑</button>
           <button type="button" aria-label={`Move ${r.title} down`} disabled={closed||setupRequired||items.indexOf(r)===items.length-1} onClick={()=>move(n,items,r,1)}>↓</button></span>}
-      </span></li>);
+        </span></span></li>);
     return <section key={n.id} className={`tree d${Math.min(depth,2)}`} aria-labelledby={`c-${n.id}`}>
       {bare?<Heading id={`c-${n.id}`} className="sr-only">{n.title}</Heading>:<header><Heading id={`c-${n.id}`}>{n.title}</Heading><span className="count">{total(n)}</span>
         {items.length>1&&!closed&&!setupRequired&&!stranded&&<button type="button" className="linklike" aria-pressed={reorder===n.id} onClick={()=>setReorder(reorder===n.id?null:n.id)}>{reorder===n.id?'Done reordering':'Reorder'}</button>}</header>}
@@ -197,10 +201,10 @@ export function FacultyClasswork(){
             <div className="section-head"><h3>Learning materials</h3><span className="muted">{selectedTree?total(selectedTree):0} items</span></div>
             <div className="chapter-material-tools">
               <div className="chapter-material-filters" role="group" aria-label="Filter chapter materials">
-                <label>Material category<select value={materialFilter} onChange={event=>setMaterialFilter(event.target.value as MaterialFilter)}>
-                  <option value="all">All materials</option><option value="lesson">Lessons</option><option value="quiz">Quizzes</option>
-                  <option value="activity">Activities</option><option value="exam">Exams</option>
-                </select></label>
+                <div className="tabs chapter-material-category-tabs" role="group" aria-label="Material category">
+                  <button type="button" className={materialFilter==='all'?'active':''} aria-pressed={materialFilter==='all'} onClick={()=>setMaterialFilter('all')}>All materials</button>
+                  {FACULTY_CATS.map(([category,label])=><button key={category} type="button" className={materialFilter===category?'active':''} aria-pressed={materialFilter===category} onClick={()=>setMaterialFilter(category)}>{label}</button>)}
+                </div>
                 {!closed&&!setupRequired&&createMenu(contextFor(selectedChapter,selectedChapter?chapters.indexOf(selectedChapter):-1))}
               </div>
               <label className="inline chapter-archived"><input type="checkbox" checked={archived} onChange={event=>setArchived(event.target.checked)}/> Show archived</label>
@@ -387,13 +391,18 @@ function Branch({node,depth,here,bare=false}:{node:TNode;depth:number;here:{from
   const Heading=(['h3','h4','h5'] as const)[Math.min(depth,2)];
   return <section className={`tree d${Math.min(depth,2)}`} aria-labelledby={`t-${node.id}`}>
     {bare?<h3 id={`t-${node.id}`} className="sr-only">{node.title}</h3>:<header><Heading id={`t-${node.id}`}>{node.title}</Heading><span className="count">{total(node)}</span></header>}
-    {node.rows.length>0&&<ul className="seq compact manager-material-list">{[...node.rows].sort((a,b)=>rank(a)-rank(b)).map(r=><li key={r.key} className={`manager-material-row manager-material-row-clickable${r.chips.some(c=>c.cls==='next')?' next':''}`}>
-      <Link state={here} className="manager-material-row-link" to={r.to} aria-label={`Open ${r.title}`}/>
-      <span className={`material-kind-icon kind-${r.icon}`} aria-hidden="true">{materialIcon(r.icon)}</span>
-      <span className="grow"><strong>{r.title}</strong>{(r.detail||r.result)&&<span className="muted">{r.detail}{r.detail&&r.result?' · ':''}{r.result&&<strong>{r.result}</strong>}</span>}</span>
-      <span className="manager-material-actions">{r.chips.map(c=><span key={c.text} className={`badge ${c.cls??''}`}>{c.text}</span>)}
-        {r.kind==='item'&&r.todo&&<Link state={here} className="start" to={r.to} title="Open this" aria-hidden="true" tabIndex={-1}>▶</Link>}</span>
-    </li>)}</ul>}
+    {node.rows.length>0&&<ul className="seq compact manager-material-list">{[...node.rows].sort((a,b)=>rank(a)-rank(b)).map(r=>{
+      const next=r.chips.find(c=>c.cls==='next');
+      const statuses=r.chips.filter(c=>c.cls!=='next');
+      return <li key={r.key} className={`manager-material-row manager-material-row-clickable${next?' next':''}`}>
+        <Link state={here} className="student-classwork-row-link" to={r.to} aria-label={`Open ${r.title}`}>
+          <span className={`material-kind-icon kind-${r.icon}`} aria-hidden="true">{materialIcon(r.icon)}</span>
+          <span className="grow"><strong>{r.title}</strong>{r.detail&&<span className="muted">{r.detail}</span>}{r.result&&<strong className="muted">{r.result}</strong>}
+            {statuses.length>0&&<span className="manager-material-actions">{statuses.map(c=><span key={c.text} className={`badge ${c.cls??''}`}>{c.text}</span>)}</span>}</span>
+          {next&&<span className="badge next">{next.text}</span>}
+        </Link>
+      </li>;
+    })}</ul>}
     {node.kids.map(k=><Branch key={k.id} node={k} depth={depth+1} here={here}/>)}
   </section>;
 }
@@ -410,9 +419,13 @@ export function StudentClasswork(){
   const allTypes=typeParam==='all';
   const cat=catOf(typeParam,FACULTY_CATS);const here=useHere();
   const [filters,setFilters]=useState<Record<string,Filter>>({});const filter=filters[allTypes?'all':cat]??'all';
-  const [search,setSearch]=useState('');
   const [activeChapter,setActiveChapter]=useState('');
   const setFilter=(f:Filter)=>setFilters({...filters,[allTypes?'all':cat]:f});
+  const setCategory=(category:'all'|Cat)=>{
+    const next=new URLSearchParams(searchParams);
+    next.set('type',category);
+    setSearchParams(next);
+  };
   const error=items.error??work.error??syllabus.error;if(error)return <p role="alert">{error.message}</p>;
   if(!items.data||!work.data||!syllabus.data)return <p>Loading…</p>;
   const nearest=work.data.find(w=>w.bucket==='todo');                // sorted by deadline, so this is the nearest
@@ -431,7 +444,7 @@ export function StudentClasswork(){
   const want=(r:SRow)=>(allTypes||r.cat===cat)&&(filter==='all'||(filter==='todo'?r.todo:r.done));
   const outline=syllabus.data?.published?.outline;
   const shownRows=rows.filter(want);
-  const visibleRows=shownRows.filter(row=>row.title.toLowerCase().includes(search.trim().toLowerCase()));
+  const visibleRows=shownRows;
   const tree=buildTree(outline,visibleRows);
   const chapters=outline?.chapters??[];
   const selectedChapter=chapters.find(chapter=>chapter.id===activeChapter)??chapters[0];
@@ -442,8 +455,7 @@ export function StudentClasswork(){
   const todoCount=rows.filter(row=>row.todo).length;
   return <>
     <section className="content-manager-header">
-      <div><p className="eyebrow">SUBJECT CLASSWORK</p><h2>Classwork</h2>
-        <p className="muted">Browse this subject’s published lessons, quizzes, activities, and exams by chapter.</p></div>
+      <div><p className="eyebrow">SUBJECT CLASSWORK</p><h2>Classwork</h2></div>
     </section>
     <section className="content-manager-overview" aria-label="Classwork overview">
       <article><span aria-hidden="true">▤</span><div><strong>{chapters.length}</strong><small>Chapters</small></div></article>
@@ -470,16 +482,15 @@ export function StudentClasswork(){
         <div className="chapter-materials">
           <div className="section-head"><h3>Learning materials</h3><span className="muted">{selectedTree?`${total(selectedTree)} items`:'0 items'}</span></div>
           <div className="chapter-material-tools">
-            <label className="chapter-material-search">Search chapter materials<input type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="Search chapter materials…"/></label>
             <div className="chapter-material-filters" role="group" aria-label="Filter chapter materials">
-              <label>Material category<select value={allTypes?'all':cat} onChange={event=>{const next=new URLSearchParams(searchParams);next.set('type',event.target.value);setSearchParams(next)}}>
-                <option value="all">All materials</option>
-                {FACULTY_CATS.map(([category,label])=><option key={category} value={category}>{label}</option>)}
-              </select></label>
+              <div className="tabs chapter-material-category-tabs" role="group" aria-label="Material category">
+                <button type="button" className={allTypes?'active':''} aria-pressed={allTypes} onClick={()=>setCategory('all')}>All materials</button>
+                {FACULTY_CATS.map(([category,label])=><button key={category} type="button" className={!allTypes&&cat===category?'active':''} aria-pressed={!allTypes&&cat===category} onClick={()=>setCategory(category)}>{label}</button>)}
+              </div>
             </div>
           </div>
           {selectedTree?<Branch node={selectedTree} depth={0} here={here} bare/>:
-            <p className="muted">{search?'No materials match your search.':filter==='todo'?'You are up to date.':filter==='done'?'Completed lessons and finished work appear here.':'No published learning materials or activities in this chapter yet.'}</p>}
+            <p className="muted">{filter==='todo'?'You are up to date.':filter==='done'?'Completed lessons and finished work appear here.':'No published learning materials or activities in this chapter yet.'}</p>}
         </div>
       </section>
     </div>

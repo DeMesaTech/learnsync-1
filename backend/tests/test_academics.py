@@ -145,6 +145,48 @@ def test_school_year_creation_allows_days_between_semesters(actors):
     assert terms[1]["start_date"] == "2033-01-10"
 
 
+def test_scheduled_semesters_auto_activate_and_close_on_calendar_dates(db, actors):
+    admin = Api("admin@example.com")
+    year = admin.post("/api/school-years", school_year_body()).json()
+    first, second = year["terms"]
+    assert admin.post(f"/api/terms/{first['id']}/schedule").status_code == 200
+    assert admin.post(f"/api/terms/{second['id']}/schedule").status_code == 200
+
+    assert commands.reconcile_term_statuses(db, date(2032, 8, 1)) is True
+    db.expire_all()
+    first_term = db.get(AcademicTerm, uuid.UUID(first["id"]))
+    assert first_term.status == "active"
+    assert commands.reconcile_term_statuses(db, date(2032, 12, 15)) is False
+    assert commands.reconcile_term_statuses(db, date(2032, 12, 16)) is True
+    db.expire_all()
+
+    first_term = db.get(AcademicTerm, uuid.UUID(first["id"]))
+    second_term = db.get(AcademicTerm, uuid.UUID(second["id"]))
+    assert first_term.status == "inactive" and first_term.closed_at is not None
+    assert first_term.closed_by is None
+    assert second_term.status == "active"
+    events = db.scalars(select(AuditEvent).where(
+        AuditEvent.action.in_(("term.auto_activated", "term.auto_closed")))).all()
+    assert sum(event.action == "term.auto_activated" for event in events) == 2
+    assert sum(event.action == "term.auto_closed" for event in events) == 1
+    assert {event.actor_label for event in events} == {"system"}
+
+
+def test_missed_scheduled_semester_is_closed_without_late_activation(db, actors):
+    admin = Api("admin@example.com")
+    term = admin.post("/api/school-years", school_year_body()).json()["terms"][0]
+    assert admin.post(f"/api/terms/{term['id']}/schedule").status_code == 200
+
+    assert commands.reconcile_term_statuses(db, date(2032, 12, 16)) is True
+    db.expire_all()
+    skipped = db.get(AcademicTerm, uuid.UUID(term["id"]))
+    assert skipped.status == "inactive" and skipped.closed_at is not None
+    event = db.scalar(select(AuditEvent).where(
+        AuditEvent.action == "term.auto_closed", AuditEvent.entity_id == term["id"]))
+    assert event.actor_label == "system"
+    assert event.details["never_activated"] is True
+
+
 def test_school_year_creation_rejects_duplicate_label(actors):
     admin = Api("admin@example.com")
     assert admin.post("/api/school-years", school_year_body()).status_code == 201
@@ -819,7 +861,7 @@ def test_semester_activation_requires_closure_and_only_one_active(actors):
     assert {"term.scheduled", "term.activated", "term.closed"}.issubset(actions)
 
 
-def test_scheduled_semester_is_read_only_for_normal_academic_operations(actors):
+def test_scheduled_terms_allow_calendar_edits_but_active_edits_preserve_today(actors, monkeypatch):
     admin = Api("admin@example.com")
     term = admin.post("/api/school-years", school_year_body()).json()["terms"][0]
     assert admin.post(f"/api/terms/{term['id']}/schedule").status_code == 200
@@ -828,9 +870,22 @@ def test_scheduled_semester_is_read_only_for_normal_academic_operations(actors):
         "name": "1A", "year_level": 1})
     assert section.status_code == 409
     assert section.json()["error"]["code"] == "term_not_active"
-    update = admin.patch(f"/api/terms/{term['id']}", {"name": "Changed"})
-    assert update.status_code == 409
-    assert update.json()["error"]["code"] == "term_read_only"
+    update = admin.patch(f"/api/terms/{term['id']}",
+                         {"name": "Changed", "end_date": "2032-12-14"})
+    assert update.status_code == 200
+    assert update.json()["name"] == "Changed"
+    assert update.json()["end_date"] == "2032-12-14"
+    assert admin.post(f"/api/terms/{term['id']}/activate").status_code == 200
+    monkeypatch.setattr(commands.calendar, "school_today", lambda: date(2032, 12, 10))
+    active_update = admin.patch(f"/api/terms/{term['id']}",
+                                {"name": "Changed again", "end_date": "2032-12-13"})
+    assert active_update.status_code == 200
+    assert active_update.json()["status"] == "active"
+    assert active_update.json()["end_date"] == "2032-12-13"
+
+    outside_today = admin.patch(f"/api/terms/{term['id']}", {"start_date": "2032-12-11"})
+    assert outside_today.status_code == 422
+    assert outside_today.json()["error"]["code"] == "active_term_dates"
 
 
 def test_database_prevents_overlapping_years_and_multiple_active_terms(db, actors):

@@ -15,9 +15,9 @@ from .models import Account, AccountToken, AuditEvent, AuthSession, now
 from .names import format_student_name, split_faculty_name, split_student_name
 
 
-def audit(db, actor, action, entity_type, entity_id, details=None):
+def audit(db, actor, action, entity_type, entity_id, details=None, actor_label=None):
     db.add(AuditEvent(actor_id=actor.id if actor else None,
-                      actor_label=actor.display_name if actor else "setup",
+                      actor_label=actor_label or (actor.display_name if actor else "setup"),
                       ownership_generation=actor.ownership_generation if actor else None,
                       action=action, entity_type=entity_type, entity_id=str(entity_id),
                       details=details or {}))

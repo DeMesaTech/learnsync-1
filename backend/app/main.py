@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import uuid
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -7,7 +9,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
+from .config import settings
 from .db import SessionLocal
+from .features.academics import commands as academic_commands
 from .features.academics.router import router as academics_router
 from .features.accounts.router import router as accounts_router
 from .features.assessments.router import router as assessments_router
@@ -18,7 +22,36 @@ from .features.study.router import router as study_router
 from .features.support.router import router as support_router
 from .features.teaching.router import router as teaching_router
 
-app = FastAPI(title="LearnSync v2", version="0.1.0")
+
+def reconcile_calendar():
+    with SessionLocal() as db:
+        academic_commands.reconcile_term_statuses(db)
+
+
+async def calendar_automation():
+    while True:
+        try:
+            await asyncio.to_thread(reconcile_calendar)
+        except Exception:
+            logger.exception("Academic calendar automation failed")
+        await asyncio.sleep(30)
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    task = None
+    if not settings().test_database_url:
+        task = asyncio.create_task(calendar_automation())
+    try:
+        yield
+    finally:
+        if task is not None:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+
+app = FastAPI(title="LearnSync v2", version="0.1.0", lifespan=lifespan)
 app.include_router(accounts_router)
 app.include_router(academics_router)
 app.include_router(teaching_router)

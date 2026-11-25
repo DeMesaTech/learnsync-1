@@ -55,7 +55,7 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
   const [tab,setTab]=useState<'sections'|'offerings'>(initialTab);
   const activeTab=standalone?initialTab:tab;
   const [teacherFilter,setTeacherFilter]=useState('');
-  const [sectionError,setSectionError]=useState('');
+  const [sectionDeleteError,setSectionDeleteError]=useState('');
   const [deletingSection,setDeletingSection]=useState<string|null>(null);
   const [activeYear,setActiveYear]=useState<number|null>(null);
   const [openYearMenu,setOpenYearMenu]=useState<number|null>(null);
@@ -136,9 +136,9 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
   const refresh=()=>{queryClient.invalidateQueries({queryKey:['sections',termId]});queryClient.invalidateQueries({queryKey:['offerings',termId]});queryClient.invalidateQueries({queryKey:['section-roster']})};
   async function removeSection(section:Section){
     if(!await ask({title:`Delete ${section.name}?`,message:'Only an unused section can be deleted. Sections with students, assignments, or academic records are protected.',yes:'Delete section',danger:true}))return;
-    setDeletingSection(section.id);setSectionError('');
+    setDeletingSection(section.id);setSectionDeleteError('');
     try{await send('DELETE',`/sections/${section.id}`);refresh();toast(`${section.name} deleted.`)}
-    catch(err){setSectionError(errorText(err))}
+    catch(err){setSectionDeleteError(errorText(err))}
     finally{setDeletingSection(null)}
   }
   async function saveStudent(student:SectionRosterRow){
@@ -155,10 +155,19 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
     finally{setSavingStudentId(null)}
   }
   async function sendStudentLink(student:SectionRosterRow){
+    const invitation=student.account_status==='invited';
+    const linkType=invitation?'invitation':'password-reset link';
+    if(!await ask({
+      title:`Send ${linkType} to ${student.display_name}?`,
+      message:invitation
+        ?`An invitation link will be sent to ${student.email}.`
+        :`A password-reset link will be sent to ${student.email}.`,
+      yes:invitation?'Send invitation':'Send reset link',
+    }))return;
     setSendingStudentId(student.student_id);setEmailError('');
     try{
       await send('POST',`/accounts/${student.student_id}/send-link`);
-      toast(student.account_status==='invited'
+      toast(invitation
         ?`Invitation sent to ${student.email}.`
         :`Password-reset link sent to ${student.email}.`);
     }catch(err){setEmailError(errorText(err))}
@@ -206,6 +215,11 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
   }
   async function sendSectionInvitations(){
     if(!selectedSection)return;
+    if(!await ask({
+      title:`Send invitations to students in ${selectedSection.name}?`,
+      message:`Invitation links will be sent to ${invitationCount} student${invitationCount===1?'':'s'} awaiting invitation.`,
+      yes:'Send invitations',
+    }))return;
     setSendingSectionInvitations(true);setEmailError('');
     try{
       const result=await post<BulkInvitationResult>(`/sections/${selectedSection.id}/send-invitations`,{});
@@ -379,7 +393,6 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
         {!closed&&colleges.data?.every(college=>college.status!=='active')&&<p className="muted">Add an active college/program before creating sections.</p>}
         {!subjects.isError&&subjects.isSuccess&&programYears.length===0&&<p className="muted">No year levels are assigned in the prospectus yet. <Link to="/admin/subjects">Add or place subjects in the prospectus</Link> before creating sections.</p>}
         {programYears.length===0&&<button type="button" disabled={closed} onClick={()=>setStudentImportOpen(true)}>Import students</button>}
-        {sectionError&&<p role="alert">{sectionError}</p>}
         <div className="student-course-filter">
           <label>Course<select aria-label="Filter by course" value={courseFilter} disabled={bulkActionBusy} onChange={event=>{setCourseFilter(event.target.value);setSelectedSectionId('');setSelectedStudents([]);setRosterPage(1);setEmailError('')}}>
             <option value="">All courses</option>
@@ -666,6 +679,10 @@ export function TermWorkspace({initialTab='sections',standalone=false}:{initialT
       queryClient.invalidateQueries({queryKey:['faculty-assignment-options']});
       toast('Teacher invitation sent.');
     }}/>}
+    {sectionDeleteError&&<Dialog title="Could not delete section" onClose={()=>setSectionDeleteError('')} confirmOnClose={false}>
+      <p role="alert">{sectionDeleteError}</p>
+      <div className="actions"><button type="button" className="primary" onClick={()=>setSectionDeleteError('')}>Close</button></div>
+    </Dialog>}
   </>;
 }
 
@@ -744,7 +761,7 @@ function TeacherInviteDialog({colleges,onClose,onDone}:{colleges:College[];onClo
       {!colleges.length&&<p className="warn">Add an active college / program before inviting a teacher.</p>}
       {error&&<p role="alert">{error}</p>}
       <div className="actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button>
-        <button className="primary" disabled={busy||!collegeId}>{busy?'Sending…':'Send invitation'}</button></div>
+        <button className="primary" disabled={busy||!collegeId}>{busy?'Sending…':'Add teacher'}</button></div>
     </form>
   </Dialog>;
 }

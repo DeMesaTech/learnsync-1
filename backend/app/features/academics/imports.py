@@ -1,10 +1,13 @@
-"""Reviewed imports: student lists and prospectus drafts. Nothing is created until an admin
-commits, and a commit with any invalid row creates nothing (no silent partial import)."""
+"""Reviewed student/legacy prospectus imports and direct atomic prospectus uploads."""
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from zipfile import BadZipFile
 
+from docx.opc.exceptions import PackageNotFoundError
 from fastapi import BackgroundTasks, HTTPException
+from openpyxl.utils.exceptions import InvalidFileException
 from pydantic import EmailStr, TypeAdapter, ValidationError
+from pypdf.errors import PdfReadError
 from sqlalchemy import select
 
 from app.errors import fail
@@ -20,7 +23,15 @@ from app.features.accounts.names import (
 from app.features.files.storage import path_of, save_upload
 
 from . import commands, documents
-from .models import College, ProspectusImport, Section, SectionMember, StudentImport, Subject
+from .models import (
+    College,
+    ProspectusImport,
+    Section,
+    SectionMember,
+    StudentImport,
+    Subject,
+)
+from .schemas import CollegeInput
 
 EMAIL = TypeAdapter(EmailStr)
 STUDENT_TYPES = {".csv", ".xlsx"}
@@ -301,3 +312,78 @@ def commit_prospectus(db, actor, import_id, expected_revision, college_id):
            "college_id": str(college.id)})
     db.commit()
     return {"created": created, "skipped_existing": len(rows) - created}
+
+
+def upload_prospectus(db, actor, upload, college_id, college_data: CollegeInput | None):
+    if (college_id is None) == (college_data is None):
+        fail(422, "college_selection_required",
+             "Choose an existing college or provide details for a new college.")
+
+    college = None
+    if college_id is not None:
+        college = db.scalar(select(College).where(College.id == college_id).with_for_update())
+        if not college:
+            fail(404, "college_not_found", "College not found.")
+        if college.status != "active":
+            fail(409, "college_inactive", "Choose an active college for this prospectus.")
+
+    stored_file = None
+    try:
+        stored_file = save_upload(db, upload, "prospectus", actor, PROSPECTUS_TYPES)
+        ext = Path(stored_file.original_name).suffix.lower()
+        try:
+            lines = documents.read_lines(path_of(stored_file), ext)
+        except (OSError, UnicodeError, ValueError, EOFError, BadZipFile,
+                InvalidFileException, PackageNotFoundError, PdfReadError):
+            fail(422, "prospectus_unreadable",
+                 "The prospectus could not be read. Upload a valid text-based document.")
+        draft, warnings = documents.parse_prospectus(lines)
+        if not draft:
+            fail(422, "prospectus_no_subjects",
+                 "No subjects were extracted. Check the file format and subject table.")
+        if any(warning.startswith("Could not read:") for warning in warnings):
+            fail(422, "prospectus_rows_unreadable",
+                 "Some subject rows could not be read. Nothing was imported.")
+        warnings = [
+            "Some subjects have no year or semester placement. They were imported as unplaced; "
+            "edit their placement in the Prospectus catalog."
+            if warning.startswith("Some subjects have no year level/semester") else warning
+            for warning in warnings
+        ]
+
+        if college_data is not None:
+            college = commands.prepare_college(db, actor, college_data)
+        rows = validate_draft(db, draft, college.id)
+        invalid_rows = [row for row in rows if row["errors"]]
+        if invalid_rows:
+            fail(422, "prospectus_rows_invalid",
+                 "Some extracted subject rows are invalid. Nothing was imported.",
+                 {"subjects": ", ".join(row["code"] or f"row {row['index']}"
+                                        for row in invalid_rows)})
+
+        imp = ProspectusImport(file_id=stored_file.id, draft=draft, warnings=warnings,
+                               status="committed", created_by=actor.id, committed_at=now())
+        db.add(imp)
+        db.flush()
+        created = 0
+        for row in rows:
+            if row["exists"]:
+                continue
+            db.add(Subject(code=row["code"], title=row["title"], units=Decimal(row["units"]),
+                           year_level=row["year_level"], semester=row["semester"],
+                           prerequisite=row["prerequisite"], college_id=college.id))
+            created += 1
+        audit(db, actor, "prospectus.uploaded", "prospectus_import", imp.id,
+              {"rows": len(draft), "college_id": str(college.id)})
+        audit(db, actor, "prospectus.committed", "prospectus_import", imp.id,
+              {"created": created, "skipped_existing": len(rows) - created,
+               "college_id": str(college.id)})
+        db.commit()
+        return {"college": {"id": college.id, "code": college.code, "name": college.name},
+                "created": created, "skipped_existing": len(rows) - created,
+                "warnings": warnings}
+    except Exception:
+        db.rollback()
+        if stored_file is not None:
+            path_of(stored_file).unlink(missing_ok=True)
+        raise

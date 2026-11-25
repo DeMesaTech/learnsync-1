@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 
 from app.config import settings
 from app.features.academics import documents, imports
-from app.features.academics.models import Subject
+from app.features.academics.models import College, ProspectusImport, Subject
 from app.features.accounts import commands as account_commands
 from app.features.accounts import faculty_imports
 from app.features.accounts.models import Account
@@ -500,6 +500,50 @@ PROSPECTUS = ["BS Entrepreneurship Prospectus", "First Year", "First Semester",
               "ENT 101 Introduction to Entrepreneurship 3 3 0",
               "GE 101 Understanding the Self 3", "Second Semester",
               "ENT 102 Business Opportunity Analysis 3", "something odd ENT 9 broken"]
+
+
+def test_direct_prospectus_upload_updates_existing_college_without_preview(db, stage):
+    admin = stage["admin"]
+    existing_subject = admin.post("/api/subjects", {
+        "code": "GE 101", "title": "Existing", "units": "3",
+        "college_id": stage["college"]["id"]})
+    assert existing_subject.status_code == 201
+
+    response = admin.upload("/api/prospectus-uploads", "prospectus.docx",
+                           docx_bytes(PROSPECTUS),
+                           {"operation": "update", "college_id": stage["college"]["id"]})
+
+    assert response.status_code == 201, response.text
+    assert response.json()["created"] == 2
+    assert response.json()["skipped_existing"] == 1
+    assert response.json()["college"]["id"] == stage["college"]["id"]
+    assert db.scalar(select(func.count()).select_from(Subject)) == 3
+    saved = db.scalar(select(ProspectusImport).where(ProspectusImport.status == "committed"))
+    assert saved is not None and saved.file_id is not None
+
+
+def test_direct_prospectus_upload_creates_college_atomically(db, stage):
+    response = stage["admin"].upload(
+        "/api/prospectus-uploads", "prospectus.docx", docx_bytes(PROSPECTUS),
+        {"operation": "add", "college_code": "NEW", "college_name": "New College"})
+
+    assert response.status_code == 201, response.text
+    assert response.json()["college"]["code"] == "NEW"
+    assert response.json()["created"] == 3
+    college = db.scalar(select(College).where(College.code == "NEW"))
+    subjects = db.scalars(select(Subject).where(Subject.college_id == college.id)).all()
+    assert len(subjects) == 3
+
+
+def test_direct_prospectus_upload_rejects_unreadable_file_without_creating_college(db, stage):
+    response = stage["admin"].upload(
+        "/api/prospectus-uploads", "empty.docx", docx_bytes(["Nothing"]),
+        {"operation": "add", "college_code": "EMPTY", "college_name": "Empty College"})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "prospectus_no_subjects"
+    assert db.scalar(select(College.id).where(College.code == "EMPTY")) is None
+    assert db.scalar(select(func.count()).select_from(Subject)) == 0
 
 
 def test_prospectus_extraction_review_and_commit(db, stage):

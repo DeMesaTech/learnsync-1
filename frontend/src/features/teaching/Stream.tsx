@@ -1,54 +1,19 @@
+import {FacultyAnnouncements} from './Announcements';
 import {Link,useOutletContext} from 'react-router-dom';
 import {useQuery} from '@tanstack/react-query';
-import {useState} from 'react';
 import {api} from '../../app/api';
 import type {OfferingSummary} from '../academics/types';
-import {FacultyAnnouncements} from './Announcements';
-import {itemTitle} from './Content';
-import {assessmentTitle} from '../assessments/Assessments';
-import type {Assessment} from '../assessments/types';
 import type {Progress} from '../study/types';
-import type {Item,LearnItem} from './types';
 
 const uploadedAt=(iso:string)=>new Date(iso).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
-const KIND:Record<string,string>={lesson:'Lesson',file:'File',reference:'Link',online_quiz:'Quiz',offline_quiz:'Paper quiz',activity:'Activity',exam:'Examination',manual:'Teacher-scored item'};
-const ICON:Record<string,string>={lesson:'▱',file:'▣',reference:'↗',online_quiz:'☷',offline_quiz:'▤',activity:'▧',exam:'▤',manual:'✎',announcement:'▤'};
-type MaterialCategory='all'|'lesson'|'quiz'|'activity'|'exam';
-const categoryOf=(kind:string):Exclude<MaterialCategory,'all'>=>kind==='online_quiz'||kind==='offline_quiz'?'quiz':kind==='activity'||kind==='manual'?'activity':kind==='exam'?'exam':'lesson';
+const ANNOUNCEMENT_ICON='▤';
 
-/** Teachers: published materials, assessments, and section announcements in one subject stream. */
+/** Teachers: section announcements. Published learning materials are managed in Classwork. */
 export function FacultyStream(){
-  const {offering}=useOutletContext<{offering:OfferingSummary}>();
-  const items=useQuery({queryKey:['items',offering.id],queryFn:()=>api<Item[]>(`/teach/offerings/${offering.id}/items`)});
-  const assessments=useQuery({queryKey:['assessments',offering.id],queryFn:()=>api<Assessment[]>(`/teach/offerings/${offering.id}/assessments`)});
-  const [category,setCategory]=useState<MaterialCategory>('all');
-  const base=`/faculty/offerings/${offering.id}`;
-  const classwork=[
-    ...(items.data??[]).filter(i=>i.published&&!i.archived).map(i=>({key:'i'+i.id,title:itemTitle(i),kind:KIND[i.kind],icon:i.kind,at:i.published!.published_at!,to:`${base}/content/${i.id}/edit`})),
-    ...(assessments.data??[]).filter(a=>a.published&&!a.archived).map(a=>({key:'a'+a.id,title:assessmentTitle(a),kind:KIND[a.kind],icon:a.kind,at:a.published!.published_at!,to:`${base}/assessments/${a.id}/scores`})),
-  ].filter(r=>r.at).sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)||a.key.localeCompare(b.key));
-  const visibleClasswork=category==='all'?classwork:classwork.filter(item=>categoryOf(item.icon)===category);
-  return <>
-    <section className="panel stream-classwork-panel" aria-labelledby="published-content-heading"><h3 id="published-content-heading">Published materials and assessments</h3>
-      <label className="stream-material-category">Material category<select value={category} onChange={event=>setCategory(event.target.value as MaterialCategory)}>
-        <option value="all">All materials</option><option value="lesson">Lessons</option><option value="quiz">Quizzes</option>
-        <option value="activity">Activities</option><option value="exam">Exams</option>
-      </select></label>
-      {visibleClasswork.length===0&&<p className="muted">{classwork.length===0?'Nothing published yet. Lessons, files, links and assessments you publish appear here.':'No published materials in this category.'}</p>}
-      <FacultyAnnouncements embedded>
-        {visibleClasswork.map(r=><li className="manager-material-row manager-material-row-clickable" key={r.key}>
-          <Link className="manager-material-row-link" to={r.to} aria-label={`Open ${r.title}`}/>
-          <span className={`material-kind-icon kind-${r.icon}`} aria-hidden="true">{ICON[r.icon]??'▣'}</span>
-          <span className="grow"><strong>{r.title}</strong><span className="muted">{r.kind} · <time dateTime={r.at}>{uploadedAt(r.at)}</time></span></span>
-        </li>)}
-      </FacultyAnnouncements>
-    </section>
-  </>;
+  return <div className="faculty-stream-announcements"><FacultyAnnouncements/></div>;
 }
 
 interface Post{id:string;title:string;body:string;published_at:string|null}
-interface Results{results:{assessment_id:string;title:string;released_at:string}[];grades:{period:string;published_at:string}[]}
-interface Entry{key:string;type:string;title:string;at:string;icon:string;to?:string;body?:string}
 type Week={days:{label:string;date:string;count:number;today:boolean;future:boolean}[];lessons_today:number;work_today:number};
 
 function activityWeek(progress:Progress):Week{
@@ -69,36 +34,27 @@ function activityWeek(progress:Progress):Week{
   return {days,lessons_today:0,work_today:counts.get(latest)??0};
 }
 
-/** Students: one feed of announcements, new materials, released results and published grades, newest first. */
+/** Students: published announcements, with weekly activity kept in its own panel. */
 export function StudentStream(){
   const {offering}=useOutletContext<{offering:OfferingSummary}>();
   const base=`/student/offerings/${offering.id}`;
   const posts=useQuery({queryKey:['learn-stream-posts',offering.id],queryFn:()=>api<{items:Post[]}>(`/learn/offerings/${offering.id}/announcements?limit=25&offset=0`)});
-  const items=useQuery({queryKey:['learn-items',offering.id],queryFn:()=>api<LearnItem[]>(`/learn/offerings/${offering.id}/items`)});
-  const results=useQuery({queryKey:['learn-stream-results',offering.id],queryFn:()=>api<Results>(`/learn/offerings/${offering.id}/results`)});
   const progress=useQuery({queryKey:['progress',offering.id],queryFn:()=>api<Progress>(`/learn/offerings/${offering.id}/progress`)});
-  const error=posts.error??items.error??results.error??progress.error;
+  const error=posts.error??progress.error;
   if(error)return <p role="alert">{error.message}</p>;
-  if(!posts.data||!items.data||!results.data||!progress.data)return <p>Loading…</p>;
-  const updates:Entry[]=[
-    ...items.data.map(i=>({key:'i'+i.id,type:i.kind==='lesson'?'New lesson':i.kind==='file'?'New file':'New link',title:i.title,at:i.published_at,icon:i.kind,to:`${base}/lessons/${i.id}`})),
-    ...results.data.results.map(r=>({key:'r'+r.assessment_id,type:'Result released',title:r.title,at:r.released_at,icon:'result',to:`${base}/results`})),
-    ...results.data.grades.map(g=>({key:'g'+g.period,type:'Grade published',title:`${g.period.charAt(0).toUpperCase()+g.period.slice(1)} grade`,at:g.published_at,icon:'manual',to:`${base}/results`})),
-  ].sort((a,b)=>a.at<b.at?1:-1).slice(0,30);
-  const feed:Entry[]=[
-    ...posts.data.items.filter(p=>p.published_at).map(p=>({key:'p'+p.id,type:'Announcement',title:p.title,at:p.published_at!,icon:'announcement',body:p.body})),
-    ...updates,
-  ].sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)||a.key.localeCompare(b.key));
+  if(!posts.data||!progress.data)return <p>Loading…</p>;
+  const announcements=posts.data.items.filter(post=>post.published_at)
+    .sort((a,b)=>Date.parse(b.published_at!)-Date.parse(a.published_at!));
   const week=activityWeek(progress.data);
   return <>
     <section className="panel student-stream-updates" aria-labelledby="stream-updates-heading">
-      <h2 id="stream-updates-heading">Course updates</h2>
-      {feed.length===0?<p className="muted">Announcements, published lessons, results and grades appear here.</p>:
-        <ul className="seq compact manager-material-list">{feed.map(e=><li className={`manager-material-row${e.to?' manager-material-row-clickable':''}`} key={e.key}>
-          {e.to&&<Link className="manager-material-row-link" to={e.to} aria-label={`Open ${e.title}`}/>}
-          <span className={`material-kind-icon kind-${e.icon}`} aria-hidden="true">{ICON[e.icon]??'▣'}</span>
-          <span className="grow"><strong>{e.title}</strong><span className="muted">{e.type} · <time dateTime={e.at}>{uploadedAt(e.at)}</time></span>
-            {e.body&&<span className="pre stream-announcement-body">{e.body}</span>}</span>
+      <h2 id="stream-updates-heading">Announcements</h2>
+      {announcements.length===0?<p className="muted">No announcements have been published yet.</p>:
+        <ul className="seq compact manager-material-list">{announcements.map(post=><li className="manager-material-row" key={post.id}>
+          <span className="material-kind-icon kind-announcement" aria-hidden="true">{ANNOUNCEMENT_ICON}</span>
+          <span className="grow"><strong>{post.title}</strong><span className="muted">Announcement</span>
+            <time className="muted" dateTime={post.published_at!}>{uploadedAt(post.published_at!)}</time>
+            <span className="pre stream-announcement-body">{post.body}</span></span>
         </li>)}</ul>}
     </section>
     <section className="panel" aria-labelledby="learning-activity-heading">

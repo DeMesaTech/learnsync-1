@@ -86,19 +86,7 @@ try{
   s=await sessions();
   check('the unmark button clears the selected attendance in the grid',(await cell(0,0).innerText())==='·'&&s.sessions[0].marks[rid(0)]===undefined);
 
-  // ---- numeric points use the published daily maximum and flag invalid input
-  await page.getByRole('button',{name:'Numeric points',exact:true}).click();
-  const numericCell=page.getByRole('spinbutton',{name:/attendance points/}).first();
-  await numericCell.fill('1.25');await page.getByText('All changes saved.').waitFor();
-  s=await sessions();
-  check('numeric attendance stores points instead of a status',s.sessions[0].marks[rid(0)]?.points===1.25);
-  await numericCell.fill('2.5');
-  await page.getByRole('alert').filter({hasText:'Enter a score from 0 to 2'}).waitFor();
-  check('numeric input above the policy maximum is highlighted and not sent',await numericCell.getAttribute('aria-invalid')==='true'&&(await sessions()).sessions[0].marks[rid(0)]?.points===1.25);
-  await numericCell.fill('1.5');await page.getByText('All changes saved.').waitFor();
-  await numericCell.fill('');await page.getByText('All changes saved.').waitFor();
-  await page.getByRole('button',{name:'Statuses',exact:true}).click();
-  check('a cleared numeric mark returns to not marked',Object.keys((await sessions()).sessions[0].marks).length===0);
+  check('attendance offers status marking only',await page.getByRole('button',{name:'Numeric points',exact:true}).count()===0&&await page.getByRole('spinbutton',{name:/attendance points/}).count()===0);
 
   // ---- keyboard: letters mark and move down, Delete clears
   await cell(1,0).focus();

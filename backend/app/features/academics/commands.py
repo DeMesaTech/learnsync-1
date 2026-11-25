@@ -1,7 +1,7 @@
 import re
 
 from fastapi import HTTPException
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from app.errors import fail
@@ -128,13 +128,20 @@ def copy_term_structure(db, actor, term_id, source_term_id, offerings):
 
 
 def update_term(db, actor, term_id, data):
-    term = get_or_404(db, AcademicTerm, term_id, "Term")
-    if term.status != "draft":
-        fail(409, "term_read_only", "Only draft semester calendar details can be changed.")
+    term = db.scalar(select(AcademicTerm).where(
+        AcademicTerm.id == term_id).with_for_update())
+    if not term:
+        fail(404, "not_found", "Term not found.")
+    if term.status not in {"draft", "scheduled", "active"}:
+        fail(409, "term_read_only",
+             "Only draft, scheduled, or active semester calendar details can be changed.")
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(term, field, value)
     if term.end_date <= term.start_date:
         fail(422, "term_dates", "Semester end date must be after its start date.")
+    if term.status == "active" and not calendar.is_within_schedule(term, calendar.school_today()):
+        fail(422, "active_term_dates",
+             "An active semester's dates must continue to include today's school-local date.")
     year = get_or_404(db, SchoolYear, term.school_year_id, "School year")
     if term.start_date < year.start_date or term.end_date > year.end_date:
         fail(422, "term_outside_school_year", "Semester dates must fall within the school-year dates.")
@@ -158,6 +165,51 @@ def update_term(db, actor, term_id, data):
             fail(409, "academic_term_dates_overlap", "Semester dates overlap another semester.")
         raise
     return term
+
+
+def reconcile_term_statuses(db, current_date=None):
+    today = current_date or calendar.school_today()
+    db.execute(text("SELECT pg_advisory_xact_lock(740292107)"))
+    terms = db.scalars(select(AcademicTerm).order_by(
+        AcademicTerm.start_date, AcademicTerm.sequence).with_for_update()).all()
+    changed = False
+
+    for term in terms:
+        if term.status == "active" and term.end_date < today:
+            term.status, term.closed_at, term.closed_by = "inactive", now(), None
+            audit(db, None, "term.auto_closed", "term", term.id,
+                  {"end_date": term.end_date.isoformat()}, actor_label="system")
+            changed = True
+        elif term.status == "scheduled" and term.end_date < today:
+            term.status, term.closed_at, term.closed_by = "inactive", now(), None
+            audit(db, None, "term.auto_closed", "term", term.id,
+                  {"end_date": term.end_date.isoformat(), "never_activated": True},
+                  actor_label="system")
+            changed = True
+
+    active = next((term for term in terms if term.status == "active"), None)
+    if active is None:
+        for term in terms:
+            if term.status != "scheduled" or not calendar.is_within_schedule(term, today):
+                continue
+            year = db.get(SchoolYear, term.school_year_id)
+            if (not year or term.start_date < year.start_date or term.end_date > year.end_date
+                    or term.end_date <= term.start_date):
+                continue
+            previous = next((candidate for candidate in reversed(terms)
+                             if candidate.id != term.id
+                             and candidate.end_date < term.start_date), None)
+            if previous and previous.status in {"active", "scheduled"}:
+                continue
+            term.status = "active"
+            audit(db, None, "term.auto_activated", "term", term.id,
+                  {"start_date": term.start_date.isoformat()}, actor_label="system")
+            changed = True
+            break
+
+    if changed:
+        db.commit()
+    return changed
 
 
 def schedule_term(db, actor, term_id):
@@ -246,7 +298,7 @@ def reopen_term(db, actor, term_id, reason):
 
 # ---------- college catalog ----------
 
-def create_college(db, actor, data):
+def prepare_college(db, actor, data):
     code = data.code.strip().upper()
     if db.scalar(select(College.id).where(College.code == code)):
         fail(409, "college_exists", "A college with this code already exists.")
@@ -254,6 +306,11 @@ def create_college(db, actor, data):
     db.add(college)
     db.flush()
     audit(db, actor, "college.created", "college", college.id, {"code": code})
+    return college
+
+
+def create_college(db, actor, data):
+    college = prepare_college(db, actor, data)
     db.commit()
     return college
 
