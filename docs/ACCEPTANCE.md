@@ -1,5 +1,10 @@
 # Acceptance status
 
+### 2026-11-26 (Immediate scheduled-semester activation)
+- Clicking a scheduled semester card now activates it immediately through the existing audited server transition; an explicit Activate semester action is also shown, while Edit semester details remains available. Unscheduled drafts retain the edit-card behavior and schedule action; automatic start-date activation remains unchanged.
+- Browser verified the card activation control issued `POST /api/terms/{id}/activate` and showed the success message with the activation response stubbed, so no database state was changed. The API tests passed for immediate scheduled-term activation and single-active/previous-term closure safeguards.
+- Passed the focused academic activation tests (2 passed), frontend build/type-check, ESLint, and `git diff --check`. The build retains the existing Vite large-chunk warning.
+
 ### 2026-11-26 (Student learning sequence route)
 - Fixed both Next-item and earlier-incomplete links on student lesson/file/link detail pages. They now use `/student/offerings/:offeringId/lessons/:itemId`, matching the registered React route instead of the `/classwork/:itemId` not-found route.
 - Browser verified the corrected Next link resolves to `/lessons/106f9955-bcb3-423d-8f95-0b51cd8a50c9`; directly opening that route loaded “lesson 5” without the Page not found view. No completion or academic-record action was performed.

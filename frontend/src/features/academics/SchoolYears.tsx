@@ -21,6 +21,14 @@ export function SchoolYears(){
     catch(e){setMessage(errorText(e))}
   }
 
+  async function activate(term:Term){
+    try{
+      await post(`/terms/${term.id}/activate`,{});
+      setMessage(`${term.name} activated.`);
+      queryClient.invalidateQueries({queryKey:['school-years']});
+    }catch(e){setMessage(errorText(e))}
+  }
+
   async function reopen(term:Term,reason:string){
     try{
       await post(`/terms/${term.id}/reopen`,{reason});
@@ -68,10 +76,11 @@ export function SchoolYears(){
                   </header>
                   <div className="settings-terms">{year.terms.map(term=>{
                     const editable=term.status==='draft'||term.status==='scheduled'||term.status==='active';
+                    const canActivate=term.status==='scheduled';
                     return <article className={`settings-term-card${editable?' editable':''}`} key={term.id}>
                     {editable&&<button type="button" className="settings-term-card-trigger"
-                      aria-label={`Edit ${term.name} information`}
-                      onClick={()=>setEditingTerm(term)}/>}
+                      aria-label={canActivate?`Activate ${term.name} now`:`Edit ${term.name} information`}
+                      onClick={()=>canActivate?void activate(term):setEditingTerm(term)}/>}
                     <div className="settings-term-top">
                       <div><p className="eyebrow">SEMESTER {term.sequence}</p><h4>{term.name}</h4>
                         <p className="settings-term-dates">{term.start_date}<span aria-hidden="true">→</span>{term.end_date}</p></div>
@@ -81,9 +90,13 @@ export function SchoolYears(){
                       <Link to="/admin/students">Student management</Link>
                       <Link to="/admin/offerings">Faculty Management</Link>
                     </div>
-                    {(term.status==='draft'||(term.status==='inactive'&&term.reopen_available))&&
+                    {(term.status==='draft'||term.status==='scheduled'||(term.status==='inactive'&&term.reopen_available))&&
                       <div className="settings-term-actions">
                         {term.status==='draft'&&<button type="button" onClick={()=>transition(term)}>Schedule semester</button>}
+                        {term.status==='scheduled'&&<>
+                          <button type="button" className="primary" onClick={()=>void activate(term)}>Activate semester</button>
+                          <button type="button" onClick={()=>setEditingTerm(term)}>Edit semester details</button>
+                        </>}
                         {term.status==='inactive'&&term.reopen_available&&<button type="button" onClick={()=>setReopening(term)}>Reopen semester</button>}
                       </div>}
                     {term.status==='inactive'&&!term.reopen_available&&<p className="muted">Reopening is available only during the scheduled dates and when no other semester is active.</p>}

@@ -10,7 +10,7 @@ Alembic revision `c91f7a2e4b60` resets every existing semester to `draft`. This 
 
 Alembic revision `41c9e0ab7d52` restores teacher-configurable per-question quiz timers. Apply migrations using the normal stopped-API and verified-backup procedure before deployment. It preserves legacy minute limits by converting them to seconds and adds a clock status used to enforce answer, skip, and timeout lockouts. Timer deadlines are server-authoritative and continue across refreshes, disconnects, and tab switches; the legacy `paused_at` column is retained but not used.
 
-The API lifespan reconciles scheduled semesters every 30 seconds using the configured school timezone. Keep at least one API process running for automatic activation and end-date closure; the database lock and active-term constraint protect concurrent API instances. Check the `learnsync` API log if calendar reconciliation fails.
+The API lifespan reconciles scheduled semesters every 30 seconds using the configured school timezone. Keep at least one API process running for automatic activation on a semester's start date and end-date closure; administrators can also activate a scheduled semester immediately from its Settings card. The server enforces the active-term and previous-term closure rules for both activation paths. The database lock and active-term constraint protect concurrent API instances. Check the `learnsync` API log if calendar reconciliation fails.
 
 ## Account name fields and display
 
