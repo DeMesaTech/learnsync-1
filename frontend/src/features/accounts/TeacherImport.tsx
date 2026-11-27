@@ -101,7 +101,7 @@ export function TeacherImport({colleges,onClose,onDone}:{colleges:College[];onCl
   }
 
   return <Dialog title="Import teachers" onClose={()=>busy?false:requestClose()} className="import-dialog" confirmOnClose={false}>
-    <p className="muted">Required columns: <code>email</code>, <code>first_name</code>, and <code>last_name</code>. <code>middle_name</code> and <code>suffix</code> are optional. LearnSync generates <code>display_name</code> from these fields; you do not need to include it. Legacy files with <code>email</code> and <code>display_name</code> are also supported. Edit the preview and save your changes to recheck validation before inviting anyone. New teachers receive an invitation link to set their password.</p>
+    <p className="muted">Required columns: <code>email</code>, <code>first_name</code>, and <code>last_name</code>. <code>middle_name</code> and <code>suffix</code> are optional. LearnSync generates <code>display_name</code> from these fields; you do not need to include it. Legacy files with <code>email</code> and <code>display_name</code> are also supported. Edit the preview and save your changes to recheck validation before importing. Importing does not send email; send invitations manually from Faculty Management.</p>
     {!preview&&!result&&<section className="panel"><form onSubmit={submit}>
       <label>Teacher list<input name="file" type="file" required accept=".csv,.xlsx" disabled={busy}/></label>
       <button className="primary" disabled={busy}>{busy?'Checking…':'Preview import'}</button>
@@ -109,9 +109,8 @@ export function TeacherImport({colleges,onClose,onDone}:{colleges:College[];onCl
     {error&&<p role="alert">{error}</p>}
     {result&&<section className="panel" role="status">
       <h3>{result.already_committed?'Import already complete':'Import complete'}</h3>
-      <p>{result.created} teacher{result.created===1?'':'s'} invited, {result.existing} already existed.</p>
-      {result.already_committed&&<p className="muted">The import was already saved. Check Faculty Management and resend any invitation links that were not received.</p>}
-      {result.email_scheduled>0&&<p className="muted">Invitation emails are being sent separately. If a teacher does not receive one, use the Send invitation action in Faculty Management.</p>}
+      <p>{result.created} teacher{result.created===1?'':'s'} created, {result.existing} already existed.</p>
+      <p className="muted">{result.already_committed?'The import was already saved. ':'No invitation emails were sent. '}Send invitations manually from Faculty Management.</p>
       <button type="button" className="primary" onClick={onClose}>Done</button>
     </section>}
     {preview&&<section className="panel">

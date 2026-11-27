@@ -1,20 +1,16 @@
-import asyncio
 import io
-from uuid import UUID
 
 import openpyxl
 import pytest
 from docx import Document
-from fastapi import BackgroundTasks
 from helpers import Api, make_account
 from sqlalchemy import func, select
 
 from app.config import settings
-from app.features.academics import documents, imports
+from app.features.academics import documents
 from app.features.academics.models import College, ProspectusImport, Subject
 from app.features.accounts import commands as account_commands
-from app.features.accounts import faculty_imports
-from app.features.accounts.models import Account
+from app.features.accounts.models import Account, AccountToken
 
 
 @pytest.fixture
@@ -72,8 +68,8 @@ def test_student_import_preview_then_commit(db, stage):
     done = stage["admin"].post(f"/api/student-imports/{preview['id']}/commit")
     assert done.status_code == 200, done.text
     assert done.json() == {"created": 3, "existing": 0, "skipped": 0,
-                           "email_scheduled": 3, "already_committed": False}
-    assert sorted(stage["sent"]) == ["ana@example.com", "ben@example.com", "cara@example.com"]
+                           "email_scheduled": 0, "already_committed": False}
+    assert stage["sent"] == []
     ana = db.scalar(select(Account).where(Account.email == "ana@example.com"))
     assert ana.role == "student" and ana.status == "invited" and ana.student_number == "2026-001"
     members = stage["admin"].get(f"/api/sections/{stage['sections']['1A']['id']}/members").json()
@@ -100,9 +96,9 @@ def test_student_import_skips_error_rows_and_commits_valid_rows(db, stage):
     done = stage["admin"].post(f"/api/student-imports/{preview['id']}/commit")
     assert done.status_code == 200, done.text
     assert done.json() == {"created": 1, "existing": 0, "skipped": 4,
-                           "email_scheduled": 1, "already_committed": False}
+                           "email_scheduled": 0, "already_committed": False}
     assert account_count(db) == before + 1
-    assert stage["sent"] == ["ok@example.com"]
+    assert stage["sent"] == []
     member = db.scalar(select(Account).where(Account.email == "ok@example.com"))
     assert member.display_name == "Fine Student"
 
@@ -118,21 +114,29 @@ def test_student_import_commit_is_idempotent(db, stage):
     assert repeated.status_code == 200
     assert repeated.json() == {"created": 3, "existing": 0, "skipped": 0,
                                "email_scheduled": 0, "already_committed": True}
-    assert len(stage["sent"]) == 3
-
-
-def test_student_import_returns_before_invitation_delivery(db, stage):
-    preview = upload(stage).json()
-    actor = db.scalar(select(Account).where(Account.email == "admin@example.com"))
-    background_tasks = BackgroundTasks()
-
-    result = imports.commit_student_import(db, actor, UUID(preview["id"]), background_tasks)
-
-    assert result == {"created": 3, "existing": 0, "skipped": 0,
-                      "email_scheduled": 3, "already_committed": False}
     assert stage["sent"] == []
-    asyncio.run(background_tasks())
-    assert sorted(stage["sent"]) == ["ana@example.com", "ben@example.com", "cara@example.com"]
+
+
+def test_student_import_requires_manual_invitation_send(db, stage):
+    preview = upload(stage).json()
+
+    result = stage["admin"].post(f"/api/student-imports/{preview['id']}/commit")
+
+    assert result.status_code == 200, result.text
+    assert result.json() == {"created": 3, "existing": 0, "skipped": 0,
+                             "email_scheduled": 0, "already_committed": False}
+    assert stage["sent"] == []
+    account = db.scalar(select(Account).where(Account.email == "ana@example.com"))
+    assert account.status == "invited"
+    assert db.scalar(select(func.count()).select_from(AccountToken).where(
+        AccountToken.account_id == account.id)) == 0
+
+    sent = stage["admin"].post(f"/api/accounts/{account.id}/send-link")
+
+    assert sent.status_code == 200, sent.text
+    assert stage["sent"] == ["ana@example.com"]
+    assert db.scalar(select(func.count()).select_from(AccountToken).where(
+        AccountToken.account_id == account.id)) == 1
 
 
 def test_student_import_refuses_when_every_row_has_errors(db, stage):
@@ -264,30 +268,37 @@ def test_faculty_import_preview_and_commit(db, stage):
     done = stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit")
     assert done.status_code == 200, done.text
     assert done.json() == {"created": 2, "existing": 0,
-                           "email_scheduled": 2, "already_committed": False}
-    assert sorted(stage["sent"]) == ["teacher.one@example.com", "teacher.two@example.com"]
+                           "email_scheduled": 0, "already_committed": False}
+    assert stage["sent"] == []
     teacher = db.scalar(select(Account).where(Account.email == "teacher.one@example.com"))
     assert teacher.role == "faculty" and teacher.status == "invited"
     repeated = stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit")
     assert repeated.status_code == 200
     assert repeated.json() == {"created": 2, "existing": 0,
                                "email_scheduled": 0, "already_committed": True}
-    assert len(stage["sent"]) == 2
-
-
-def test_faculty_import_returns_before_invitation_delivery(db, stage):
-    preview = faculty_upload(stage).json()
-    actor = db.scalar(select(Account).where(Account.email == "admin@example.com"))
-    background_tasks = BackgroundTasks()
-
-    result = faculty_imports.commit_faculty_import(
-        db, actor, UUID(preview["id"]), background_tasks)
-
-    assert result == {"created": 2, "existing": 0,
-                      "email_scheduled": 2, "already_committed": False}
     assert stage["sent"] == []
-    asyncio.run(background_tasks())
-    assert sorted(stage["sent"]) == ["teacher.one@example.com", "teacher.two@example.com"]
+
+
+def test_faculty_import_requires_manual_invitation_send(db, stage):
+    preview = faculty_upload(stage).json()
+
+    result = stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit")
+
+    assert result.status_code == 200, result.text
+    assert result.json() == {"created": 2, "existing": 0,
+                             "email_scheduled": 0, "already_committed": False}
+    assert stage["sent"] == []
+    account = db.scalar(select(Account).where(Account.email == "teacher.one@example.com"))
+    assert account.status == "invited"
+    assert db.scalar(select(func.count()).select_from(AccountToken).where(
+        AccountToken.account_id == account.id)) == 0
+
+    sent = stage["admin"].post(f"/api/accounts/{account.id}/send-link")
+
+    assert sent.status_code == 200, sent.text
+    assert stage["sent"] == ["teacher.one@example.com"]
+    assert db.scalar(select(func.count()).select_from(AccountToken).where(
+        AccountToken.account_id == account.id)) == 1
 
 
 def test_faculty_import_removes_titles_and_recovers_attached_surname_initial(db, stage):
@@ -300,6 +311,8 @@ def test_faculty_import_removes_titles_and_recovers_attached_surname_initial(db,
     assert preview["rows"][0]["display_name"] == "MARFILLA, TERESA D."
     done = stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit")
     assert done.status_code == 200, done.text
+    assert done.json()["email_scheduled"] == 0
+    assert stage["sent"] == []
     teacher = db.scalar(select(Account).where(Account.email == "teacher.name@example.com"))
     assert (teacher.first_name, teacher.middle_name, teacher.last_name) == (
         "TERESA", "D.", "MARFILLA")
@@ -338,8 +351,10 @@ def test_faculty_import_preview_edits_are_revalidated_and_persisted(db, stage):
 
     done = stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit")
     assert done.status_code == 200, done.text
-    assert stage["sent"] == ["corrected@example.com"]
+    assert done.json()["email_scheduled"] == 0
+    assert stage["sent"] == []
     teacher = db.scalar(select(Account).where(Account.email == "corrected@example.com"))
+    assert teacher.status == "invited"
     assert str(teacher.college_id) == stage["college"]["id"]
     assert stage["admin"].put(f"/api/faculty-imports/{preview['id']}", {"rows": [
         {"row": 2, "display_name": "Changed after commit", "email": "corrected@example.com"},
@@ -361,8 +376,8 @@ def test_faculty_import_skips_existing_faculty_and_supports_xlsx(db, stage):
     done = stage["admin"].post(f"/api/faculty-imports/{preview['id']}/commit")
     assert done.status_code == 200
     assert done.json() == {"created": 1, "existing": 1,
-                           "email_scheduled": 1, "already_committed": False}
-    assert stage["sent"] == ["new-teacher@example.com"]
+                           "email_scheduled": 0, "already_committed": False}
+    assert stage["sent"] == []
 
 
 def test_faculty_import_accepts_split_account_name_columns(db, stage):

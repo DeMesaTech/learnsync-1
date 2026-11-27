@@ -323,9 +323,8 @@ def student_import(import_id: UUID, actor=Depends(admin), db: Session = Depends(
 
 
 @router.post("/student-imports/{import_id}/commit")
-def commit_student_import(import_id: UUID, background_tasks: BackgroundTasks,
-                          actor=Depends(admin), db: Session = Depends(get_db)):
-    return imports.commit_student_import(db, actor, import_id, background_tasks)
+def commit_student_import(import_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):
+    return imports.commit_student_import(db, actor, import_id)
 
 
 @router.post("/prospectus-imports", status_code=201)

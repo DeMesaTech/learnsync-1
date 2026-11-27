@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -136,9 +136,8 @@ def update_faculty_import(import_id: UUID, data: FacultyImportUpdate,
     return faculty_imports.faculty_preview(db, imp)
 
 @router.post("/faculty-imports/{import_id}/commit")
-def commit_faculty_import(import_id: UUID, background_tasks: BackgroundTasks,
-                          actor=Depends(admin), db: Session = Depends(get_db)):
-    return faculty_imports.commit_faculty_import(db, actor, import_id, background_tasks)
+def commit_faculty_import(import_id: UUID, actor=Depends(admin), db: Session = Depends(get_db)):
+    return faculty_imports.commit_faculty_import(db, actor, import_id)
 
 
 @router.post("/accounts", response_model=AccountView, status_code=201)

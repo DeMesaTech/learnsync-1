@@ -2,13 +2,13 @@
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import BackgroundTasks, HTTPException
+from fastapi import HTTPException
 from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy import select
 
 from app.errors import fail
 from app.features.academics.documents import MAX_ROWS, read_faculty_rows
-from app.features.accounts.commands import audit, issue_token, send_import_invitation_batch
+from app.features.accounts.commands import audit
 from app.features.accounts.models import Account, AuditEvent, FacultyImport, now
 from app.features.accounts.names import (
     StudentName,
@@ -154,7 +154,7 @@ def update_faculty_import(db, actor, import_id, rows):
     return imp
 
 
-def commit_faculty_import(db, actor, import_id, background_tasks: BackgroundTasks):
+def commit_faculty_import(db, actor, import_id):
     imp = db.scalar(select(FacultyImport).where(FacultyImport.id == import_id).with_for_update())
     if not imp:
         fail(404, "not_found", "Import not found.")
@@ -172,7 +172,7 @@ def commit_faculty_import(db, actor, import_id, background_tasks: BackgroundTask
         fail(409, "import_has_errors",
              "Fix the highlighted rows and upload the file again. Nothing was imported.")
 
-    invitations = []
+    created = 0
     for row in rows:
         if row["status"] != "new":
             continue
@@ -183,16 +183,11 @@ def commit_faculty_import(db, actor, import_id, background_tasks: BackgroundTask
                           college_id=UUID(row["college_id"]) if row.get("college_id") else None,
                           status="invited")
         db.add(account)
-        db.flush()
-        invitations.append((account.email, account.display_name,
-                            issue_token(db, account, "invite", actor)))
+        created += 1
 
     imp.status, imp.committed_at = "committed", now()
     audit(db, actor, "faculty_import.committed", "faculty_import", imp.id,
-          {"created": len(invitations), "existing": len(rows) - len(invitations)})
+          {"created": created, "existing": len(rows) - created})
     db.commit()
-    if invitations:
-        background_tasks.add_task(send_import_invitation_batch, invitations,
-                                  "faculty_import", str(imp.id))
-    return {"created": len(invitations), "existing": len(rows) - len(invitations),
-            "email_scheduled": len(invitations), "already_committed": False}
+    return {"created": created, "existing": len(rows) - created,
+            "email_scheduled": 0, "already_committed": False}

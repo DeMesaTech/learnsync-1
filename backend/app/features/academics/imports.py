@@ -4,14 +4,14 @@ from pathlib import Path
 from zipfile import BadZipFile
 
 from docx.opc.exceptions import PackageNotFoundError
-from fastapi import BackgroundTasks, HTTPException
+from fastapi import HTTPException
 from openpyxl.utils.exceptions import InvalidFileException
 from pydantic import EmailStr, TypeAdapter, ValidationError
 from pypdf.errors import PdfReadError
 from sqlalchemy import select
 
 from app.errors import fail
-from app.features.accounts.commands import audit, issue_token, send_import_invitation_batch
+from app.features.accounts.commands import audit
 from app.features.accounts.models import Account, AuditEvent, now
 from app.features.accounts.names import (
     StudentName,
@@ -144,7 +144,7 @@ def create_student_import(db, actor, upload, term_id):
     return imp
 
 
-def commit_student_import(db, actor, import_id, background_tasks: BackgroundTasks):
+def commit_student_import(db, actor, import_id):
     imp = db.scalar(select(StudentImport).where(StudentImport.id == import_id).with_for_update())
     if not imp:
         fail(404, "not_found", "Import not found.")
@@ -166,7 +166,7 @@ def commit_student_import(db, actor, import_id, background_tasks: BackgroundTask
         fail(409, "import_no_valid_rows", "There are no valid rows to import.")
     sections = {s.name: s for s in db.scalars(
         select(Section).where(Section.term_id == imp.term_id))} if imp.term_id else {}
-    created, invitations = 0, []
+    created = 0
     for r in importable:
         if r["status"] == "new":
             account = Account(email=r["email"], display_name=r["display_name"], role="student",
@@ -175,8 +175,6 @@ def commit_student_import(db, actor, import_id, background_tasks: BackgroundTask
                               student_number=r["student_number"], status="invited")
             db.add(account)
             db.flush()
-            invitations.append((account.email, account.display_name,
-                                issue_token(db, account, "invite", actor)))
             created += 1
         else:
             account = db.scalar(select(Account).where(Account.email == r["email"]))
@@ -187,11 +185,8 @@ def commit_student_import(db, actor, import_id, background_tasks: BackgroundTask
     audit(db, actor, "student_import.committed", "student_import", imp.id,
           {"created": created, "existing": len(importable) - created, "skipped": skipped})
     db.commit()
-    if invitations:
-        background_tasks.add_task(send_import_invitation_batch, invitations,
-                                  "student_import", str(imp.id))
     return {"created": created, "existing": len(importable) - created, "skipped": skipped,
-            "email_scheduled": len(invitations), "already_committed": False}
+            "email_scheduled": 0, "already_committed": False}
 
 
 # ---------- prospectus ----------

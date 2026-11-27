@@ -56,7 +56,7 @@ export function StudentImport({termId:providedTermId,onClose,onDone}:{termId?:st
     }finally{setBusy(false)}
   }
   const content=<>
-    <p className="muted">Upload a CSV or Excel file with <code>student_number</code> and <code>email</code>, plus either <code>display_name</code> or <code>firstName</code>, <code>Middle Initial</code> and <code>lastName</code>. Split names are displayed as Last Name, First Name and optional Middle Initial. Excel imports read each worksheet with student columns; CSV imports read the file as one table. You may also include <code>section</code> (an existing section name in this term). Review the result before anything is created. New students receive an invitation email.</p>
+    <p className="muted">Upload a CSV or Excel file with <code>student_number</code> and <code>email</code>, plus either <code>display_name</code> or <code>firstName</code>, <code>Middle Initial</code> and <code>lastName</code>. Split names are displayed as Last Name, First Name and optional Middle Initial. Excel imports read each worksheet with student columns; CSV imports read the file as one table. You may also include <code>section</code> (an existing section name in this term). Review the result before anything is created. Importing does not send email; send invitations manually from Student Management.</p>
     {!preview&&!result&&<section className="panel"><form onSubmit={submit}>
       <label>Student list<input name="file" type="file" required accept=".csv,.xlsx" disabled={busy}/></label>
       <button className="primary" disabled={busy}>{busy?'Checking…':'Preview import'}</button>
@@ -64,9 +64,8 @@ export function StudentImport({termId:providedTermId,onClose,onDone}:{termId?:st
     {!termId&&<p className="muted">Students can be imported without assigning them to a term section.</p>}
     {error&&<p role="alert">{error}</p>}
     {result&&<section className="panel" role="status"><h2>{result.already_committed?'Import already complete':'Import complete'}</h2>
-      <p>{result.created} student{result.created===1?'':'s'} invited, {result.existing} already existed, {result.skipped} error row{result.skipped===1?'':'s'} skipped.</p>
-      {result.already_committed&&<p className="muted">The import was already saved. Check Student Management and resend any invitation links that were not received.</p>}
-      {result.email_scheduled>0&&<p className="muted">Invitation emails are being sent separately. If a student does not receive one, resend the invitation from Student Management.</p>}
+      <p>{result.created} student{result.created===1?'':'s'} created, {result.existing} already existed, {result.skipped} error row{result.skipped===1?'':'s'} skipped.</p>
+      <p className="muted">{result.already_committed?'The import was already saved. ':'No invitation emails were sent. '}Send invitations manually from Student Management.</p>
       {onClose&&<button type="button" className="primary" onClick={onClose}>Done</button>}</section>}
     {preview&&<>
       <section className="panel">

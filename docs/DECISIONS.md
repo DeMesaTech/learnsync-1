@@ -1,5 +1,8 @@
 # Implementation decisions
 
+2026-11-26 (manual invitations after student and teacher imports; supersedes the 2026-10-06 automatic student-import email decision):
+- Student and teacher imports create invited accounts without issuing invitation tokens or sending emails. Administrators send invitation links manually from Student Management or Faculty Management after import.
+
 2026-11-15 (date-scoped semester reopening):
 - An inactive semester may be reopened only when the current date in `APP_TIMEZONE` is within its scheduled date range, inclusive, and no other semester is active. Reopening requires a reason, restores `active` status, and is audited. Archived semesters remain closed.
 

@@ -34,7 +34,7 @@ def setup_steps(terms, subjects, faculty):
              ("sections", "Create sections for the term", bool(first and first["sections"]), term),
              ("faculty", "Invite a faculty account (a teacher must exist before assignment)", faculty > 0, "/admin/accounts"),
              ("offerings", "Assign teachers to subjects", bool(first and first["offerings"]), term),
-             ("students", "Enroll students (import them into sections; invitations are sent)", bool(first and first["students"]), term)]
+             ("students", "Enroll students (import them into sections; send invitations manually)", bool(first and first["students"]), term)]
     out = [{"key": k, "label": label, "done": done, "link": link} for k, label, done, link in steps]
     return [] if all(x["done"] for x in out) else out
 

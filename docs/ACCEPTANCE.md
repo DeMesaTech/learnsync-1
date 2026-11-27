@@ -1,5 +1,11 @@
 # Acceptance status
 
+### 2026-11-27 (Manual invitations after student and teacher imports)
+- Student and teacher import commits now create invited accounts without issuing invitation tokens, queuing background email tasks, or sending mail. The existing per-account invitation actions remain available for administrators to send links manually.
+- Import dialogs now state that email is not sent automatically and direct admins to send links from Student Management or Faculty Management.
+- Verified student and faculty imports create invited accounts without email or invitation tokens; their manual invitation actions still issue a token and send email. Ran `pytest tests/test_imports.py -q` with three unrelated existing failures deselected: 31 passed, 3 deselected. The full module also has known pre-existing failures for two legacy student display-name expectations and one unsupported `make_account(student_number=...)` argument.
+- Frontend build/type-check, ESLint, backend Ruff, and `git diff --check` passed. The build retains its existing Vite large-chunk warning.
+
 ### 2026-11-26 (Immediate scheduled-semester activation)
 - Clicking a scheduled semester card now activates it immediately through the existing audited server transition; an explicit Activate semester action is also shown, while Edit semester details remains available. Unscheduled drafts retain the edit-card behavior and schedule action; automatic start-date activation remains unchanged.
 - Browser verified the card activation control issued `POST /api/terms/{id}/activate` and showed the success message with the activation response stubbed, so no database state was changed. The API tests passed for immediate scheduled-term activation and single-active/previous-term closure safeguards.

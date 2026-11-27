@@ -34,6 +34,10 @@ The latest student-page decisions supersede the earlier mixed Stream feed and Cl
 - Student account invitation and password-reset links require confirmation before sending, including individual and section-wide actions. The selected-student bulk action remains confirmation-backed.
 - When section deletion is refused because students or academic history exist, show the server error in a modal instead of an inline page alert.
 
+### Current amendment (2026-11-26; manual invitations after import)
+
+- Student and teacher imports create invited accounts without creating invitation tokens or sending email. Administrators send invitation links manually from Student Management or Faculty Management after import.
+
 ### Current amendment (2026-11-26; quiz creation guidance)
 
 - Faculty Classwork's quiz creation options explain that **Online quiz** is for writing questions manually, while **Quiz drafted by AI** generates questions from published materials. AI-drafted quizzes can also be edited and have questions added manually before publication.
